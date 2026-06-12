@@ -3,7 +3,7 @@ main = "src/index.js"
 compatibility_date = "2026-06-01"
 
 kv_namespaces = [
-  { binding = "TALLY_PUSH", id = "REPLACED_AT_DEPLOY" }
+  { binding = "TALLY_PUSH", id = "843aea42ba0248139aade8b5e276734a" }
 ]
 
 [triggers]
