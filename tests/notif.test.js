@@ -7,7 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const ctx = vm.createContext({});
-for (const file of ['store.js', 'notif.js']) {
+for (const file of ['store.js', 'notif.js', 'push.js']) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), ctx, { filename: file });
 }
 
@@ -166,6 +166,71 @@ test('badgeCount counts only people who owe you', () => {
     transactions: [txn('a', 100, 1), txn('b', -50, 1)],
   });
   assert.strictEqual(ctx.badgeCount(st, NOW), 1);
+});
+
+/* ---------- projection (push.js) ---------- */
+
+test('projectSchedule predicts a future aging crossing', () => {
+  /* borrowed 20 days ago, aging at 30 days -> fires ~10 days out */
+  const st = makeState({
+    people: [person('a', 'Priya')], transactions: [txn('a', 2000, 20)],
+    notifications: { recurringNudge: { enabled: false }, balanceThreshold: { enabled: false } },
+  });
+  const sched = ctx.projectSchedule(st, freshLog(), NOW);
+  const aging = sched.filter(e => e.key === 'aging:a');
+  assert.strictEqual(aging.length, 1);
+  const expected = NOW + 10 * DAY;
+  assert.ok(Math.abs(aging[0].fireAt - expected) <= 6 * 3600 * 1000 + 1,
+    `fireAt ${new Date(aging[0].fireAt)} not within a step of ${new Date(expected)}`);
+  assert.match(aging[0].body, /Priya/);
+});
+
+test('projectSchedule excludes currently-due and already-fired items', () => {
+  /* 40-day-old debt: aging + threshold due NOW -> local check owns them */
+  const st = makeState({
+    people: [person('a')], transactions: [txn('a', 2000, 40)],
+    notifications: { recurringNudge: { enabled: false } },
+  });
+  const sched = ctx.projectSchedule(st, freshLog(), NOW);
+  assert.strictEqual(sched.length, 0);
+
+  /* already-fired key (condition still true) stays excluded */
+  const log = freshLog();
+  log.fired['aging:a'] = NOW - DAY;   // fired yesterday, debt still aging
+  log.fired['threshold:a'] = NOW - DAY;
+  assert.strictEqual(ctx.projectSchedule(st, log, NOW).length, 0);
+});
+
+test('projectSchedule finds interest-driven crossings', () => {
+  /* 1000 at 1%/day simple -> interest hits 100 (milestone) at ~10 days */
+  const st = makeState({
+    people: [person('a')], transactions: [txn('a', 1000, 0)], interestRules: DAILY_1PCT,
+    notifications: { recurringNudge: { enabled: false }, agingDebt: { enabled: false },
+                     balanceThreshold: { enabled: false }, capitalizeSuggest: { enabled: false } },
+  });
+  const m = ctx.projectSchedule(st, freshLog(), NOW).filter(e => e.key === 'milestone:a');
+  assert.strictEqual(m.length, 1);
+  assert.ok(Math.abs(m[0].fireAt - (NOW + 10 * DAY)) <= 6 * 3600 * 1000 + 1);
+});
+
+test('projectSchedule repeats the nudge at its cadence across the horizon', () => {
+  const st = makeState({
+    people: [person('a', 'Priya')], transactions: [txn('a', 500, 1)],
+    notifications: { agingDebt: { enabled: false }, balanceThreshold: { enabled: false },
+                     interestMilestone: { enabled: false }, capitalizeSuggest: { enabled: false } },
+  });
+  const nudges = ctx.projectSchedule(st, freshLog(), NOW).filter(e => e.key.startsWith('nudge:'));
+  assert.strictEqual(nudges.length, 12);                      // 7,14,...,84 days
+  assert.strictEqual(nudges[0].fireAt, NOW + 7 * DAY);
+  assert.strictEqual(nudges[1].fireAt - nudges[0].fireAt, 7 * DAY);
+});
+
+test('projectSchedule does not mutate the real log', () => {
+  const st = makeState({ people: [person('a')], transactions: [txn('a', 2000, 20)] });
+  const log = freshLog();
+  ctx.projectSchedule(st, log, NOW);
+  assert.strictEqual(Object.keys(log.fired).length, 0);
+  assert.strictEqual(log.lastNudge, NOW);
 });
 
 test('notifSettings merges defaults into old saved state', () => {
