@@ -40,7 +40,16 @@ function commit() { saveState(); render(); runNotificationCheck(); }
 
 /* ---------- notifications plumbing ---------- */
 
-async function runNotificationCheck() {
+/* Checks read-modify-write the shared notifLog; run them one at a
+   time or concurrent calls (e.g. enable toggle: commit + permission
+   grant) both see the stale log and double-notify. */
+let notifCheckChain = Promise.resolve();
+function runNotificationCheck() {
+  notifCheckChain = notifCheckChain.then(doNotificationCheck);
+  return notifCheckChain;
+}
+
+async function doNotificationCheck() {
   updateBadge();
   const ns = notifSettings(state);
   if (!ns.enabled || !('Notification' in window) || Notification.permission !== 'granted') return;
