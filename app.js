@@ -69,12 +69,12 @@ function renderLedger() {
     const exempt = p.interestExempt ? '<span class="chip exempt">no interest</span>' : '';
 
     return `<tr class="row">
-      <td><button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button> ${exempt}</td>
+      <td class="col-person"><button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button> ${exempt}</td>
       <td class="col-groups">${groups}</td>
-      <td class="num"><span class="money ${moneyClass(principal)}">${fmtMoney(principal, p.currency)}</span></td>
-      <td class="num"><span class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</span></td>
-      <td class="num"><span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span></td>
-      <td>
+      <td class="num" data-label="Principal"><span class="money ${moneyClass(principal)}">${fmtMoney(principal, p.currency)}</span></td>
+      <td class="num" data-label="Interest"><span class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</span></td>
+      <td class="num" data-label="Total"><span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span></td>
+      <td class="col-quick">
         <div class="quick-add">
           <input type="number" step="any" min="0" placeholder="amount" id="qa-${p.id}">
           <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" title="They borrowed / you lent">+ lent</button>
@@ -175,16 +175,16 @@ function renderGroupDetail() {
   const rows = members.map(p => {
     const total = totalOf(p);
     return `<tr class="row">
-      <td><button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button></td>
-      <td class="num"><span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span></td>
-      <td>
+      <td class="col-person"><button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>
+        <button class="del-x row-remove" data-action="remove-member" data-id="${p.id}" data-group="${g.id}" title="Remove from group">✕</button></td>
+      <td class="num" data-label="Total owed"><span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span></td>
+      <td class="col-quick">
         <div class="quick-add">
           <input type="number" step="any" min="0" placeholder="amount" id="qa-${p.id}">
           <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" data-group="${g.id}">+ lent</button>
           <button class="btn small minus" data-action="quick-add" data-id="${p.id}" data-sign="-1" data-group="${g.id}">− paid</button>
         </div>
       </td>
-      <td><button class="del-x" data-action="remove-member" data-id="${p.id}" data-group="${g.id}" title="Remove from group">✕</button></td>
     </tr>`;
   }).join('');
 
@@ -222,8 +222,8 @@ function renderGroupDetail() {
     ${groupDebtStrip(g)}
 
     <table class="ledger-table">
-      <thead><tr><th>Member</th><th class="num">Total owed (global)</th><th>Quick entry (tagged to this group)</th><th></th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="4" class="muted">No members yet.</td></tr>'}</tbody>
+      <thead><tr><th>Member</th><th class="num">Total owed (global)</th><th>Quick entry (tagged to this group)</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="3" class="muted">No members yet.</td></tr>'}</tbody>
     </table>
 
     <div class="panel" style="margin-top:24px">
@@ -236,7 +236,7 @@ function renderGroupDetail() {
 
     <div class="panel">
       <h3>Group activity</h3>
-      ${activity ? `<table class="txn-table"><thead><tr><th>Date</th><th>Person</th><th>Note</th><th class="num">Amount</th></tr></thead><tbody>${activity}</tbody></table>`
+      ${activity ? `<div class="table-wrap"><table class="txn-table"><thead><tr><th>Date</th><th>Person</th><th>Note</th><th class="num">Amount</th></tr></thead><tbody>${activity}</tbody></table></div>`
         : '<span class="muted">No transactions tagged to this group yet.</span>'}
     </div>
 
@@ -406,7 +406,7 @@ function renderModal() {
       </div>
 
       <h3 style="font-family:var(--display);color:var(--green-deep);margin-bottom:8px">History</h3>
-      ${txRows ? `<table class="txn-table"><thead><tr><th>Date</th><th>Group</th><th>Note</th><th class="num">Amount</th><th></th></tr></thead><tbody>${txRows}</tbody></table>`
+      ${txRows ? `<div class="table-wrap"><table class="txn-table"><thead><tr><th>Date</th><th>Group</th><th>Note</th><th class="num">Amount</th><th></th></tr></thead><tbody>${txRows}</tbody></table></div>`
         : '<span class="muted">No entries yet.</span>'}
     </div>
   </div>`;
