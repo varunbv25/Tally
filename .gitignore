@@ -5,3 +5,10 @@ node_modules/
 worker/.dev.vars
 worker/.wrangler/
 worker/.secrets.env
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
