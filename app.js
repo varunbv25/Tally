@@ -148,7 +148,7 @@ function renderLedger() {
     const principal = principalOf(p.id);
     const interest = accruedInterest(p);
     const total = principal + interest;
-    const groups = groupsOf(p.id).map(g => `<span class="chip">${esc(g.name)}</span>`).join('') || '<span class="muted">—</span>';
+    const groups = groupsOf(p.id).map(g => `<span class="chip">${esc(g.name)}</span>`).join('');
     const exempt = p.interestExempt ? '<span class="chip exempt">no interest</span>' : '';
 
     return `<tr class="row">
