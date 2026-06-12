@@ -50,6 +50,7 @@ function runNotificationCheck() {
 }
 
 async function doNotificationCheck() {
+  await pushSyncDown();           // merge server-delivered keys before reading the log
   updateBadge();
   const ns = notifSettings(state);
   if (!ns.enabled || !('Notification' in window) || Notification.permission !== 'granted') return;
@@ -64,6 +65,7 @@ async function doNotificationCheck() {
       }));
     }
     await idbSet('notifLog', JSON.stringify(log));
+    schedulePushUpload();         // refresh the server's schedule
   } catch { /* notifications must never break the app */ }
 }
 
@@ -94,12 +96,14 @@ function showToast(msg) {
 async function enableNotifications() {
   if (!('Notification' in window)) return;
   await Notification.requestPermission();
+  await subscribePush();
   render();                       // reflect granted/denied state
   runNotificationCheck();
   registerPeriodicSync();
 }
 
 async function disableNotifications() {
+  await unsubscribePush();
   if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(() => {});
   try {
     const reg = await navigator.serviceWorker.ready;
@@ -402,6 +406,10 @@ function notificationsPanel() {
       <div class="form-row">
         <label><input type="checkbox" id="notif-master" ${ns.enabled ? 'checked' : ''} ${supported ? '' : 'disabled'}> Enable notifications</label>
       </div>
+      ${ns.enabled ? `<p class="muted">Background push: ${
+        !PUSH_SERVER || !VAPID_PUBLIC_KEY ? 'not configured' :
+        pushStatus === 'active' ? 'active on this device' :
+        pushStatus === 'unavailable' ? 'unavailable on this device' : 'connecting…'}</p>` : ''}
       ${supported ? '' : '<p class="muted">This browser does not support notifications.</p>'}
       ${blocked ? '<div class="banner">Notifications are blocked in your browser settings. Allow them for this site to receive alerts.</div>' : ''}
       ${row('agingDebt', 'Aging debt — no repayment for', num('agingDebt', 'days', 'days', 'min="1" step="1"'))}

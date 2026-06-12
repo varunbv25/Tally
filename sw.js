@@ -3,7 +3,7 @@
 
 importScripts('./store.js', './notif.js');
 
-const CACHE = 'tally-v4';
+const CACHE = 'tally-v5';
 const SHELL = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const SHELL = [
   './app.js',
   './store.js',
   './notif.js',
+  './push.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -94,6 +95,15 @@ async function backgroundCheck() {
     await idbSet('notifLog', JSON.stringify(log));
   } catch { /* a failed check must never break the SW */ }
 }
+
+self.addEventListener('push', e => {
+  if (!e.data) return;
+  let n;
+  try { n = e.data.json(); } catch { return; }
+  e.waitUntil(self.registration.showNotification(n.title || 'Tally', {
+    body: n.body || '', icon: './icons/icon-192.png', tag: n.key || undefined,
+  }));
+});
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
