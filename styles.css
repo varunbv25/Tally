@@ -356,3 +356,23 @@ button { font-family: var(--body); cursor: pointer; }
 .notif-row.off { opacity: 0.45; }
 .notif-row input[type="number"] { width: 90px; }
 .notif-value { color: var(--ink-soft); }
+
+/* ---------- toast ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translate(-50%, 16px);
+  background: var(--green-deep);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: var(--body);
+  opacity: 0;
+  transition: opacity 0.3s, transform 0.3s;
+  z-index: 100;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }

@@ -36,11 +36,51 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function commit() { saveState(); render(); }
+function commit() { saveState(); render(); runNotificationCheck(); }
 
 /* ---------- notifications plumbing ---------- */
 
-function runNotificationCheck() {} /* replaced in Task 5 with the real check */
+async function runNotificationCheck() {
+  updateBadge();
+  const ns = notifSettings(state);
+  if (!ns.enabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    const logJson = await idbGet('notifLog');
+    const log = logJson ? JSON.parse(logJson) : { fired: {}, lastNudge: 0 };
+    const due = evaluateNotifications(state, log, Date.now());
+    if (due.length && 'serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      due.forEach(n => reg.showNotification(n.title, {
+        body: n.body, icon: './icons/icon-192.png', tag: n.key,
+      }));
+    }
+    await idbSet('notifLog', JSON.stringify(log));
+  } catch { /* notifications must never break the app */ }
+}
+
+function updateBadge() {
+  if (!('setAppBadge' in navigator)) return;
+  const ns = notifSettings(state);
+  const c = ns.enabled ? badgeCount(state) : 0;
+  (c ? navigator.setAppBadge(c) : navigator.clearAppBadge()).catch(() => {});
+}
+
+function maybeCelebrate(personId, beforeTotal) {
+  const p = getPerson(personId);
+  if (!p) return;
+  if (Math.abs(beforeTotal) > 0.005 && Math.abs(totalOf(p)) <= 0.005) {
+    showToast(`All square with ${p.name} 🎉`);
+  }
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3500);
+}
 
 async function enableNotifications() {
   if (!('Notification' in window)) return;
@@ -519,8 +559,10 @@ document.addEventListener('click', e => {
       const input = document.getElementById(`qa-${id}`);
       const amt = parseFloat(input?.value);
       if (!Number.isFinite(amt) || amt <= 0) { input?.focus(); return; }
+      const before = totalOf(getPerson(id));
       addTransaction({ personId: id, groupId: group || null, amount: amt * Number(sign) });
       commit();
+      maybeCelebrate(id, before);
       break;
     }
 
@@ -549,7 +591,9 @@ document.addEventListener('click', e => {
 
     case 'settle':
       if (confirm('Settle up? Outstanding interest is added, then the balance is zeroed.')) {
+        const before = totalOf(getPerson(id));
         settleUp(id); commit();
+        maybeCelebrate(id, before);
       }
       break;
 
@@ -631,14 +675,17 @@ document.addEventListener('submit', e => {
       const amt = parseFloat(fd.get('amount'));
       if (!Number.isFinite(amt) || amt <= 0) return;
       const dateStr = fd.get('date');
+      const pid = form.dataset.person;
+      const before = totalOf(getPerson(pid));
       addTransaction({
-        personId: form.dataset.person,
+        personId: pid,
         groupId: fd.get('groupId') || null,
         amount: amt * Number(fd.get('sign')),
         note: fd.get('note') || '',
         date: dateStr ? new Date(dateStr + 'T12:00:00').toISOString() : null,
       });
       commit();
+      maybeCelebrate(pid, before);
       break;
     }
 
@@ -730,4 +777,7 @@ setInterval(render, 60_000);
 /* ---------- boot ---------- */
 
 loadState();
+saveState();            // ensure the IDB mirror exists even before the first edit
 render();
+runNotificationCheck();
+registerPeriodicSync();
