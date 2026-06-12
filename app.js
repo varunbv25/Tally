@@ -160,6 +160,7 @@ function renderLedger() {
       <td class="col-quick">
         <div class="quick-add">
           <input type="number" step="any" min="0" placeholder="amount" id="qa-${p.id}">
+          <input class="qa-reason" placeholder="reason" id="qr-${p.id}" maxlength="80">
           <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" title="They borrowed / you lent">+ lent</button>
           <button class="btn small minus" data-action="quick-add" data-id="${p.id}" data-sign="-1" title="They paid you back">− paid</button>
         </div>
@@ -264,6 +265,7 @@ function renderGroupDetail() {
       <td class="col-quick">
         <div class="quick-add">
           <input type="number" step="any" min="0" placeholder="amount" id="qa-${p.id}">
+          <input class="qa-reason" placeholder="reason" id="qr-${p.id}" maxlength="80">
           <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" data-group="${g.id}">+ lent</button>
           <button class="btn small minus" data-action="quick-add" data-id="${p.id}" data-sign="-1" data-group="${g.id}">− paid</button>
         </div>
@@ -355,6 +357,7 @@ function interestRulesPanel() {
   return `
     <div class="panel">
       <h3>Interest rules <span class="muted">(evaluated top-down, first match wins)</span></h3>
+      <p class="muted" style="margin-bottom:12px">Interest is charged in full-period steps: the first charge lands one day after a rule's condition is met, then one charge per period after that.</p>
       ${interestCards || '<span class="muted">No interest rules. Debts sit politely at face value.</span>'}
       <form data-form="add-interest-rule" style="margin-top:16px">
         <div class="form-row">
@@ -379,6 +382,10 @@ function interestRulesPanel() {
         </div>
         <div class="form-row tight"><button class="btn" type="submit">Add interest rule</button></div>
       </form>
+      <div class="form-row tight" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
+        <label><input type="checkbox" id="reset-interest-drop" ${state.settings.resetInterestOnDrop ? 'checked' : ''}>
+          Reset accrued interest when the balance falls below the rule's condition</label>
+      </div>
     </div>
 
   `;
@@ -577,7 +584,8 @@ document.addEventListener('click', e => {
       const amt = parseFloat(input?.value);
       if (!Number.isFinite(amt) || amt <= 0) { input?.focus(); return; }
       const before = totalOf(getPerson(id));
-      addTransaction({ personId: id, groupId: group || null, amount: amt * Number(sign) });
+      const note = document.getElementById(`qr-${id}`)?.value.trim() || '';
+      addTransaction({ personId: id, groupId: group || null, amount: amt * Number(sign), note });
       commit();
       maybeCelebrate(id, before);
       break;
@@ -730,6 +738,10 @@ document.addEventListener('submit', e => {
 document.addEventListener('change', e => {
   if (e.target.id === 'base-currency') {
     state.settings.baseCurrency = e.target.value;
+    commit();
+  }
+  if (e.target.id === 'reset-interest-drop') {
+    state.settings.resetInterestOnDrop = e.target.checked;
     commit();
   }
   if (e.target.id === 'person-currency' && ui.modalPersonId) {

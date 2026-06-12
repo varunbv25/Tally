@@ -196,8 +196,9 @@ button { font-family: var(--body); cursor: pointer; }
 
 .chip.exempt { color: var(--blue); border-color: var(--blue); }
 
-.quick-add { display: flex; gap: 6px; align-items: center; }
+.quick-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .quick-add input { width: 90px; }
+.quick-add .qa-reason { width: 110px; }
 
 /* ---------- groups ---------- */
 
@@ -332,6 +333,7 @@ button { font-family: var(--body); cursor: pointer; }
   }
   .ledger-table td.col-quick { margin-top: 8px; }
   .quick-add input { flex: 1; width: auto; min-width: 0; }
+  .quick-add .qa-reason { flex: 1 1 100%; order: 1; }
 
   .balance-strip { gap: 16px; }
   .modal-overlay { padding: 16px 8px; }

@@ -35,16 +35,21 @@ interest per `month`, capped at `N` periods (optional).*
 
 - Condition: any of `>` `>=` `<` `<=` `=` against any threshold.
 - Scope: everyone, or only members of a chosen group (per-group rules).
-- Type: simple (`P·r·t`) or compound (`P·(1+r)^t − P`).
+- Type: simple (charges on principal) or compound (charges on principal
+  plus accrued interest).
 - Period: day / week / month / year. Optional total-duration cap (the
   "time period T").
-- The engine walks each person's real transaction timeline and accrues
-  segment by segment, so partial repayments immediately shrink the base.
+- Interest lands in full-period steps: the first charge arrives one day
+  after a rule's condition is met, then one charge per period after that.
+  The engine walks each person's real transaction timeline, so partial
+  repayments immediately shrink the base.
 
 Interest never accrues on money *you* owe (negative or zero balances earn
 nothing), people can be marked "interest exempt", rules are evaluated
 top-down with first match winning, and capitalizing or settling moves the
-accrual anchor so past time is never billed twice.
+accrual anchor so past time is never billed twice. An optional setting
+resets accrued interest the moment a balance falls below the rule's
+condition.
 
 ### Currencies
 12 currencies; each person has their own. The header shows a net position

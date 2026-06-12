@@ -42,7 +42,10 @@ function defaultState() {
     transactions: [],  // {id, personId, groupId|null, amount, note, date, isInterest}
     interestRules: [], // {id, name, enabled, op, value, type:'simple'|'compound', rate, periodUnit, capPeriods|null, groupId|null}
                        // groupId null = applies to everyone; otherwise only to members of that group
-    settings: { baseCurrency: 'INR' }, // default currency for new people
+    settings: {
+      baseCurrency: 'INR',        // default currency for new people
+      resetInterestOnDrop: false, // wipe accrued interest when balance stops matching any rule
+    },
   };
 }
 
@@ -159,8 +162,12 @@ function firstMatchingInterestRule(balance, personId) {
 }
 
 /*
-  Walks the person's transaction history chronologically and accrues
-  interest on each time segment where the running balance satisfies a rule.
+  Interest is charged in DISCRETE STEPS, not continuously:
+    - A rule's clock starts the moment the balance meets its condition.
+    - The first FULL period's interest lands one day later, all at once.
+    - One more full period's interest is added every period after that.
+    - Compound rules charge on principal + accrued; simple rules charge
+      on principal only.
 
   Hard exceptions, in order:
     1. Interest NEVER accrues while balance <= 0 (you owe them, or settled).
@@ -168,11 +175,14 @@ function firstMatchingInterestRule(balance, personId) {
     3. Accrual starts no earlier than person.interestAnchor (set when
        interest is capitalized or debts settled, preventing double-count).
     4. Rules are evaluated top-down; the FIRST matching enabled rule wins
-       for that segment (no stacking). A rule scoped to a group only
-       applies to current members of that group.
-    5. A rule with capPeriods stops accruing after that many cumulative
-       periods of accrual under that rule.
+       (no stacking). A rule scoped to a group only applies to current
+       members of that group.
+    5. A rule with capPeriods stops charging after that many periods.
+    6. If settings.resetInterestOnDrop is on, accrued (uncapitalized)
+       interest is wiped the moment the balance stops matching any rule.
 */
+const INTEREST_GRACE_MS = PERIOD_MS.day; // first charge lands 1 day after the condition is met
+
 function accruedInterestDetail(person, now = Date.now()) {
   const out = { total: 0, byRule: {} };
   if (!person || person.interestExempt) return out;
@@ -181,34 +191,43 @@ function accruedInterestDetail(person, now = Date.now()) {
   if (!txns.length || !state.interestRules.some(r => r.enabled)) return out;
 
   const anchor = person.interestAnchor ? new Date(person.interestAnchor).getTime() : 0;
-  const usedPeriods = {}; // ruleId -> cumulative periods consumed (for caps)
+  const usedPeriods = {}; // ruleId -> periods charged so far (for caps)
   let balance = 0;
+  let stretch = null;     // { rule, accrued, nextTick } while a rule's condition holds
 
   for (let i = 0; i < txns.length; i++) {
     balance += txns[i].amount;
-    const segStart = Math.max(new Date(txns[i].date).getTime(), anchor);
-    const segEnd = i + 1 < txns.length ? new Date(txns[i + 1].date).getTime() : now;
-    if (segEnd <= segStart) continue;
-    if (balance <= 0.005) continue;                    // exception 1
+    const eventTime = Math.max(new Date(txns[i].date).getTime(), anchor);
+    const segEnd = i + 1 < txns.length
+      ? Math.max(new Date(txns[i + 1].date).getTime(), anchor)
+      : Math.max(now, anchor);
 
-    const rule = firstMatchingInterestRule(balance, person.id);
-    if (!rule) continue;
+    const rule = balance > 0.005 ? firstMatchingInterestRule(balance, person.id) : null;
 
-    let periods = (segEnd - segStart) / PERIOD_MS[rule.periodUnit];
-    if (rule.capPeriods) {
-      const used = usedPeriods[rule.id] || 0;
-      periods = Math.max(0, Math.min(periods, rule.capPeriods - used));
-      usedPeriods[rule.id] = used + periods;
+    if (!rule) {
+      stretch = null;
+      if (state.settings.resetInterestOnDrop) { out.total = 0; out.byRule = {}; }
+    } else if (!stretch || stretch.rule.id !== rule.id) {
+      stretch = { rule, accrued: 0, nextTick: eventTime + INTEREST_GRACE_MS };
     }
-    if (periods <= 0) continue;
 
-    const r = Number(rule.rate) / 100;
-    const interest = rule.type === 'compound'
-      ? balance * (Math.pow(1 + r, periods) - 1)
-      : balance * r * periods;
+    if (!stretch) continue;
 
-    out.total += interest;
-    out.byRule[rule.id] = (out.byRule[rule.id] || 0) + interest;
+    const r = Number(stretch.rule.rate) / 100;
+    const periodMs = PERIOD_MS[stretch.rule.periodUnit];
+    const limit = Math.min(segEnd, now);
+
+    while (stretch.nextTick <= limit) {
+      const used = usedPeriods[stretch.rule.id] || 0;
+      if (stretch.rule.capPeriods && used >= stretch.rule.capPeriods) break;
+      const base = stretch.rule.type === 'compound' ? balance + stretch.accrued : balance;
+      const charge = base * r;
+      stretch.accrued += charge;
+      out.total += charge;
+      out.byRule[stretch.rule.id] = (out.byRule[stretch.rule.id] || 0) + charge;
+      usedPeriods[stretch.rule.id] = used + 1;
+      stretch.nextTick += periodMs;
+    }
   }
   return out;
 }
