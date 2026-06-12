@@ -62,7 +62,13 @@ function loadState() {
 }
 
 function saveState() {
-  localStorage.setItem(LS_KEY, JSON.stringify(state));
+  const json = JSON.stringify(state);
+  localStorage.setItem(LS_KEY, json);
+  /* mirror for the service worker (it can't read localStorage);
+     idbSet lives in notif.js — guard for load order and tests */
+  if (typeof idbSet === 'function' && typeof indexedDB !== 'undefined') {
+    idbSet('state', json).catch(() => {});
+  }
 }
 
 /* ---------- CRUD ---------- */
