@@ -307,9 +307,10 @@ button { font-family: var(--body); cursor: pointer; }
 
   .masthead-inner {
     padding: 14px 16px 4px;
-    flex-direction: column; align-items: flex-start; gap: 8px;
+    align-items: center; gap: 8px;
   }
   .wordmark { font-size: 24px; }
+  .net-stamps { margin-left: auto; justify-content: flex-end; }
   .stamp { font-size: 11.5px; padding: 4px 10px; }
   .tabs { padding: 0 16px; gap: 14px; }
   .view { padding: 18px 14px 60px; }
