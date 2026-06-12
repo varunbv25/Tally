@@ -1,0 +1,10 @@
+name = "tally"
+main = "src/index.js"
+compatibility_date = "2026-06-01"
+
+kv_namespaces = [
+  { binding = "TALLY_PUSH", id = "REPLACED_AT_DEPLOY" }
+]
+
+[triggers]
+crons = ["*/15 * * * *"]
