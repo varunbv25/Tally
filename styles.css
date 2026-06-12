@@ -339,3 +339,20 @@ button { font-family: var(--body); cursor: pointer; }
   .form-row { row-gap: 8px; }
   input[type="date"] { width: auto; }
 }
+
+/* ---------- notifications settings ---------- */
+
+.notif-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px dotted var(--line);
+  font-size: 14px;
+}
+.notif-row:last-of-type { border-bottom: 0; }
+.notif-row.off { opacity: 0.45; }
+.notif-row input[type="number"] { width: 90px; }
+.notif-value { color: var(--ink-soft); }

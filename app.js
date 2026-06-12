@@ -38,6 +38,36 @@ function fmtDate(iso) {
 
 function commit() { saveState(); render(); }
 
+/* ---------- notifications plumbing ---------- */
+
+function runNotificationCheck() {} /* replaced in Task 5 with the real check */
+
+async function enableNotifications() {
+  if (!('Notification' in window)) return;
+  await Notification.requestPermission();
+  render();                       // reflect granted/denied state
+  runNotificationCheck();
+  registerPeriodicSync();
+}
+
+async function disableNotifications() {
+  if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(() => {});
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if ('periodicSync' in reg) await reg.periodicSync.unregister('tally-check');
+  } catch { /* unsupported — nothing to undo */ }
+}
+
+async function registerPeriodicSync() {
+  if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if ('periodicSync' in reg) {
+      await reg.periodicSync.register('tally-check', { minInterval: 12 * 60 * 60 * 1000 });
+    }
+  } catch { /* iOS / desktop tab: foreground path covers it */ }
+}
+
 /* ---------- masthead stamps ---------- */
 
 function renderStamps() {
@@ -303,12 +333,50 @@ function interestRulesPanel() {
 
 /* ---------- settings view ---------- */
 
+function notificationsPanel() {
+  const ns = notifSettings(state);
+  const supported = 'Notification' in window;
+  const blocked = supported && ns.enabled && Notification.permission === 'denied';
+  const dis = ns.enabled ? '' : 'disabled';
+
+  const row = (key, label, control) => `
+    <div class="notif-row ${ns.enabled ? '' : 'off'}">
+      <label><input type="checkbox" data-notif-toggle="${key}" ${ns[key].enabled ? 'checked' : ''} ${dis}> ${label}</label>
+      ${control}
+    </div>`;
+  const num = (key, field, suffix, attrs) => `
+    <label class="notif-value"><input type="number" ${attrs} data-notif-value="${key}" data-field="${field}" value="${ns[key][field]}" ${dis}> ${suffix}</label>`;
+
+  return `
+    <div class="panel">
+      <h3>Notifications</h3>
+      <div class="form-row">
+        <label><input type="checkbox" id="notif-master" ${ns.enabled ? 'checked' : ''} ${supported ? '' : 'disabled'}> Enable notifications</label>
+      </div>
+      ${supported ? '' : '<p class="muted">This browser does not support notifications.</p>'}
+      ${blocked ? '<div class="banner">Notifications are blocked in your browser settings. Allow them for this site to receive alerts.</div>' : ''}
+      ${row('agingDebt', 'Aging debt — no repayment for', num('agingDebt', 'days', 'days', 'min="1" step="1"'))}
+      ${row('recurringNudge', 'Recurring reminder of who owes you', `
+        <select data-notif-value="recurringNudge" data-field="cadence" ${dis}>
+          <option value="weekly" ${ns.recurringNudge.cadence === 'weekly' ? 'selected' : ''}>weekly</option>
+          <option value="monthly" ${ns.recurringNudge.cadence === 'monthly' ? 'selected' : ''}>monthly</option>
+        </select>`)}
+      ${row('balanceThreshold', 'Someone’s total crosses', num('balanceThreshold', 'amount', '', 'min="0" step="any"'))}
+      ${row('settleUpNudge', 'You’ve owed someone for', num('settleUpNudge', 'days', 'days', 'min="1" step="1"'))}
+      ${row('interestMilestone', 'Accrued interest reaches', num('interestMilestone', 'amount', '', 'min="0" step="any"'))}
+      ${row('capitalizeSuggest', 'Interest exceeds', num('capitalizeSuggest', 'percent', '% of principal', 'min="1" step="1"'))}
+      <p class="muted">Computed on this device — amounts compare in each person’s own currency. Background alerts work where Tally is installed as an app (Android/Chrome); elsewhere you’re notified when you open Tally.</p>
+    </div>`;
+}
+
 function renderSettings() {
   return `
     <h2 class="section-title">Settings</h2>
     <p class="section-sub">Interest rules, currency, and your data — which never leaves this browser unless you export it.</p>
 
     ${interestRulesPanel()}
+
+    ${notificationsPanel()}
 
     <div class="panel">
       <h3>Currency</h3>
@@ -615,6 +683,24 @@ document.addEventListener('change', e => {
       try { importJSON(text); render(); alert('Backup imported.'); }
       catch (err) { alert('Import failed: ' + err.message); }
     });
+  }
+  if (e.target.id === 'notif-master') {
+    const ns = notifSettings(state);
+    ns.enabled = e.target.checked;
+    commit();
+    if (ns.enabled) enableNotifications(); else disableNotifications();
+  }
+  if (e.target.dataset.notifToggle) {
+    notifSettings(state)[e.target.dataset.notifToggle].enabled = e.target.checked;
+    commit();
+  }
+  if (e.target.dataset.notifValue) {
+    const ns = notifSettings(state);
+    const { notifValue: key, field } = e.target.dataset;
+    ns[key][field] = field === 'cadence'
+      ? e.target.value
+      : Math.max(0, parseFloat(e.target.value) || 0);
+    commit();
   }
 });
 
