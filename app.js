@@ -632,11 +632,12 @@ function renderSettings() {
     <div class="panel">
       <h3>Data</h3>
       <div class="form-row">
-        <button class="btn ghost" data-action="export-data">Export backup (JSON)</button>
-        <label class="btn ghost" style="display:inline-block">Import backup
-          <input type="file" id="import-file" accept=".json,application/json" style="display:none">
+        <button class="btn ghost" data-action="export-data">Export spreadsheet (CSV)</button>
+        <label class="btn ghost" style="display:inline-block">Import spreadsheet
+          <input type="file" id="import-file" accept=".csv,text/csv" style="display:none">
         </label>
       </div>
+      <p class="muted">Opens in Excel, Google Sheets or Numbers — one row per entry. Importing replaces people, groups and entries; your interest rules and settings stay on this device.</p>
       <div class="form-row tight">
         <button class="btn danger" data-action="reset-data">Erase everything</button>
       </div>
@@ -833,10 +834,10 @@ document.addEventListener('click', e => {
       break;
 
     case 'export-data': {
-      const blob = new Blob([exportJSON()], { type: 'application/json' });
+      const blob = new Blob(['﻿' + exportCSV()], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `tally-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `tally-export-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(a.href);
       break;
@@ -950,8 +951,14 @@ document.addEventListener('change', e => {
     const file = e.target.files[0];
     if (!file) return;
     file.text().then(text => {
-      try { importJSON(text); render(); alert('Backup imported.'); }
-      catch (err) { alert('Import failed: ' + err.message); }
+      try {
+        importCSV(text);
+        ui.selectMode = false; ui.selected = new Set(); ui.confirmDelete = false;
+        history.replaceState(navState(), '');
+        render();
+        showToast('Spreadsheet imported');
+      } catch (err) { alert('Import failed: ' + err.message); }
+      e.target.value = '';   // allow re-importing the same file
     });
   }
   if (e.target.id === 'notif-master') {

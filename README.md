@@ -61,7 +61,10 @@ date in one box. Tap a name to open that person's full record.
 per currency — amounts are never converted between currencies.
 
 ### Data
-Export/import JSON backups from Settings. Nothing ever leaves the browser.
+Export/import a CSV spreadsheet from Settings (one row per entry, opens in
+Excel/Sheets/Numbers). Importing rebuilds people, groups and entries;
+interest rules and settings stay on the device. Nothing ever leaves the
+browser unless you export it.
 
 ## Architecture
 

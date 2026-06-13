@@ -301,16 +301,138 @@ function netSummary(now = Date.now()) {
   return { perCurrency };
 }
 
-/* ---------- export / import ---------- */
+/* ---------- export / import (CSV / spreadsheet) ----------
+   One row per transaction. Person-level columns (Currency, Member of,
+   Interest exempt) repeat per row so people, group memberships, and
+   transactions all round-trip. Interest rules and settings aren't
+   representable in a flat sheet — they stay on the device. */
 
-function exportJSON() {
-  return JSON.stringify(state, null, 2);
+const CSV_HEADER = ['Date', 'Person', 'Currency', 'Type', 'Amount', 'Group', 'Reason', 'Member of', 'Interest exempt', 'Hidden'];
+
+function csvEscape(v) {
+  const s = String(v ?? '');
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
-function importJSON(text) {
-  const parsed = JSON.parse(text); // throws on bad input
-  if (!parsed || !Array.isArray(parsed.people)) throw new Error('Not a Tally backup file');
-  state = Object.assign(defaultState(), parsed);
+function exportCSV() {
+  const memberOf = p => groupsOf(p.id).map(g => g.name).join('; ');
+  const txns = state.transactions.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+  const seen = new Set();
+  const rows = [];
+  txns.forEach(t => {
+    const p = getPerson(t.personId);
+    if (!p) return;
+    seen.add(p.id);
+    const g = t.groupId ? getGroup(t.groupId) : null;
+    rows.push([
+      t.date, p.name, p.currency,
+      t.isInterest ? 'Interest' : (t.amount >= 0 ? 'Lent' : 'Paid'),
+      t.amount, g ? g.name : '', t.note || '',
+      memberOf(p), p.interestExempt ? 'yes' : '', t.archived ? 'yes' : '',
+    ]);
+  });
+  // people with no transactions still need a row to preserve them
+  state.people.filter(p => !seen.has(p.id)).forEach(p => {
+    rows.push(['', p.name, p.currency, '', '', '', '', memberOf(p), p.interestExempt ? 'yes' : '', '']);
+  });
+  return [CSV_HEADER, ...rows].map(r => r.map(csvEscape).join(',')).join('\r\n');
+}
+
+function parseCSV(text) {
+  const out = [];
+  let row = [], field = '', inQ = false;
+  const src = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (inQ) {
+      if (c === '"') {
+        if (src[i + 1] === '"') { field += '"'; i++; }
+        else inQ = false;
+      } else field += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n') { row.push(field); out.push(row); row = []; field = ''; }
+    else field += c;
+  }
+  if (field.length || row.length) { row.push(field); out.push(row); }
+  return out.filter(r => !(r.length === 1 && r[0].trim() === ''));
+}
+
+function importCSV(text) {
+  const rows = parseCSV(text);
+  if (rows.length < 1) throw new Error('The file is empty');
+  const header = rows[0].map(h => h.trim().toLowerCase());
+  const col = name => header.indexOf(name);
+  const ci = {
+    date: col('date'), person: col('person'), currency: col('currency'),
+    type: col('type'), amount: col('amount'), group: col('group'),
+    reason: col('reason'), members: col('member of'),
+    exempt: col('interest exempt'), hidden: col('hidden'),
+  };
+  if (ci.person < 0) throw new Error('CSV must have a "Person" column');
+
+  const people = new Map();   // name -> person
+  const groups = new Map();   // name -> group
+  const txns = [];
+  const get = (row, c) => (c >= 0 && c < row.length ? row[c].trim() : '');
+
+  const ensurePerson = (name, currency, exempt) => {
+    let p = people.get(name);
+    if (!p) {
+      p = { id: uid(), name, currency: currency || state.settings.baseCurrency,
+            interestExempt: !!exempt, interestAnchor: null, createdAt: new Date().toISOString() };
+      people.set(name, p);
+    } else {
+      if (currency) p.currency = currency;
+      if (exempt) p.interestExempt = true;
+    }
+    return p;
+  };
+  const ensureGroup = name => {
+    let g = groups.get(name);
+    if (!g) { g = { id: uid(), name, memberIds: [] }; groups.set(name, g); }
+    return g;
+  };
+  const addMember = (g, p) => { if (g && p && !g.memberIds.includes(p.id)) g.memberIds.push(p.id); };
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const name = get(row, ci.person);
+    if (!name) continue;
+    const p = ensurePerson(name, get(row, ci.currency), get(row, ci.exempt).toLowerCase() === 'yes');
+
+    get(row, ci.members).split(';').map(s => s.trim()).filter(Boolean)
+      .forEach(gn => addMember(ensureGroup(gn), p));
+
+    const amtStr = get(row, ci.amount);
+    if (amtStr !== '') {
+      const amount = Number(amtStr.replace(/[^0-9.\-]/g, ''));
+      if (Number.isFinite(amount) && amount !== 0) {
+        const gName = get(row, ci.group);
+        const g = gName ? ensureGroup(gName) : null;
+        if (g) addMember(g, p);
+        const d = new Date(get(row, ci.date));
+        const txn = {
+          id: uid(), personId: p.id, groupId: g ? g.id : null,
+          amount, note: get(row, ci.reason),
+          date: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
+          isInterest: get(row, ci.type).toLowerCase() === 'interest',
+        };
+        if (get(row, ci.hidden).toLowerCase() === 'yes') txn.archived = true;
+        txns.push(txn);
+      }
+    }
+  }
+
+  if (!people.size) throw new Error('No people found in the file');
+
+  state = Object.assign(defaultState(), {
+    people: [...people.values()],
+    groups: [...groups.values()],
+    transactions: txns,
+    interestRules: state.interestRules,   // kept as-is (not in the sheet)
+    settings: state.settings,             // kept as-is (not in the sheet)
+  });
   saveState();
 }
 
