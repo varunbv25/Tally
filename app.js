@@ -39,6 +39,34 @@ function fmtDate(iso) {
 
 function commit() { saveState(); render(); runNotificationCheck(); }
 
+/* ---------- back-button / gesture navigation ----------
+   Each drill-in (tab switch, group detail, person modal) pushes a
+   history entry encoding the nav state. Close buttons call goBack(),
+   so the OS back button/gesture and on-screen close behave identically;
+   popstate replays the previous nav state. From the root, back exits. */
+
+function navState() {
+  return { tally: true, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId };
+}
+
+function pushNav() {
+  history.pushState(navState(), '');
+}
+
+function applyNav(s) {
+  ui.tab = s && s.tab ? s.tab : 'ledger';
+  ui.openGroupId = (s && s.openGroupId) || null;
+  ui.modalPersonId = (s && s.modalPersonId) || null;
+  ui.renamingGroup = false;
+}
+
+function goBack() { history.back(); }
+
+window.addEventListener('popstate', e => {
+  applyNav(e.state && e.state.tally ? e.state : { tab: 'ledger' });
+  render();
+});
+
 /* ---------- notifications plumbing ---------- */
 
 /* Checks read-modify-write the shared notifLog; run them one at a
@@ -86,10 +114,17 @@ function maybeCelebrate(personId, beforeTotal) {
 }
 
 function showToast(msg) {
+  let stack = document.getElementById('toast-stack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'toast-stack';
+    stack.className = 'toast-stack';
+    document.body.appendChild(stack);
+  }
   const t = document.createElement('div');
   t.className = 'toast';
   t.textContent = msg;
-  document.body.appendChild(t);
+  stack.appendChild(t);
   requestAnimationFrame(() => t.classList.add('show'));
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3500);
 }
@@ -632,16 +667,16 @@ function render() {
 document.addEventListener('click', e => {
   const btn = e.target.closest('[data-action]');
 
-  if (e.target.id === 'modal-overlay') { ui.modalPersonId = null; render(); return; }
+  if (e.target.id === 'modal-overlay') { goBack(); return; }
   if (!btn) return;
 
   const { action, id, sign, group } = btn.dataset;
 
   switch (action) {
-    case 'open-person': ui.modalPersonId = id; render(); break;
-    case 'close-modal': ui.modalPersonId = null; render(); break;
-    case 'open-group': ui.openGroupId = id; ui.tab = 'groups'; ui.renamingGroup = false; render(); break;
-    case 'close-group': ui.openGroupId = null; ui.renamingGroup = false; render(); break;
+    case 'open-person': ui.modalPersonId = id; pushNav(); render(); break;
+    case 'close-modal': goBack(); break;
+    case 'open-group': ui.openGroupId = id; ui.tab = 'groups'; ui.renamingGroup = false; pushNav(); render(); break;
+    case 'close-group': goBack(); break;
     case 'rename-group': ui.renamingGroup = true; render(); document.querySelector('[data-form="rename-group"] input')?.focus(); break;
     case 'cancel-rename': ui.renamingGroup = false; render(); break;
 
@@ -666,14 +701,14 @@ document.addEventListener('click', e => {
 
     case 'delete-group':
       if (confirm('Delete this group? People and their balances are kept.')) {
-        deleteGroup(id); ui.openGroupId = null; commit();
+        deleteGroup(id); saveState(); runNotificationCheck(); goBack();
       }
       break;
 
     case 'delete-person': {
       const p = getPerson(id);
       if (p && confirm(`Delete ${p.name} and ALL their transactions? This cannot be undone.`)) {
-        deletePerson(id); ui.modalPersonId = null; commit();
+        deletePerson(id); saveState(); runNotificationCheck(); goBack();
       }
       break;
     }
@@ -868,9 +903,13 @@ document.addEventListener('input', e => {
 document.getElementById('tabs').addEventListener('click', e => {
   const tab = e.target.closest('.tab');
   if (!tab) return;
-  ui.tab = tab.dataset.tab;
+  const newTab = tab.dataset.tab;
+  if (newTab === ui.tab && !ui.openGroupId && !ui.modalPersonId) return;
+  ui.tab = newTab;
   ui.openGroupId = null;
+  ui.modalPersonId = null;
   ui.renamingGroup = false;
+  pushNav();
   render();
 });
 
@@ -881,6 +920,7 @@ setInterval(render, 60_000);
 
 loadState();
 saveState();            // ensure the IDB mirror exists even before the first edit
+history.replaceState(navState(), '');   // anchor root so back-navigation has a floor
 render();
 runNotificationCheck();
 registerPeriodicSync();
