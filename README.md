@@ -51,6 +51,16 @@ accrual anchor so past time is never billed twice. An optional setting
 resets accrued interest the moment a balance falls below the rule's
 condition.
 
+### Indirect payments
+When someone who owes you (the **lender**) is themselves owed by a third
+person (the **receiver**), route the debt onto your ledger from the
+**Indirect** tab: the lender's balance with you drops, and the receiver
+who owed them now owes you instead. Your overall position is unchanged —
+the debt just moves to whoever can actually pay. A live preview shows the
+exact before/after for both people, and each transfer is recorded as two
+linked entries (tagged **INDIRECT**, with a *via* label) so it shows in
+History and can be undone in one step, reverting both balances.
+
 ### History
 A dedicated tab listing every entry across everyone — lent, paid, and
 interest — newest first. Search filters by person, reason, amount, or
@@ -72,7 +82,7 @@ browser unless you export it.
 |---|---|
 | `store.js` | State, persistence, CRUD, the interest engine, currency math |
 | `app.js` | Rendering (vanilla JS, full re-render) and delegated event handling |
-| `styles.css` | Banker's-ledger theme (Fraunces + IBM Plex, cream paper, green ink) |
+| `styles.css` | Banker's-ledger theme (Fraunces + IBM Plex, cream paper, green ink); type/spacing/radii driven by design tokens in `:root` |
 | `serve.js` | Optional zero-dependency dev server |
 
 The data layer (`store.js`) has no DOM dependencies — it is deliberately

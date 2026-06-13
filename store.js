@@ -126,6 +126,63 @@ function deleteTransaction(id) {
   state.transactions = state.transactions.filter(t => t.id !== id);
 }
 
+/* ---------- indirect payments (debt routing) ----------
+   When someone who owes you (the LENDER) is themselves owed by a third
+   person (the RECEIVER), the debt can be routed onto your ledger:
+     - the lender's balance with you DROPS by the amount, and
+     - the receiver now owes YOU that same amount.
+   Your overall position is unchanged — the debt just moves to whoever
+   can actually pay. Recorded as two linked transactions (shared linkId)
+   so the pair shows in History and can be undone together. */
+function addIndirectPayment({ lenderId, receiverId, amount, note = '', date = null }) {
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt <= 0) throw new Error('Enter an amount greater than zero.');
+  if (!lenderId || !receiverId) throw new Error('Pick both people.');
+  if (lenderId === receiverId) throw new Error('Pick two different people.');
+  const lender = getPerson(lenderId), receiver = getPerson(receiverId);
+  if (!lender || !receiver) throw new Error('Person not found.');
+
+  const linkId = uid();
+  const when = date || new Date().toISOString();
+  const lenderTxn = addTransaction({ personId: lenderId, amount: -amt, note, date: when });
+  const receiverTxn = addTransaction({ personId: receiverId, amount: amt, note, date: when });
+  lenderTxn.indirect = receiverTxn.indirect = true;
+  lenderTxn.linkId = receiverTxn.linkId = linkId;
+  lenderTxn.counterpartyId = receiverId;
+  receiverTxn.counterpartyId = lenderId;
+  return { linkId, lenderTxn, receiverTxn };
+}
+
+/* All recorded indirect payments as {linkId, lender, receiver, amount, note, date},
+   newest first. A half-pair (one leg deleted directly) is skipped. */
+function indirectPayments() {
+  const byLink = {};
+  state.transactions.forEach(t => {
+    if (!t.indirect || !t.linkId || t.archived) return;
+    (byLink[t.linkId] || (byLink[t.linkId] = [])).push(t);
+  });
+  const pairs = [];
+  Object.entries(byLink).forEach(([linkId, legs]) => {
+    const lenderTxn = legs.find(t => t.amount < 0);
+    const receiverTxn = legs.find(t => t.amount > 0);
+    if (!lenderTxn || !receiverTxn) return;
+    const lender = getPerson(lenderTxn.personId);
+    const receiver = getPerson(receiverTxn.personId);
+    if (!lender || !receiver) return;
+    pairs.push({
+      linkId, lender, receiver,
+      amount: Math.abs(lenderTxn.amount),
+      note: lenderTxn.note, date: lenderTxn.date,
+    });
+  });
+  return pairs.sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+/* Remove both legs of an indirect payment, reverting both balances. */
+function deleteIndirectPayment(linkId) {
+  state.transactions = state.transactions.filter(t => t.linkId !== linkId);
+}
+
 function personTxns(personId) {
   return state.transactions
     .filter(t => t.personId === personId)
@@ -326,7 +383,7 @@ function exportCSV() {
     const g = t.groupId ? getGroup(t.groupId) : null;
     rows.push([
       t.date, p.name, p.currency,
-      t.isInterest ? 'Interest' : (t.amount >= 0 ? 'Lent' : 'Paid'),
+      t.isInterest ? 'Interest' : (t.indirect ? 'Indirect' : (t.amount >= 0 ? 'Lent' : 'Paid')),
       t.amount, g ? g.name : '', t.note || '',
       memberOf(p), p.interestExempt ? 'yes' : '', t.archived ? 'yes' : '',
     ]);

@@ -8,6 +8,7 @@ const ui = {
   tab: 'ledger',
   openGroupId: null,
   modalPersonId: null,
+  indirectOpen: false,      // indirect-payment popup open
   search: '',
   historySearch: '',
   renamingGroup: false,
@@ -49,7 +50,7 @@ function commit() { saveState(); render(); runNotificationCheck(); }
    popstate replays the previous nav state. From the root, back exits. */
 
 function navState() {
-  return { tally: true, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, selectMode: ui.selectMode };
+  return { tally: true, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, selectMode: ui.selectMode };
 }
 
 function pushNav() {
@@ -60,6 +61,7 @@ function applyNav(s) {
   ui.tab = s && s.tab ? s.tab : 'ledger';
   ui.openGroupId = (s && s.openGroupId) || null;
   ui.modalPersonId = (s && s.modalPersonId) || null;
+  ui.indirectOpen = !!(s && s.indirectOpen);
   ui.renamingGroup = false;
   ui.selectMode = !!(s && s.selectMode);
   if (!ui.selectMode) { ui.selected = new Set(); ui.confirmDelete = false; }
@@ -219,6 +221,10 @@ function renderLedger() {
         <input name="name" placeholder="Name" required>
         <button class="btn" type="submit">Add to ledger</button>
       </form>
+      <div class="form-row tight" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--line)">
+        <button class="btn ghost" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
+        <span class="muted">Move a debt across people — route what one person owes through someone else.</span>
+      </div>
     </div>
 
     <div class="form-row">
@@ -486,10 +492,14 @@ function renderHistory() {
 
   const matches = entries.filter(({ t, p, g }) => {
     if (!q) return true;
-    const kind = t.isInterest ? 'interest' : (t.amount >= 0 ? 'lent borrowed' : 'paid back');
+    const kind = t.isInterest ? 'interest'
+      : t.indirect ? 'indirect transfer'
+      : (t.amount >= 0 ? 'lent borrowed' : 'paid back');
+    const counterparty = t.indirect && t.counterpartyId ? (getPerson(t.counterpartyId)?.name || '') : '';
     const hay = [
       p.name,
       t.note,
+      counterparty,
       g ? g.name : 'personal',
       Math.abs(t.amount),
       fmtMoney(t.amount, p.currency),
@@ -501,9 +511,13 @@ function renderHistory() {
   });
 
   const rows = matches.map(({ t, p, g }) => {
+    const via = t.indirect && t.counterpartyId
+      ? `<span class="muted xfer-via">via ${esc(getPerson(t.counterpartyId)?.name || '—')}</span>` : '';
     const tag = t.isInterest
       ? '<span class="interest-tag">INTEREST</span>'
-      : (t.amount >= 0 ? '<span class="hist-tag lent">lent</span>' : '<span class="hist-tag paid">paid</span>');
+      : t.indirect
+        ? '<span class="hist-tag indirect">indirect</span>'
+        : (t.amount >= 0 ? '<span class="hist-tag lent">lent</span>' : '<span class="hist-tag paid">paid</span>');
     const isSel = ui.selected.has(t.id);
     const selCls = ui.selectMode ? (isSel ? ' selected' : '') : '';
     const check = ui.selectMode ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
@@ -516,7 +530,7 @@ function renderHistory() {
       <td data-label="Date">${fmtDate(t.date)}</td>
       <td data-label="Type">${tag}</td>
       <td data-label="Group">${g ? `<span class="chip">${esc(g.name)}</span>` : '<span class="muted">personal</span>'}</td>
-      <td data-label="Reason">${esc(t.note) || '<span class="muted">—</span>'}</td>
+      <td data-label="Reason">${esc(t.note) || (via ? '' : '<span class="muted">—</span>')} ${via}</td>
       <td class="num" data-label="Amount"><span class="money ${moneyClass(t.amount)}">${fmtMoney(t.amount, p.currency)}</span></td>
     </tr>`;
   }).join('');
@@ -594,8 +608,15 @@ function toggleSelected(txnId) {
 /* mode: 'adjust' removes the entries and changes balances;
    'archive' hides them from history but keeps balances unchanged. */
 function performDelete(mode) {
-  const ids = [...ui.selected];
-  if (!ids.length) return;
+  const ids = new Set(ui.selected);
+  if (!ids.size) return;
+  // an indirect payment is two linked legs — act on its sibling too so balances stay consistent
+  [...ids].forEach(id => {
+    const t = state.transactions.find(x => x.id === id);
+    if (t && t.indirect && t.linkId) {
+      state.transactions.forEach(x => { if (x.linkId === t.linkId) ids.add(x.id); });
+    }
+  });
   ids.forEach(id => {
     if (mode === 'adjust') {
       deleteTransaction(id);
@@ -606,10 +627,100 @@ function performDelete(mode) {
   });
   saveState();
   runNotificationCheck();
-  const n = ids.length;
+  const n = ids.size;
   ui.confirmDelete = false;
   goBack();   // pops the select-mode entry; popstate clears selection and re-renders
   showToast(`${n} ${n === 1 ? 'entry' : 'entries'} ${mode === 'adjust' ? 'deleted' : 'removed from history'}`);
+}
+
+/* ---------- indirect payments view ---------- */
+
+function balancePhrase(n, currency) {
+  if (n > 0.005) return `owes you ${fmtMoney(n, currency)}`;
+  if (n < -0.005) return `you owe ${fmtMoney(-n, currency)}`;
+  return 'settled';
+}
+
+function transferPreviewHTML(lenderId, receiverId, amt) {
+  if (!lenderId || !receiverId || !Number.isFinite(amt) || amt <= 0) {
+    return '<span class="muted">Pick both people and an amount to preview the effect.</span>';
+  }
+  if (lenderId === receiverId) return '<span class="xfer-warn">Pick two different people.</span>';
+  const lender = getPerson(lenderId), receiver = getPerson(receiverId);
+  if (!lender || !receiver) return '';
+  const lBefore = totalOf(lender), rBefore = totalOf(receiver);
+  const mismatch = lender.currency !== receiver.currency
+    ? `<div class="xfer-warn">${esc(lender.name)} is in ${lender.currency} and ${esc(receiver.name)} is in ${receiver.currency} — the amount is applied in each person's own currency, nothing is converted.</div>`
+    : '';
+  return `
+    <div class="xfer-line">
+      <span><b>${esc(lender.name)}</b> ${balancePhrase(lBefore, lender.currency)}
+      <span class="xfer-arrow">→</span> ${balancePhrase(lBefore - amt, lender.currency)}</span>
+      <span class="xfer-delta neg">−${fmtMoney(amt, lender.currency)}</span>
+    </div>
+    <div class="xfer-line">
+      <span><b>${esc(receiver.name)}</b> ${balancePhrase(rBefore, receiver.currency)}
+      <span class="xfer-arrow">→</span> ${balancePhrase(rBefore + amt, receiver.currency)}</span>
+      <span class="xfer-delta pos">+${fmtMoney(amt, receiver.currency)}</span>
+    </div>
+    ${mismatch}`;
+}
+
+/* The popup speaks in "left <owes|lent> right". Map that to the
+   lender (balance with you drops) / receiver (now owes you) the data
+   layer expects: with "lent", left lent to right, so left is the lender;
+   with "owes", left owes right, so right is the lender. */
+function transferRoles(leftId, rightId, rel) {
+  return rel === 'owes'
+    ? { lenderId: rightId, receiverId: leftId }
+    : { lenderId: leftId, receiverId: rightId };
+}
+
+function updateTransferPreview() {
+  const form = document.querySelector('[data-form="add-transfer"]');
+  const node = document.getElementById('xfer-preview');
+  if (!form || !node) return;
+  const { lenderId, receiverId } = transferRoles(form.leftId.value, form.rightId.value, form.rel.value);
+  node.innerHTML = transferPreviewHTML(lenderId, receiverId, parseFloat(form.amount.value));
+}
+
+function renderIndirectModal() {
+  const root = document.getElementById('indirect-root');
+  if (!ui.indirectOpen) { root.innerHTML = ''; return; }
+
+  const people = state.people;
+  const opts = sel => people.map(p =>
+    `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.name)}</option>`
+  ).join('');
+
+  root.innerHTML = `
+  <div class="modal-overlay" id="indirect-overlay">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Indirect payment</h2>
+        <button class="modal-close" data-action="close-indirect">✕</button>
+      </div>
+      <p class="section-sub" style="margin-bottom:18px">Route a debt across people: the lender's balance with you drops, and the person who owed them now owes you instead. Your total is unchanged — it just moves to whoever can actually pay.</p>
+
+      <form data-form="add-transfer">
+        <div class="xfer-sentence">
+          <select name="leftId">${opts(people[0].id)}</select>
+          <select name="rel">
+            <option value="lent">lent to</option>
+            <option value="owes">owes</option>
+          </select>
+          <select name="rightId">${opts(people[1].id)}</select>
+        </div>
+        <div class="form-row">
+          <input name="amount" type="number" step="any" min="0.01" placeholder="amount" required>
+          <input name="date" type="date" value="${new Date().toISOString().slice(0, 10)}">
+          <input name="note" placeholder="reason (optional)" maxlength="80" style="flex:1">
+        </div>
+        <div id="xfer-preview" class="xfer-preview"></div>
+        <div class="form-row tight"><button class="btn" type="submit">Record indirect payment</button></div>
+      </form>
+    </div>
+  </div>`;
 }
 
 function renderSettings() {
@@ -664,7 +775,7 @@ function renderModal() {
     return `<tr>
       <td>${fmtDate(t.date)}</td>
       <td>${g ? `<span class="chip">${esc(g.name)}</span>` : '<span class="muted">personal</span>'}</td>
-      <td>${esc(t.note) || '<span class="muted">—</span>'} ${t.isInterest ? '<span class="interest-tag">INTEREST</span>' : ''}</td>
+      <td>${esc(t.note) || '<span class="muted">—</span>'} ${t.isInterest ? '<span class="interest-tag">INTEREST</span>' : ''}${t.indirect ? `<span class="hist-tag indirect">indirect${t.counterpartyId ? ' · ' + esc(getPerson(t.counterpartyId)?.name || '') : ''}</span>` : ''}</td>
       <td class="num"><span class="money ${moneyClass(t.amount)}">${fmtMoney(t.amount, p.currency)}</span></td>
       <td><button class="del-x" data-action="delete-txn" data-id="${t.id}" title="Delete entry">✕</button></td>
     </tr>`;
@@ -717,7 +828,7 @@ function renderModal() {
         </form>
       </div>
 
-      <h3 style="font-family:var(--display);color:var(--green-deep);margin-bottom:8px">History</h3>
+      <h3 class="subhead">History</h3>
       ${txRows ? `<div class="table-wrap"><table class="txn-table"><thead><tr><th>Date</th><th>Group</th><th>Note</th><th class="num">Amount</th><th></th></tr></thead><tbody>${txRows}</tbody></table></div>`
         : '<span class="muted">No entries yet.</span>'}
     </div>
@@ -740,6 +851,8 @@ function render() {
     case 'settings': view.innerHTML = renderSettings(); break;
   }
   renderModal();
+  renderIndirectModal();
+  if (ui.indirectOpen) updateTransferPreview();
 }
 
 /* ---------- event wiring (delegated) ---------- */
@@ -756,6 +869,7 @@ document.addEventListener('click', e => {
   const btn = e.target.closest('[data-action]');
 
   if (e.target.id === 'modal-overlay') { goBack(); return; }
+  if (e.target.id === 'indirect-overlay') { goBack(); return; }
   if (e.target.id === 'confirm-overlay') { ui.confirmDelete = false; render(); return; }
   if (!btn) return;
 
@@ -764,6 +878,8 @@ document.addEventListener('click', e => {
   switch (action) {
     case 'open-person': ui.modalPersonId = id; pushNav(); render(); break;
     case 'close-modal': goBack(); break;
+    case 'open-indirect': ui.indirectOpen = true; pushNav(); render(); break;
+    case 'close-indirect': goBack(); break;
     case 'open-group': ui.openGroupId = id; ui.tab = 'groups'; ui.renamingGroup = false; pushNav(); render(); break;
     case 'close-group': goBack(); break;
     case 'rename-group': ui.renamingGroup = true; render(); document.querySelector('[data-form="rename-group"] input')?.focus(); break;
@@ -812,9 +928,17 @@ document.addEventListener('click', e => {
       }
       break;
 
-    case 'delete-txn':
-      if (confirm('Delete this entry?')) { deleteTransaction(id); commit(); }
+    case 'delete-txn': {
+      const t = state.transactions.find(x => x.id === id);
+      if (t && t.indirect && t.linkId) {
+        if (confirm('This is one leg of an indirect payment. Delete both legs and revert both balances?')) {
+          deleteIndirectPayment(t.linkId); commit();
+        }
+      } else if (confirm('Delete this entry?')) {
+        deleteTransaction(id); commit();
+      }
       break;
+    }
 
     case 'open-delete-confirm': if (ui.selected.size) { ui.confirmDelete = true; render(); } break;
     case 'cancel-confirm': ui.confirmDelete = false; render(); break;
@@ -909,6 +1033,27 @@ document.addEventListener('submit', e => {
       break;
     }
 
+    case 'add-transfer': {
+      const dateStr = fd.get('date');
+      const { lenderId, receiverId } = transferRoles(fd.get('leftId'), fd.get('rightId'), fd.get('rel'));
+      try {
+        addIndirectPayment({
+          lenderId,
+          receiverId,
+          amount: parseFloat(fd.get('amount')),
+          note: fd.get('note') || '',
+          date: dateStr ? new Date(dateStr + 'T12:00:00').toISOString() : null,
+        });
+        ui.indirectOpen = false;
+        goBack();          // pop the nav entry the popup pushed, then commit re-renders
+        commit();
+        showToast('Indirect payment recorded');
+      } catch (err) {
+        alert(err.message);
+      }
+      break;
+    }
+
     case 'add-interest-rule': {
       const cap = parseFloat(fd.get('capPeriods'));
       state.interestRules.push({
@@ -979,6 +1124,7 @@ document.addEventListener('change', e => {
       : Math.max(0, parseFloat(e.target.value) || 0);
     commit();
   }
+  if (e.target.closest('[data-form="add-transfer"]')) updateTransferPreview();
 });
 
 document.addEventListener('input', e => {
@@ -998,6 +1144,7 @@ document.addEventListener('input', e => {
     box.focus();
     box.setSelectionRange(pos, pos);
   }
+  if (e.target.closest('[data-form="add-transfer"]')) updateTransferPreview();
 });
 
 document.getElementById('tabs').addEventListener('click', e => {
