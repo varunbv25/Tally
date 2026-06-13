@@ -11,6 +11,9 @@ const ui = {
   search: '',
   historySearch: '',
   renamingGroup: false,
+  selectMode: false,        // history multi-select for deletion
+  selected: new Set(),      // selected transaction ids
+  confirmDelete: false,     // delete-confirmation overlay open
 };
 
 /* ---------- helpers ---------- */
@@ -46,7 +49,7 @@ function commit() { saveState(); render(); runNotificationCheck(); }
    popstate replays the previous nav state. From the root, back exits. */
 
 function navState() {
-  return { tally: true, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId };
+  return { tally: true, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, selectMode: ui.selectMode };
 }
 
 function pushNav() {
@@ -58,6 +61,8 @@ function applyNav(s) {
   ui.openGroupId = (s && s.openGroupId) || null;
   ui.modalPersonId = (s && s.modalPersonId) || null;
   ui.renamingGroup = false;
+  ui.selectMode = !!(s && s.selectMode);
+  if (!ui.selectMode) { ui.selected = new Set(); ui.confirmDelete = false; }
 }
 
 function goBack() { history.back(); }
@@ -476,7 +481,7 @@ function renderHistory() {
 
   const entries = state.transactions
     .map(t => ({ t, p: getPerson(t.personId), g: t.groupId ? getGroup(t.groupId) : null }))
-    .filter(x => x.p)                                          // skip orphaned entries
+    .filter(x => x.p && !x.t.archived)                         // skip orphaned + hidden entries
     .sort((a, b) => new Date(b.t.date) - new Date(a.t.date));  // newest first
 
   const matches = entries.filter(({ t, p, g }) => {
@@ -499,11 +504,14 @@ function renderHistory() {
     const tag = t.isInterest
       ? '<span class="interest-tag">INTEREST</span>'
       : (t.amount >= 0 ? '<span class="hist-tag lent">lent</span>' : '<span class="hist-tag paid">paid</span>');
-    return `<tr class="row" data-txn-id="${t.id}">
+    const isSel = ui.selected.has(t.id);
+    const selCls = ui.selectMode ? (isSel ? ' selected' : '') : '';
+    const check = ui.selectMode ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
+    return `<tr class="row${selCls}" data-txn-id="${t.id}">
       <td class="col-person">
+        ${check}
         <button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>
         <span class="money ${moneyClass(t.amount)} hist-amount">${fmtMoney(t.amount, p.currency)}</span>
-        <button class="del-x hist-del" data-action="delete-history" data-id="${t.id}" title="Delete entry">✕</button>
       </td>
       <td data-label="Date">${fmtDate(t.date)}</td>
       <td data-label="Type">${tag}</td>
@@ -513,9 +521,41 @@ function renderHistory() {
     </tr>`;
   }).join('');
 
+  const selCount = ui.selected.size;
+  const selectBar = ui.selectMode ? `
+    <div class="select-bar">
+      <button class="select-cancel" data-action="exit-select" aria-label="Cancel selection">✕</button>
+      <span class="select-count">${selCount} selected</span>
+      <button class="select-bin" data-action="open-delete-confirm" ${selCount ? '' : 'disabled'} aria-label="Delete selected">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/>
+          <path d="M10 11v6M14 11v6"/>
+        </svg>
+      </button>
+    </div>` : '';
+
+  const confirmOverlay = ui.confirmDelete ? `
+    <div class="confirm-overlay" id="confirm-overlay">
+      <div class="confirm-card">
+        <h3>Delete ${selCount} ${selCount === 1 ? 'entry' : 'entries'}?</h3>
+        <p class="muted">Choose how these should be removed:</p>
+        <button class="btn danger block" data-action="confirm-delete" data-mode="adjust">
+          Delete &amp; adjust balances
+        </button>
+        <p class="confirm-hint">Removes the entries and updates each person's balance by those amounts.</p>
+        <button class="btn block" data-action="confirm-delete" data-mode="archive">
+          Remove from history only
+        </button>
+        <p class="confirm-hint">Hides them from history. Everyone's balance stays exactly the same.</p>
+        <button class="btn ghost block" data-action="cancel-confirm">Cancel</button>
+      </div>
+    </div>` : '';
+
   return `
+    ${selectBar}
+    ${confirmOverlay}
     <h2 class="section-title">History</h2>
-    <p class="section-sub">Every entry across everyone — lent, paid, and interest. Search by person, reason, amount, or date. Long-press an entry to delete it.</p>
+    <p class="section-sub">Every entry across everyone — lent, paid, and interest. Search by person, reason, amount, or date. Long-press an entry to start selecting, tap others to add, then tap the bin to delete.</p>
 
     <div class="form-row">
       <input id="history-search" placeholder="Search person, reason, amount, date…" value="${esc(ui.historySearch)}" style="flex:1">
@@ -534,16 +574,42 @@ function renderHistory() {
   `;
 }
 
-function deleteHistoryEntry(txnId) {
-  const t = state.transactions.find(x => x.id === txnId);
-  if (!t) return;
-  const p = getPerson(t.personId);
-  const desc = `${p ? p.name + ' · ' : ''}${fmtMoney(t.amount, p ? p.currency : 'INR')}${t.note ? ' · ' + t.note : ''}`;
-  if (confirm(`Delete this entry?\n\n${desc}\n${fmtDate(t.date)}`)) {
-    deleteTransaction(txnId);
-    commit();
-    showToast('Entry deleted');
+function enterSelectMode(txnId) {
+  if (ui.selectMode) {
+    toggleSelected(txnId);
+    return;
   }
+  ui.selectMode = true;
+  ui.selected = new Set([txnId]);
+  pushNav();
+  render();
+}
+
+function toggleSelected(txnId) {
+  if (ui.selected.has(txnId)) ui.selected.delete(txnId);
+  else ui.selected.add(txnId);
+  render();
+}
+
+/* mode: 'adjust' removes the entries and changes balances;
+   'archive' hides them from history but keeps balances unchanged. */
+function performDelete(mode) {
+  const ids = [...ui.selected];
+  if (!ids.length) return;
+  ids.forEach(id => {
+    if (mode === 'adjust') {
+      deleteTransaction(id);
+    } else {
+      const t = state.transactions.find(x => x.id === id);
+      if (t) t.archived = true;
+    }
+  });
+  saveState();
+  runNotificationCheck();
+  const n = ids.length;
+  ui.confirmDelete = false;
+  goBack();   // pops the select-mode entry; popstate clears selection and re-renders
+  showToast(`${n} ${n === 1 ? 'entry' : 'entries'} ${mode === 'adjust' ? 'deleted' : 'removed from history'}`);
 }
 
 function renderSettings() {
@@ -679,9 +745,17 @@ function render() {
 
 document.addEventListener('click', e => {
   if (lpFired) { lpFired = false; return; }   // swallow the click after a long-press
+
+  // in selection mode, tapping a history row toggles its selection
+  if (ui.selectMode && !e.target.closest('.select-bar, .confirm-overlay')) {
+    const histRow = e.target.closest('.history-table tr[data-txn-id]');
+    if (histRow) { toggleSelected(histRow.dataset.txnId); return; }
+  }
+
   const btn = e.target.closest('[data-action]');
 
   if (e.target.id === 'modal-overlay') { goBack(); return; }
+  if (e.target.id === 'confirm-overlay') { ui.confirmDelete = false; render(); return; }
   if (!btn) return;
 
   const { action, id, sign, group } = btn.dataset;
@@ -741,7 +815,10 @@ document.addEventListener('click', e => {
       if (confirm('Delete this entry?')) { deleteTransaction(id); commit(); }
       break;
 
-    case 'delete-history': deleteHistoryEntry(id); break;
+    case 'open-delete-confirm': if (ui.selected.size) { ui.confirmDelete = true; render(); } break;
+    case 'cancel-confirm': ui.confirmDelete = false; render(); break;
+    case 'confirm-delete': performDelete(btn.dataset.mode); break;
+    case 'exit-select': goBack(); break;
 
     case 'toggle-rule': {
       const r = state.interestRules.find(x => x.id === id);
@@ -920,11 +997,14 @@ document.getElementById('tabs').addEventListener('click', e => {
   const tab = e.target.closest('.tab');
   if (!tab) return;
   const newTab = tab.dataset.tab;
-  if (newTab === ui.tab && !ui.openGroupId && !ui.modalPersonId) return;
+  if (newTab === ui.tab && !ui.openGroupId && !ui.modalPersonId && !ui.selectMode) return;
   ui.tab = newTab;
   ui.openGroupId = null;
   ui.modalPersonId = null;
   ui.renamingGroup = false;
+  ui.selectMode = false;
+  ui.selected = new Set();
+  ui.confirmDelete = false;
   pushNav();
   render();
 });
@@ -951,7 +1031,7 @@ document.addEventListener('pointerdown', e => {
     if (lpRow) lpRow.classList.remove('lp-pressing');
     lpFired = true;
     if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
-    deleteHistoryEntry(txnId);
+    enterSelectMode(txnId);
   }, 500);
 });
 document.addEventListener('pointermove', e => {

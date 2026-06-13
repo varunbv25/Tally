@@ -291,20 +291,67 @@ button { font-family: var(--body); cursor: pointer; }
   text-transform: uppercase; letter-spacing: 0.05em; }
 .hist-amount { display: none; }   /* shown only on mobile cards */
 
-/* long-press to delete: row turns red while held */
-.history-table tr[data-txn-id] { transition: background 0.25s; -webkit-tap-highlight-color: transparent; }
-.history-table tr.lp-pressing { background: rgba(178, 58, 38, 0.12) !important; }
+/* long-press to start selecting: row tints while held */
+.history-table tr[data-txn-id] { transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
+.history-table tr.lp-pressing { background: rgba(30, 91, 63, 0.10) !important; }
 
-/* desktop affordance: a delete ✕ on row hover (touch devices use long-press) */
-.hist-del { display: none; }
-@media (hover: hover) and (pointer: fine) {
-  .hist-del {
-    display: inline-block; margin-left: 8px; opacity: 0;
-    transition: opacity 0.15s; font-size: 12px;
-  }
-  .history-table tr:hover .hist-del { opacity: 0.5; }
-  .hist-del:hover { opacity: 1; }
+/* multi-select mode */
+.history-table tr.selected { background: rgba(30, 91, 63, 0.12) !important; box-shadow: inset 3px 0 0 var(--green); }
+.history-table tr[data-txn-id] { cursor: default; }
+.sel-check {
+  display: inline-block; width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid var(--line-strong); margin-right: 9px; vertical-align: -4px;
+  position: relative; flex: 0 0 auto; transition: background 0.15s, border-color 0.15s;
 }
+.sel-check.on { background: var(--green); border-color: var(--green); }
+.sel-check.on::after {
+  content: ''; position: absolute; left: 5px; top: 1.5px;
+  width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+
+/* selection top bar */
+.select-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 120;
+  display: flex; align-items: center; gap: 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) 18px 12px;
+  background: var(--card); border-bottom: 1px solid var(--line-strong);
+  box-shadow: 0 2px 10px rgba(20, 61, 43, 0.08);
+}
+.select-cancel {
+  background: none; border: 1px solid var(--line-strong); border-radius: 8px;
+  width: 34px; height: 34px; font-size: 15px; color: var(--ink-soft); cursor: pointer;
+}
+.select-cancel:hover { color: var(--ink); border-color: var(--ink-soft); }
+.select-count { font-weight: 600; font-size: 15px; flex: 1; }
+.select-bin {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 42px; height: 42px; border-radius: 12px;
+  background: var(--red); color: #fff; border: none; cursor: pointer;
+  transition: transform 0.1s, background 0.15s, opacity 0.15s;
+}
+.select-bin:hover { background: #8c2d1d; }
+.select-bin:active { transform: scale(0.94); }
+.select-bin:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* delete confirmation with blurred backdrop */
+.confirm-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: rgba(20, 61, 43, 0.28);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  animation: fade 0.18s ease both;
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.confirm-card {
+  background: var(--card); border: 1px solid var(--line-strong); border-radius: 16px;
+  padding: 22px; max-width: 360px; width: 100%;
+  box-shadow: 0 18px 50px rgba(20, 61, 43, 0.35);
+  animation: rise 0.2s ease both;
+}
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.confirm-card h3 { font-family: var(--display); font-size: 20px; color: var(--green-deep); margin-bottom: 4px; }
+.btn.block { display: block; width: 100%; margin-top: 12px; text-align: center; }
+.confirm-hint { font-size: 12px; color: var(--ink-soft); margin: 6px 2px 0; }
 
 .del-x {
   background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 13px;
@@ -417,3 +464,7 @@ button { font-family: var(--body); cursor: pointer; }
   pointer-events: auto;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
+
+/* history col-person: keep [check][name] left, amount right (mobile) */
+.history-table td.col-person { display: flex; align-items: center; justify-content: flex-start; }
+.history-table .hist-amount { margin-left: auto; }
