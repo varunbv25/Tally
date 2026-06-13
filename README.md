@@ -51,6 +51,11 @@ accrual anchor so past time is never billed twice. An optional setting
 resets accrued interest the moment a balance falls below the rule's
 condition.
 
+### History
+A dedicated tab listing every entry across everyone — lent, paid, and
+interest — newest first. Search filters by person, reason, amount, or
+date in one box. Tap a name to open that person's full record.
+
 ### Currencies
 12 currencies; each person has their own. The header shows a net position
 per currency — amounts are never converted between currencies.

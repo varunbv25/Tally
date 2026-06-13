@@ -280,6 +280,17 @@ button { font-family: var(--body); cursor: pointer; }
 .txn-table td.num { text-align: right; }
 .txn-table .interest-tag { color: var(--gold); font-family: var(--mono); font-size: 10.5px; }
 
+/* history view */
+.hist-tag {
+  font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 2px 7px; border-radius: 20px;
+}
+.hist-tag.lent { color: var(--green); background: var(--green-tint, rgba(31,122,77,0.1)); }
+.hist-tag.paid { color: var(--ink-soft); background: rgba(0,0,0,0.05); }
+.interest-tag { color: var(--gold); font-family: var(--mono); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.05em; }
+.hist-amount { display: none; }   /* shown only on mobile cards */
+
 .del-x {
   background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 13px;
 }
@@ -334,6 +345,10 @@ button { font-family: var(--body); cursor: pointer; }
   .ledger-table td.col-quick { margin-top: 8px; }
   .quick-add input { flex: 1; width: auto; min-width: 0; }
   .quick-add .qa-reason { flex: 1 1 100%; order: 1; }
+
+  /* history cards: amount rides in the header, hide the labeled Amount row */
+  .hist-amount { display: inline; font-size: 14px; }
+  .history-table td[data-label="Amount"] { display: none; }
 
   .balance-strip { gap: 16px; }
   .modal-overlay { padding: 16px 8px; }

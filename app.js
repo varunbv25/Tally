@@ -9,6 +9,7 @@ const ui = {
   openGroupId: null,
   modalPersonId: null,
   search: '',
+  historySearch: '',
   renamingGroup: false,
 };
 
@@ -433,6 +434,70 @@ function notificationsPanel() {
     </div>`;
 }
 
+/* ---------- history view ---------- */
+
+function renderHistory() {
+  const q = ui.historySearch.trim().toLowerCase();
+
+  const entries = state.transactions
+    .map(t => ({ t, p: getPerson(t.personId), g: t.groupId ? getGroup(t.groupId) : null }))
+    .filter(x => x.p)                                          // skip orphaned entries
+    .sort((a, b) => new Date(b.t.date) - new Date(a.t.date));  // newest first
+
+  const matches = entries.filter(({ t, p, g }) => {
+    if (!q) return true;
+    const kind = t.isInterest ? 'interest' : (t.amount >= 0 ? 'lent borrowed' : 'paid back');
+    const hay = [
+      p.name,
+      t.note,
+      g ? g.name : 'personal',
+      Math.abs(t.amount),
+      fmtMoney(t.amount, p.currency),
+      fmtDate(t.date),
+      t.date.slice(0, 10),
+      kind,
+    ].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+
+  const rows = matches.map(({ t, p, g }) => {
+    const tag = t.isInterest
+      ? '<span class="interest-tag">INTEREST</span>'
+      : (t.amount >= 0 ? '<span class="hist-tag lent">lent</span>' : '<span class="hist-tag paid">paid</span>');
+    return `<tr class="row">
+      <td class="col-person">
+        <button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>
+        <span class="money ${moneyClass(t.amount)} hist-amount">${fmtMoney(t.amount, p.currency)}</span>
+      </td>
+      <td data-label="Date">${fmtDate(t.date)}</td>
+      <td data-label="Type">${tag}</td>
+      <td data-label="Group">${g ? `<span class="chip">${esc(g.name)}</span>` : '<span class="muted">personal</span>'}</td>
+      <td data-label="Reason">${esc(t.note) || '<span class="muted">—</span>'}</td>
+      <td class="num" data-label="Amount"><span class="money ${moneyClass(t.amount)}">${fmtMoney(t.amount, p.currency)}</span></td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <h2 class="section-title">History</h2>
+    <p class="section-sub">Every entry across everyone — lent, paid, and interest. Search by person, reason, amount, or date.</p>
+
+    <div class="form-row">
+      <input id="history-search" placeholder="Search person, reason, amount, date…" value="${esc(ui.historySearch)}" style="flex:1">
+    </div>
+
+    ${entries.length ? (matches.length ? `
+    <p class="muted" style="margin-bottom:10px">${matches.length} ${matches.length === 1 ? 'entry' : 'entries'}${q ? ' matching' : ''}</p>
+    <table class="ledger-table history-table">
+      <thead><tr>
+        <th>Person</th><th>Date</th><th>Type</th><th>Group</th><th>Reason</th><th class="num">Amount</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`
+      : `<div class="empty-state">No entries match “${esc(ui.historySearch)}”.</div>`)
+      : `<div class="empty-state">No transactions yet. Record some lending or repayments on the Ledger.</div>`}
+  `;
+}
+
 function renderSettings() {
   return `
     <h2 class="section-title">Settings</h2>
@@ -556,6 +621,7 @@ function render() {
   switch (ui.tab) {
     case 'ledger':   view.innerHTML = renderLedger(); break;
     case 'groups':   view.innerHTML = renderGroups(); break;
+    case 'history':  view.innerHTML = renderHistory(); break;
     case 'settings': view.innerHTML = renderSettings(); break;
   }
   renderModal();
@@ -786,6 +852,14 @@ document.addEventListener('input', e => {
     const pos = e.target.selectionStart;
     render();
     const box = document.getElementById('search-box');
+    box.focus();
+    box.setSelectionRange(pos, pos);
+  }
+  if (e.target.id === 'history-search') {
+    ui.historySearch = e.target.value;
+    const pos = e.target.selectionStart;
+    render();
+    const box = document.getElementById('history-search');
     box.focus();
     box.setSelectionRange(pos, pos);
   }
