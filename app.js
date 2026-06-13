@@ -499,10 +499,11 @@ function renderHistory() {
     const tag = t.isInterest
       ? '<span class="interest-tag">INTEREST</span>'
       : (t.amount >= 0 ? '<span class="hist-tag lent">lent</span>' : '<span class="hist-tag paid">paid</span>');
-    return `<tr class="row">
+    return `<tr class="row" data-txn-id="${t.id}">
       <td class="col-person">
         <button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>
         <span class="money ${moneyClass(t.amount)} hist-amount">${fmtMoney(t.amount, p.currency)}</span>
+        <button class="del-x hist-del" data-action="delete-history" data-id="${t.id}" title="Delete entry">✕</button>
       </td>
       <td data-label="Date">${fmtDate(t.date)}</td>
       <td data-label="Type">${tag}</td>
@@ -514,7 +515,7 @@ function renderHistory() {
 
   return `
     <h2 class="section-title">History</h2>
-    <p class="section-sub">Every entry across everyone — lent, paid, and interest. Search by person, reason, amount, or date.</p>
+    <p class="section-sub">Every entry across everyone — lent, paid, and interest. Search by person, reason, amount, or date. Long-press an entry to delete it.</p>
 
     <div class="form-row">
       <input id="history-search" placeholder="Search person, reason, amount, date…" value="${esc(ui.historySearch)}" style="flex:1">
@@ -531,6 +532,18 @@ function renderHistory() {
       : `<div class="empty-state">No entries match “${esc(ui.historySearch)}”.</div>`)
       : `<div class="empty-state">No transactions yet. Record some lending or repayments on the Ledger.</div>`}
   `;
+}
+
+function deleteHistoryEntry(txnId) {
+  const t = state.transactions.find(x => x.id === txnId);
+  if (!t) return;
+  const p = getPerson(t.personId);
+  const desc = `${p ? p.name + ' · ' : ''}${fmtMoney(t.amount, p ? p.currency : 'INR')}${t.note ? ' · ' + t.note : ''}`;
+  if (confirm(`Delete this entry?\n\n${desc}\n${fmtDate(t.date)}`)) {
+    deleteTransaction(txnId);
+    commit();
+    showToast('Entry deleted');
+  }
 }
 
 function renderSettings() {
@@ -665,6 +678,7 @@ function render() {
 /* ---------- event wiring (delegated) ---------- */
 
 document.addEventListener('click', e => {
+  if (lpFired) { lpFired = false; return; }   // swallow the click after a long-press
   const btn = e.target.closest('[data-action]');
 
   if (e.target.id === 'modal-overlay') { goBack(); return; }
@@ -726,6 +740,8 @@ document.addEventListener('click', e => {
     case 'delete-txn':
       if (confirm('Delete this entry?')) { deleteTransaction(id); commit(); }
       break;
+
+    case 'delete-history': deleteHistoryEntry(id); break;
 
     case 'toggle-rule': {
       const r = state.interestRules.find(x => x.id === id);
@@ -912,6 +928,38 @@ document.getElementById('tabs').addEventListener('click', e => {
   pushNav();
   render();
 });
+
+/* ---------- long-press a history entry to delete it (touch + mouse) ---------- */
+let lpTimer = null, lpStart = null, lpRow = null, lpFired = false;
+
+function lpClear() {
+  if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+  if (lpRow) { lpRow.classList.remove('lp-pressing'); lpRow = null; }
+  lpStart = null;
+}
+
+document.addEventListener('pointerdown', e => {
+  const row = e.target.closest('.history-table tr[data-txn-id]');
+  if (!row) return;
+  lpFired = false;
+  lpStart = { x: e.clientX, y: e.clientY };
+  lpRow = row;
+  row.classList.add('lp-pressing');
+  const txnId = row.dataset.txnId;
+  lpTimer = setTimeout(() => {
+    lpTimer = null;
+    if (lpRow) lpRow.classList.remove('lp-pressing');
+    lpFired = true;
+    if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
+    deleteHistoryEntry(txnId);
+  }, 500);
+});
+document.addEventListener('pointermove', e => {
+  if (lpStart && Math.hypot(e.clientX - lpStart.x, e.clientY - lpStart.y) > 10) lpClear();
+});
+document.addEventListener('pointerup', lpClear);
+document.addEventListener('pointercancel', lpClear);
+document.addEventListener('scroll', lpClear, true);
 
 /* interest accrues with time — refresh the numbers every minute */
 setInterval(render, 60_000);

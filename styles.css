@@ -291,6 +291,21 @@ button { font-family: var(--body); cursor: pointer; }
   text-transform: uppercase; letter-spacing: 0.05em; }
 .hist-amount { display: none; }   /* shown only on mobile cards */
 
+/* long-press to delete: row turns red while held */
+.history-table tr[data-txn-id] { transition: background 0.25s; -webkit-tap-highlight-color: transparent; }
+.history-table tr.lp-pressing { background: rgba(178, 58, 38, 0.12) !important; }
+
+/* desktop affordance: a delete ✕ on row hover (touch devices use long-press) */
+.hist-del { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .hist-del {
+    display: inline-block; margin-left: 8px; opacity: 0;
+    transition: opacity 0.15s; font-size: 12px;
+  }
+  .history-table tr:hover .hist-del { opacity: 0.5; }
+  .hist-del:hover { opacity: 1; }
+}
+
 .del-x {
   background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 13px;
 }
