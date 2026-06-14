@@ -246,7 +246,10 @@ function renderLedger() {
   }).join('');
 
   return `
-    <h2 class="section-title">The Ledger</h2>
+    <div class="detail-head">
+      <h2 class="section-title">The Ledger</h2>
+      <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
+    </div>
     <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− paid</em>, just like a spreadsheet row.</p>
 
     <div class="panel">
@@ -255,10 +258,6 @@ function renderLedger() {
         <input name="name" placeholder="Name" required>
         <button class="btn" type="submit">Add to ledger</button>
       </form>
-      <div class="form-row tight" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--line)">
-        <button class="btn ghost" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
-        <span class="muted">Move a debt across people — route what one person owes through someone else.</span>
-      </div>
     </div>
 
     <div class="form-row">
