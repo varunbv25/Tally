@@ -217,9 +217,12 @@ function renderStamps() {
 
 function renderLedger() {
   const q = ui.search.trim().toLowerCase();
+  const query = ui.search.trim();
   const people = state.people
     .filter(p => !q || p.name.toLowerCase().includes(q))
     .sort((a, b) => totalOf(b) - totalOf(a));
+  const exactMatch = state.people.some(p => p.name.toLowerCase() === q);
+  const showAdd = query.length > 0 && !exactMatch;
 
   const rows = people.map(p => {
     const principal = principalOf(p.id);
@@ -252,17 +255,18 @@ function renderLedger() {
     </div>
     <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− paid</em>, just like a spreadsheet row.</p>
 
-    <div class="panel">
-      <h3>Add a person</h3>
-      <form data-form="add-person" class="form-row tight">
-        <input name="name" placeholder="Name" required>
-        <button class="btn" type="submit">Add to ledger</button>
-      </form>
-    </div>
-
-    <div class="form-row">
-      <input id="search-box" placeholder="Search people…" value="${esc(ui.search)}">
-    </div>
+    <form data-form="person-search" class="people-search" role="search">
+      <span class="people-search-icon" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </span>
+      <input id="search-box" name="q" placeholder="Search people, or type a new name to add…" value="${esc(ui.search)}" autocomplete="off">
+      ${query ? `<button type="button" class="people-search-clear" data-action="clear-search" aria-label="Clear search">×</button>` : ''}
+    </form>
+    ${showAdd ? `
+      <button type="submit" form="person-search" class="add-suggestion">
+        <span class="add-suggestion-plus" aria-hidden="true">+</span>
+        <span>Add “<b>${esc(query)}</b>” as a new person</span>
+      </button>` : ''}
 
     ${people.length ? `
     <table class="ledger-table">
@@ -272,7 +276,9 @@ function renderLedger() {
         <th>Quick entry</th>
       </tr></thead>
       <tbody>${rows}</tbody>
-    </table>` : `<div class="empty-state">The ledger is blank. Add a person above — or live a debt-free life, your call.</div>`}
+    </table>` : (state.people.length === 0
+      ? `<div class="empty-state">The ledger is blank. Type a name above to add your first person — or live a debt-free life, your call.</div>`
+      : `<div class="empty-state">No one matches “${esc(query)}”.${showAdd ? ' Add them with the button above.' : ''}</div>`)}
   `;
 }
 
@@ -1064,6 +1070,8 @@ document.addEventListener('click', e => {
       break;
     }
 
+    case 'clear-search': ui.search = ''; render(); document.getElementById('search-box')?.focus(); break;
+
     case 'open-indirect': ui.indirectOpen = true; pushNav(); render(); break;
     case 'close-indirect': goBack(); break;
     case 'open-group': ui.openGroupId = id; ui.tab = 'groups'; ui.renamingGroup = false; pushNav(); render(); break;
@@ -1168,11 +1176,15 @@ document.addEventListener('submit', e => {
   const fd = new FormData(form);
 
   switch (form.dataset.form) {
-    case 'add-person': {
-      const name = fd.get('name').trim();
+    case 'person-search': {
+      const name = (fd.get('q') || '').trim();
       if (!name) return;
+      // Enter on a name that already exists just keeps filtering — no duplicate.
+      if (state.people.some(p => p.name.toLowerCase() === name.toLowerCase())) return;
       addPerson(name, state.settings.baseCurrency);
+      ui.search = '';
       commit();
+      document.getElementById('search-box')?.focus();
       break;
     }
 
