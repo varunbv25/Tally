@@ -348,6 +348,39 @@ function groupDebtSummary(g, now = Date.now()) {
   return per;
 }
 
+/* ---------- share text ----------
+   Plain-text summaries for the native share sheet / clipboard.
+   Sign convention is the ledger's own: positive (no sign) => they owe
+   you; negative (e.g. -50) => you owe them. Amounts are the on-screen
+   Total (principal + accrued interest), formatted as a bare number. */
+
+function shareAmount(n) {
+  const v = round2(n) || 0;          // collapse -0 to 0
+  return String(v);                  // round2 keeps it to <=2 clean decimals
+}
+
+/* "Name  amount" — a single line for one person. */
+function personShareText(person, now = Date.now()) {
+  return `${person.name}  ${shareAmount(totalOf(person, now))}`;
+}
+
+/* One line per member with a non-zero balance. Settled members are
+   omitted; if everyone's square the body reads "All square." When the
+   group mixes currencies, each line is tagged with its currency code so
+   the bare numbers stay unambiguous. People whose ids are in excludeIds
+   are left out entirely (the share-time exclusion picker). */
+function groupShareText(group, now = Date.now(), excludeIds = []) {
+  const excluded = new Set(excludeIds);
+  const members = group.memberIds.map(getPerson).filter(Boolean).filter(p => !excluded.has(p.id));
+  const multiCurrency = new Set(members.map(p => p.currency)).size > 1;
+  const lines = members
+    .map(p => ({ p, total: totalOf(p, now) }))
+    .filter(({ total }) => Math.abs(total) > 0.005)
+    .map(({ p, total }) =>
+      `${p.name}  ${shareAmount(total)}${multiCurrency ? ' ' + p.currency : ''}`);
+  return lines.length ? lines.join('\n') : 'All square.';
+}
+
 /* Net position per currency (no conversion — each currency stands alone). */
 function netSummary(now = Date.now()) {
   const perCurrency = {};

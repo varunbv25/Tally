@@ -341,6 +341,27 @@ button { font-family: var(--body); cursor: pointer; }
 }
 .modal-close:hover { color: var(--red); border-color: var(--red); }
 
+/* group share picker — blurred backdrop, member checklist, live preview */
+.share-overlay {
+  background: rgba(35,42,35,0.32);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.share-pick-list { display: flex; flex-direction: column; margin-bottom: var(--sp-5); }
+.share-pick-row {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer;
+}
+.share-pick-row:last-child { border-bottom: none; }
+.share-pick-row input[type="checkbox"] { width: auto; }
+.share-pick-name { flex: 1; font-weight: 500; }
+.share-preview {
+  font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.6;
+  background: var(--green-tint); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px; margin: 0 0 var(--sp-5);
+  white-space: pre-wrap; word-break: break-word; color: var(--ink); min-height: 1.6em;
+}
+
 .balance-strip {
   display: flex; gap: 28px; flex-wrap: wrap;
   font-size: var(--fs-sm); color: var(--ink-soft);
@@ -433,6 +454,24 @@ button { font-family: var(--body); cursor: pointer; }
 }
 .del-x:hover { color: var(--red); }
 .row-remove { margin-left: var(--sp-2); }
+
+/* compact share icon sitting next to a person's name */
+.share-x {
+  background: none; border: none; color: var(--ink-soft); cursor: pointer;
+  margin-left: var(--sp-2); padding: 2px; line-height: 0; vertical-align: middle;
+  transition: color var(--duration-fast);
+}
+.share-x:hover, .share-x:focus-visible { color: var(--green); }
+.share-x svg { display: block; }
+
+/* group-detail header: title left, Share action pinned top-right */
+.detail-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--sp-3); flex-wrap: wrap;
+}
+.detail-head .section-title { margin-bottom: var(--sp-1); }
+.share-group-btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.share-group-btn svg { display: block; }
 
 .empty-state {
   text-align: center; padding: 48px var(--sp-5); color: var(--ink-soft);

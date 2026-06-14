@@ -9,6 +9,7 @@ const ui = {
   openGroupId: null,
   modalPersonId: null,
   indirectOpen: false,      // indirect-payment popup open
+  shareGroupId: null,       // group share-picker popup open (which group)
   search: '',
   historySearch: '',
   renamingGroup: false,
@@ -50,7 +51,7 @@ function commit() { saveState(); render(); runNotificationCheck(); }
    popstate replays the previous nav state. From the root, back exits. */
 
 function navState() {
-  return { tally: true, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, selectMode: ui.selectMode };
+  return { tally: true, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, shareGroupId: ui.shareGroupId, selectMode: ui.selectMode };
 }
 
 function pushNav() {
@@ -62,6 +63,7 @@ function applyNav(s) {
   ui.openGroupId = (s && s.openGroupId) || null;
   ui.modalPersonId = (s && s.modalPersonId) || null;
   ui.indirectOpen = !!(s && s.indirectOpen);
+  ui.shareGroupId = (s && s.shareGroupId) || null;
   ui.renamingGroup = false;
   ui.selectMode = !!(s && s.selectMode);
   if (!ui.selectMode) { ui.selected = new Set(); ui.confirmDelete = false; }
@@ -136,6 +138,33 @@ function showToast(msg) {
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3500);
 }
 
+/* ---------- sharing ---------- */
+
+const SHARE_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>`;
+
+/* A compact share icon button used next to a person's name. */
+function shareIconBtn(action, id, label) {
+  return `<button class="share-x" data-action="${action}" data-id="${id}" title="${esc(label)}" aria-label="${esc(label)}">${SHARE_SVG}</button>`;
+}
+
+/* Open the native share sheet; fall back to the clipboard where the Web
+   Share API is missing (most desktops) or fails for any reason other
+   than the user dismissing the sheet. */
+async function shareText(title, text) {
+  try {
+    if (navigator.share) { await navigator.share({ title, text }); return; }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;   // user dismissed the sheet
+    /* any other share failure falls through to the clipboard */
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Copied to clipboard');
+  } catch {
+    showToast('Sharing isn’t supported on this device');
+  }
+}
+
 async function enableNotifications() {
   if (!('Notification' in window)) return;
   await Notification.requestPermission();
@@ -195,7 +224,7 @@ function renderLedger() {
     const exempt = p.interestExempt ? '<span class="chip exempt">no interest</span>' : '';
 
     return `<tr class="row">
-      <td class="col-person"><button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button> ${exempt}</td>
+      <td class="col-person"><button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button> ${exempt} ${shareIconBtn('share-person', p.id, `Share ${p.name}'s balance`)}</td>
       <td class="col-groups">${groups}</td>
       <td class="num" data-label="Principal"><span class="money ${moneyClass(principal)}">${fmtMoney(principal, p.currency)}</span></td>
       <td class="num" data-label="Interest"><span class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</span></td>
@@ -307,6 +336,7 @@ function renderGroupDetail() {
     const total = totalOf(p);
     return `<tr class="row">
       <td class="col-person"><button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>
+        ${shareIconBtn('share-person', p.id, `Share ${p.name}'s balance`)}
         <button class="del-x row-remove" data-action="remove-member" data-id="${p.id}" data-group="${g.id}" title="Remove from group">✕</button></td>
       <td class="num" data-label="Total owed"><span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span></td>
       <td class="col-quick">
@@ -346,9 +376,12 @@ function renderGroupDetail() {
       <button class="btn small" type="submit">Save</button>
       <button class="btn small ghost" type="button" data-action="cancel-rename">Cancel</button>
     </form>` : `
-    <h2 class="section-title">${esc(g.name)}
-      <button class="btn small ghost" data-action="rename-group" data-id="${g.id}">Rename</button>
-    </h2>`}
+    <div class="detail-head">
+      <h2 class="section-title">${esc(g.name)}
+        <button class="btn small ghost" data-action="rename-group" data-id="${g.id}">Rename</button>
+      </h2>
+      <button class="btn small ghost share-group-btn" data-action="share-group" data-id="${g.id}">${SHARE_SVG} Share</button>
+    </div>`}
     <div class="banner">Balances here are <strong>global</strong>. A payment recorded in ${esc(g.name)} updates this person everywhere — every other group sees it too.</div>
 
     ${groupDebtStrip(g)}
@@ -723,6 +756,63 @@ function renderIndirectModal() {
   </div>`;
 }
 
+/* ---------- group share picker ----------
+   A popup over a blurred page: every member with a checkbox (ticked by
+   default) and a live preview of exactly what will be shared. Unticked
+   people are excluded from the list. Nothing is persisted — the choice
+   is made fresh each time. */
+
+function renderShareModal() {
+  const root = document.getElementById('share-root');
+  if (!ui.shareGroupId) { root.innerHTML = ''; return; }
+  const g = getGroup(ui.shareGroupId);
+  if (!g) { ui.shareGroupId = null; root.innerHTML = ''; return; }
+
+  const members = g.memberIds.map(getPerson).filter(Boolean);
+  const rows = members.map(p => {
+    const total = totalOf(p);
+    const settled = Math.abs(total) <= 0.005;
+    return `<label class="share-pick-row">
+      <input type="checkbox" data-share-member="${p.id}" checked>
+      <span class="share-pick-name">${esc(p.name)}</span>
+      ${settled
+        ? '<span class="muted">settled</span>'
+        : `<span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span>`}
+    </label>`;
+  }).join('');
+
+  root.innerHTML = `
+  <div class="modal-overlay share-overlay" id="share-overlay">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Share ${esc(g.name)}</h2>
+        <button class="modal-close" data-action="close-share">✕</button>
+      </div>
+      <p class="section-sub" style="margin-bottom:14px">Tick who to include — unticked people are left out of the shared list.</p>
+      ${members.length
+        ? `<div class="share-pick-list">${rows}</div>`
+        : '<p class="muted">This group has no members yet.</p>'}
+      <h3 class="subhead">Preview</h3>
+      <pre class="share-preview" id="share-preview"></pre>
+      <div class="form-row tight"><button class="btn" data-action="do-share-group" data-id="${g.id}">Share</button></div>
+    </div>
+  </div>`;
+}
+
+/* ids of members whose checkbox is currently unticked */
+function shareExcludedIds() {
+  return [...document.querySelectorAll('[data-share-member]')]
+    .filter(cb => !cb.checked)
+    .map(cb => cb.dataset.shareMember);
+}
+
+function updateSharePreview() {
+  const node = document.getElementById('share-preview');
+  const g = ui.shareGroupId ? getGroup(ui.shareGroupId) : null;
+  if (!node || !g) return;
+  node.textContent = groupShareText(g, Date.now(), shareExcludedIds());
+}
+
 function renderSettings() {
   return `
     <h2 class="section-title">Settings</h2>
@@ -852,7 +942,9 @@ function render() {
   }
   renderModal();
   renderIndirectModal();
+  renderShareModal();
   if (ui.indirectOpen) updateTransferPreview();
+  if (ui.shareGroupId) updateSharePreview();
 }
 
 /* ---------- event wiring (delegated) ---------- */
@@ -870,6 +962,7 @@ document.addEventListener('click', e => {
 
   if (e.target.id === 'modal-overlay') { goBack(); return; }
   if (e.target.id === 'indirect-overlay') { goBack(); return; }
+  if (e.target.id === 'share-overlay') { goBack(); return; }
   if (e.target.id === 'confirm-overlay') { ui.confirmDelete = false; render(); return; }
   if (!btn) return;
 
@@ -878,6 +971,28 @@ document.addEventListener('click', e => {
   switch (action) {
     case 'open-person': ui.modalPersonId = id; pushNav(); render(); break;
     case 'close-modal': goBack(); break;
+
+    case 'share-person': {
+      const p = getPerson(id);
+      if (p) shareText(p.name, personShareText(p));
+      break;
+    }
+    case 'share-group': {
+      const g = getGroup(id);
+      if (g) { ui.shareGroupId = id; pushNav(); render(); }
+      break;
+    }
+    case 'close-share': goBack(); break;
+    case 'do-share-group': {
+      const g = getGroup(id);
+      if (g) {
+        const text = groupShareText(g, Date.now(), shareExcludedIds());
+        goBack();                 // pop the nav entry the popup pushed, clearing shareGroupId
+        shareText(g.name, text);
+      }
+      break;
+    }
+
     case 'open-indirect': ui.indirectOpen = true; pushNav(); render(); break;
     case 'close-indirect': goBack(); break;
     case 'open-group': ui.openGroupId = id; ui.tab = 'groups'; ui.renamingGroup = false; pushNav(); render(); break;
@@ -1125,6 +1240,7 @@ document.addEventListener('change', e => {
     commit();
   }
   if (e.target.closest('[data-form="add-transfer"]')) updateTransferPreview();
+  if (e.target.matches('[data-share-member]')) updateSharePreview();
 });
 
 document.addEventListener('input', e => {
@@ -1155,6 +1271,7 @@ document.getElementById('tabs').addEventListener('click', e => {
   ui.tab = newTab;
   ui.openGroupId = null;
   ui.modalPersonId = null;
+  ui.shareGroupId = null;
   ui.renamingGroup = false;
   ui.selectMode = false;
   ui.selected = new Set();
