@@ -472,7 +472,7 @@ button { font-family: var(--body); cursor: pointer; }
   gap: var(--sp-3); flex-wrap: wrap;
 }
 .detail-head .section-title { margin-bottom: var(--sp-1); }
-.share-group-btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.share-group-btn, .head-action { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .share-group-btn svg { display: block; }
 
 .empty-state {
