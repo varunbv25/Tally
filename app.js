@@ -16,6 +16,9 @@ const ui = {
   selectMode: false,        // history multi-select for deletion
   selected: new Set(),      // selected transaction ids
   confirmDelete: false,     // delete-confirmation overlay open
+  memberSelect: false,      // group-member multi-select for removal
+  selectedMembers: new Set(), // selected member ids
+  confirmRemoveMembers: false, // remove-members confirmation overlay open
 };
 
 /* ---------- helpers ---------- */
@@ -51,7 +54,7 @@ function commit() { saveState(); render(); runNotificationCheck(); }
    popstate replays the previous nav state. From the root, back exits. */
 
 function navState() {
-  return { tally: true, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, shareGroupId: ui.shareGroupId, selectMode: ui.selectMode };
+  return { tally: true, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, shareGroupId: ui.shareGroupId, selectMode: ui.selectMode, memberSelect: ui.memberSelect };
 }
 
 function pushNav() {
@@ -67,6 +70,8 @@ function applyNav(s) {
   ui.renamingGroup = false;
   ui.selectMode = !!(s && s.selectMode);
   if (!ui.selectMode) { ui.selected = new Set(); ui.confirmDelete = false; }
+  ui.memberSelect = !!(s && s.memberSelect);
+  if (!ui.memberSelect) { ui.selectedMembers = new Set(); ui.confirmRemoveMembers = false; }
 }
 
 function goBack() { history.back(); }
@@ -334,10 +339,12 @@ function renderGroupDetail() {
 
   const rows = members.map(p => {
     const total = totalOf(p);
-    return `<tr class="row">
-      <td class="col-person"><button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>
-        ${shareIconBtn('share-person', p.id, `Share ${p.name}'s balance`)}
-        <button class="del-x row-remove" data-action="remove-member" data-id="${p.id}" data-group="${g.id}" title="Remove from group">✕</button></td>
+    const isSel = ui.selectedMembers.has(p.id);
+    const selCls = ui.memberSelect ? (isSel ? ' selected' : '') : '';
+    const check = ui.memberSelect ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
+    return `<tr class="row${selCls}" data-member-id="${p.id}">
+      <td class="col-person">${check}<button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>
+        ${shareIconBtn('share-person', p.id, `Share ${p.name}'s balance`)}</td>
       <td class="num" data-label="Total owed"><span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span></td>
       <td class="col-quick">
         <div class="quick-add">
@@ -368,7 +375,32 @@ function renderGroupDetail() {
       </tr>`;
     }).join('');
 
+  const selCount = ui.selectedMembers.size;
+  const selectBar = ui.memberSelect ? `
+    <div class="select-bar">
+      <button class="select-cancel" data-action="exit-member-select" aria-label="Cancel selection">✕</button>
+      <span class="select-count">${selCount} selected</span>
+      <button class="select-bin" data-action="open-remove-members-confirm" ${selCount ? '' : 'disabled'} aria-label="Remove selected from group">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/>
+          <path d="M10 11v6M14 11v6"/>
+        </svg>
+      </button>
+    </div>` : '';
+
+  const confirmOverlay = ui.confirmRemoveMembers ? `
+    <div class="confirm-overlay" id="member-confirm-overlay">
+      <div class="confirm-card">
+        <h3>Remove ${selCount} ${selCount === 1 ? 'person' : 'people'}?</h3>
+        <p class="muted">They'll be taken out of ${esc(g.name)}. Balances and history stay exactly the same — only the grouping changes.</p>
+        <button class="btn danger block" data-action="confirm-remove-members">Remove from group</button>
+        <button class="btn ghost block" data-action="cancel-remove-members">Cancel</button>
+      </div>
+    </div>` : '';
+
   return `
+    ${selectBar}
+    ${confirmOverlay}
     <button class="back-link" data-action="close-group">← All groups</button>
     ${ui.renamingGroup ? `
     <form data-form="rename-group" data-group="${g.id}" class="form-row">
@@ -390,6 +422,7 @@ function renderGroupDetail() {
       <thead><tr><th>Member</th><th class="num">Total owed (global)</th><th>Quick entry (tagged to this group)</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="3" class="muted">No members yet.</td></tr>'}</tbody>
     </table>
+    ${members.length ? '<p class="muted" style="margin-top:8px">Long-press a member to start selecting, tap others to add, then tap the bin to remove them from the group.</p>' : ''}
 
     <div class="panel" style="margin-top:24px">
       <h3>Add member</h3>
@@ -664,6 +697,38 @@ function performDelete(mode) {
   ui.confirmDelete = false;
   goBack();   // pops the select-mode entry; popstate clears selection and re-renders
   showToast(`${n} ${n === 1 ? 'entry' : 'entries'} ${mode === 'adjust' ? 'deleted' : 'removed from history'}`);
+}
+
+/* ---------- group-member multi-select removal ---------- */
+function enterMemberSelectMode(memberId) {
+  if (ui.memberSelect) {
+    toggleMemberSelected(memberId);
+    return;
+  }
+  ui.memberSelect = true;
+  ui.selectedMembers = new Set([memberId]);
+  pushNav();
+  render();
+}
+
+function toggleMemberSelected(memberId) {
+  if (ui.selectedMembers.has(memberId)) ui.selectedMembers.delete(memberId);
+  else ui.selectedMembers.add(memberId);
+  render();
+}
+
+function performRemoveMembers() {
+  const g = getGroup(ui.openGroupId);
+  if (!g) return;
+  const ids = new Set(ui.selectedMembers);
+  if (!ids.size) return;
+  g.memberIds = g.memberIds.filter(m => !ids.has(m));
+  saveState();
+  runNotificationCheck();
+  const n = ids.size;
+  ui.confirmRemoveMembers = false;
+  goBack();   // pops the member-select entry; popstate clears selection and re-renders
+  showToast(`${n} ${n === 1 ? 'person' : 'people'} removed from ${g.name}`);
 }
 
 /* ---------- indirect payments view ---------- */
@@ -958,12 +1023,19 @@ document.addEventListener('click', e => {
     if (histRow) { toggleSelected(histRow.dataset.txnId); return; }
   }
 
+  // in member-selection mode, tapping a member row toggles its selection
+  if (ui.memberSelect && !e.target.closest('.select-bar, .confirm-overlay')) {
+    const memRow = e.target.closest('.ledger-table tr[data-member-id]');
+    if (memRow) { toggleMemberSelected(memRow.dataset.memberId); return; }
+  }
+
   const btn = e.target.closest('[data-action]');
 
   if (e.target.id === 'modal-overlay') { goBack(); return; }
   if (e.target.id === 'indirect-overlay') { goBack(); return; }
   if (e.target.id === 'share-overlay') { goBack(); return; }
   if (e.target.id === 'confirm-overlay') { ui.confirmDelete = false; render(); return; }
+  if (e.target.id === 'member-confirm-overlay') { ui.confirmRemoveMembers = false; render(); return; }
   if (!btn) return;
 
   const { action, id, sign, group } = btn.dataset;
@@ -1012,12 +1084,10 @@ document.addEventListener('click', e => {
       break;
     }
 
-    case 'remove-member': {
-      const g = getGroup(group);
-      if (g) g.memberIds = g.memberIds.filter(m => m !== id);
-      commit();
-      break;
-    }
+    case 'open-remove-members-confirm': if (ui.selectedMembers.size) { ui.confirmRemoveMembers = true; render(); } break;
+    case 'cancel-remove-members': ui.confirmRemoveMembers = false; render(); break;
+    case 'confirm-remove-members': performRemoveMembers(); break;
+    case 'exit-member-select': goBack(); break;
 
     case 'delete-group':
       if (confirm('Delete this group? People and their balances are kept.')) {
@@ -1214,6 +1284,7 @@ document.addEventListener('change', e => {
       try {
         importCSV(text);
         ui.selectMode = false; ui.selected = new Set(); ui.confirmDelete = false;
+        ui.memberSelect = false; ui.selectedMembers = new Set(); ui.confirmRemoveMembers = false;
         history.replaceState(navState(), '');
         render();
         showToast('Spreadsheet imported');
@@ -1276,6 +1347,9 @@ document.getElementById('tabs').addEventListener('click', e => {
   ui.selectMode = false;
   ui.selected = new Set();
   ui.confirmDelete = false;
+  ui.memberSelect = false;
+  ui.selectedMembers = new Set();
+  ui.confirmRemoveMembers = false;
   pushNav();
   render();
 });
@@ -1290,19 +1364,21 @@ function lpClear() {
 }
 
 document.addEventListener('pointerdown', e => {
-  const row = e.target.closest('.history-table tr[data-txn-id]');
+  const histRow = e.target.closest('.history-table tr[data-txn-id]');
+  const memRow = histRow ? null : e.target.closest('.ledger-table tr[data-member-id]');
+  const row = histRow || memRow;
   if (!row) return;
   lpFired = false;
   lpStart = { x: e.clientX, y: e.clientY };
   lpRow = row;
   row.classList.add('lp-pressing');
-  const txnId = row.dataset.txnId;
   lpTimer = setTimeout(() => {
     lpTimer = null;
     if (lpRow) lpRow.classList.remove('lp-pressing');
     lpFired = true;
     if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
-    enterSelectMode(txnId);
+    if (histRow) enterSelectMode(histRow.dataset.txnId);
+    else enterMemberSelectMode(memRow.dataset.memberId);
   }, 500);
 });
 document.addEventListener('pointermove', e => {
