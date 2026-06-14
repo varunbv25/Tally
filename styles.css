@@ -388,11 +388,14 @@ button { font-family: var(--body); cursor: pointer; }
 .hist-amount { display: none; }   /* shown only on mobile cards */
 
 /* long-press to start selecting: row tints while held */
-.history-table tr[data-txn-id] { transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
-.history-table tr.lp-pressing { background: rgba(30, 91, 63, 0.10) !important; }
+.history-table tr[data-txn-id],
+.ledger-table tr[data-member-id] { transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
+.history-table tr.lp-pressing,
+.ledger-table tr.lp-pressing { background: rgba(30, 91, 63, 0.10) !important; }
 
 /* multi-select mode */
-.history-table tr.selected { background: rgba(30, 91, 63, 0.12) !important; box-shadow: inset 3px 0 0 var(--green); }
+.history-table tr.selected,
+.ledger-table tr.selected { background: rgba(30, 91, 63, 0.12) !important; box-shadow: inset 3px 0 0 var(--green); }
 .history-table tr[data-txn-id] { cursor: default; }
 .sel-check {
   display: inline-block; width: 18px; height: 18px; border-radius: 50%;
@@ -453,7 +456,6 @@ button { font-family: var(--body); cursor: pointer; }
   background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: var(--fs-sm);
 }
 .del-x:hover { color: var(--red); }
-.row-remove { margin-left: var(--sp-2); }
 
 /* compact share icon sitting next to a person's name */
 .share-x {
