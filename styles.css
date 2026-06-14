@@ -284,6 +284,45 @@ button { font-family: var(--body); cursor: pointer; }
 .quick-add input { width: 90px; }
 .quick-add .qa-reason { width: 110px; }
 
+/* quick entry stays quiet until used, so balances are the visual subject.
+   inputs read as faint affordances; the +lent/−paid buttons sit in a muted
+   ghost state and only light up once an amount is typed (.active toggled in JS). */
+.quick-add input {
+  background: transparent;
+  border-color: transparent;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 8px 4px;
+  transition: border-color var(--duration-fast), background var(--duration-fast);
+}
+.quick-add input:hover { border-bottom-color: var(--line-strong); }
+.quick-add input:focus {
+  background: var(--card);
+  border-color: var(--green);
+  border-radius: var(--radius-sm);
+}
+.quick-add .btn.plus,
+.quick-add .btn.minus {
+  background: transparent;
+  color: var(--ink-soft);
+  border-color: var(--line-strong);
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+}
+.quick-add .btn.plus:hover { color: var(--green-deep); border-color: var(--green); }
+.quick-add .btn.minus:hover { color: var(--ink); border-color: var(--ink-soft); }
+/* armed: an amount is present — restore full colour so the action reads as ready */
+.quick-add.active .btn.plus { background: var(--green); color: #fff; border-color: var(--green); }
+.quick-add.active .btn.plus:hover { background: var(--green-deep); }
+.quick-add.active .btn.minus { background: var(--ink-soft); color: #fff; border-color: var(--ink-soft); }
+.quick-add.active .btn.minus:hover { background: var(--ink); }
+
+/* destructive action: low-emphasis text button pushed away from the primaries */
+.btn.quiet-danger {
+  background: transparent; color: var(--red);
+  border-color: transparent; margin-left: auto;
+}
+.btn.quiet-danger:hover { background: rgba(178,58,38,0.08); border-color: var(--red); }
+
 /* ---------- groups ---------- */
 
 .group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--sp-3); }
@@ -295,9 +334,21 @@ button { font-family: var(--body); cursor: pointer; }
   text-align: left; width: 100%;
   transition: border-color var(--duration-fast);
 }
-.group-card:hover { border-color: var(--green); }
+.group-card:hover { border-color: var(--green); box-shadow: 0 2px 12px rgba(20, 61, 43, 0.06); }
+.group-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-2); }
 .group-card h3 { font-family: var(--display); font-size: var(--fs-h2); color: var(--green-deep); margin-bottom: var(--sp-1); }
-.group-card .members { font-size: var(--fs-cap); color: var(--ink-soft); margin-bottom: var(--sp-2); }
+.group-card-head .chip { flex: 0 0 auto; }
+.group-card .members { font-size: var(--fs-cap); color: var(--ink-soft); margin-bottom: var(--sp-3); }
+.group-card .group-net {
+  display: block; font-size: var(--fs-sm); color: var(--ink-soft);
+  padding-top: var(--sp-2); border-top: 1px solid var(--line);
+}
+.group-card .group-net .money { font-weight: 600; }
+.group-card .net-square { color: var(--ink-soft); font-style: italic; }
+
+/* panel header with a close affordance (e.g. the reveal-able create-group form) */
+.panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-2); }
+.panel-head h3 { margin-bottom: var(--sp-3); }
 
 .banner {
   font-size: var(--fs-sm); color: var(--green-deep);
@@ -307,10 +358,12 @@ button { font-family: var(--body); cursor: pointer; }
 
 .back-link {
   background: none; border: none; color: var(--green-deep);
-  font-size: var(--fs-sm); cursor: pointer;
-  padding: 0; margin-bottom: var(--sp-3); display: inline-block;
+  font-family: var(--body); font-size: var(--fs-lead); font-weight: 600;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 8px 6px 0; margin: 0 0 var(--sp-2) -2px;
 }
-.back-link:hover { text-decoration: underline; }
+.back-link .back-arrow { display: block; flex: 0 0 auto; }
+.back-link:hover { color: var(--green); text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---------- rules ---------- */
 
@@ -557,6 +610,10 @@ button { font-family: var(--body); cursor: pointer; }
   .view { padding: 18px 14px 60px; }
   .panel { padding: 14px; }
 
+  /* roomier touch target for the compact share icon (WCAG 2.5.5);
+     negative vert margin keeps row height unchanged, left gap preserved */
+  .share-x { padding: 9px; margin: -7px 0 -7px var(--sp-1); }
+
   /* tables become stacked cards */
   .ledger-table thead { display: none; }
   .ledger-table, .ledger-table tbody, .ledger-table tr, .ledger-table td { display: block; width: 100%; }
@@ -575,9 +632,30 @@ button { font-family: var(--body); cursor: pointer; }
   .quick-add input { flex: 1; width: auto; min-width: 0; }
   .quick-add .qa-reason { flex: 1 1 100%; order: 1; }
 
-  /* history cards: amount rides in the header, hide the labeled Amount row */
+  /* history cards: name + amount on the header line, everything else collapsed
+     onto a single muted meta line ("Jun 8 · lent · Flatmates · Groceries")
+     instead of four repeated uppercase-labelled rows. */
   .hist-amount { display: inline; font-size: var(--fs-base); }
   .history-table td[data-label="Amount"] { display: none; }
+  .history-table tr.row { display: flex; flex-wrap: wrap; align-items: baseline; row-gap: 2px; }
+  .history-table td.col-person { flex: 1 1 100%; margin-bottom: 2px; }
+  .history-table td[data-label="Date"],
+  .history-table td[data-label="Type"],
+  .history-table td[data-label="Group"],
+  .history-table td[data-label="Reason"] {
+    display: inline-flex; align-items: baseline; width: auto;
+    padding: 0; font-size: var(--fs-cap); color: var(--ink-soft);
+  }
+  .history-table td[data-label]::before { content: none; }
+  .history-table td[data-label="Date"]::after,
+  .history-table td[data-label="Type"]::after,
+  .history-table td[data-label="Group"]::after {
+    content: '·'; margin: 0 6px; color: var(--line-strong);
+  }
+  /* group reads as plain muted text in the meta line, not a bordered pill */
+  .history-table td[data-label="Group"] .chip {
+    background: none; border: none; padding: 0; color: var(--ink-soft);
+  }
 
   .balance-strip { gap: var(--sp-4); }
   .modal-overlay { padding: var(--sp-4) var(--sp-2); }

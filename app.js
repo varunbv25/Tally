@@ -13,6 +13,7 @@ const ui = {
   search: '',
   historySearch: '',
   renamingGroup: false,
+  creatingGroup: false,     // group-create panel revealed
   selectMode: false,        // history multi-select for deletion
   selected: new Set(),      // selected transaction ids
   confirmDelete: false,     // delete-confirmation overlay open
@@ -53,11 +54,17 @@ function commit() { saveState(); render(); runNotificationCheck(); }
    so the OS back button/gesture and on-screen close behave identically;
    popstate replays the previous nav state. From the root, back exits. */
 
+/* Depth above the Ledger floor (entry 0). Stored in each history entry so
+   popstate can restore it; lets a tap on the Ledger tab collapse the whole
+   stack back to the floor, so the next OS-back exits the app. */
+let navDepth = 0;
+
 function navState() {
-  return { tally: true, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, shareGroupId: ui.shareGroupId, selectMode: ui.selectMode, memberSelect: ui.memberSelect };
+  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, shareGroupId: ui.shareGroupId, selectMode: ui.selectMode, memberSelect: ui.memberSelect };
 }
 
 function pushNav() {
+  navDepth++;
   history.pushState(navState(), '');
 }
 
@@ -77,7 +84,9 @@ function applyNav(s) {
 function goBack() { history.back(); }
 
 window.addEventListener('popstate', e => {
-  applyNav(e.state && e.state.tally ? e.state : { tab: 'ledger' });
+  const s = e.state && e.state.tally ? e.state : { tab: 'ledger', depth: 0 };
+  navDepth = s.depth || 0;
+  applyNav(s);
   render();
 });
 
@@ -285,10 +294,14 @@ function renderLedger() {
 /* ---------- groups view ---------- */
 
 function groupNetLine(g) {
-  return Object.entries(groupDebtSummary(g))
+  const parts = Object.entries(groupDebtSummary(g))
     .filter(([, s]) => Math.abs(s.net) > 0.005)
-    .map(([code, s]) => `${s.net >= 0 ? 'net owed to you' : 'net you owe'} ${fmtMoney(Math.abs(s.net), code)}`)
-    .join(' · ') || 'all square';
+    .map(([code, s]) => {
+      const cls = s.net >= 0 ? 'pos' : 'neg';
+      const label = s.net >= 0 ? 'net owed to you' : 'net you owe';
+      return `${label} <span class="money ${cls}">${fmtMoney(Math.abs(s.net), code)}</span>`;
+    });
+  return parts.length ? parts.join(' · ') : '<span class="net-square">all square</span>';
 }
 
 function groupDebtStrip(g) {
@@ -307,10 +320,14 @@ function renderGroups() {
 
   const cards = state.groups.map(g => {
     const names = g.memberIds.map(id => getPerson(id)?.name).filter(Boolean).join(', ');
+    const count = g.memberIds.length;
     return `<button class="group-card" data-action="open-group" data-id="${g.id}">
-      <h3>${esc(g.name)}</h3>
+      <div class="group-card-head">
+        <h3>${esc(g.name)}</h3>
+        <span class="chip">${count} ${count === 1 ? 'person' : 'people'}</span>
+      </div>
       <div class="members">${esc(names) || 'No members yet'}</div>
-      <span class="muted">${groupNetLine(g)}</span>
+      <span class="group-net">${groupNetLine(g)}</span>
     </button>`;
   }).join('');
 
@@ -318,21 +335,34 @@ function renderGroups() {
     `<label><input type="checkbox" name="member" value="${p.id}"> ${esc(p.name)}</label>`
   ).join('');
 
-  return `
-    <h2 class="section-title">Groups</h2>
-    <p class="section-sub">People can live in many groups at once. Balances are global — record a payment in one group and it shows up in every other group instantly.</p>
-
+  // The create form takes the prime slot only when there's nothing else to show
+  // or the user explicitly opens it; otherwise existing groups lead.
+  const showCreate = ui.creatingGroup || state.groups.length === 0;
+  const createPanel = `
     <div class="panel">
-      <h3>Create a group</h3>
+      <div class="panel-head">
+        <h3>Create a group</h3>
+        ${state.groups.length ? '<button class="modal-close" data-action="cancel-create-group" aria-label="Close">×</button>' : ''}
+      </div>
       <form data-form="add-group">
         <div class="form-row"><input name="name" placeholder="Group name (e.g. Goa Trip)" required></div>
         <div class="form-row">${memberChecks || '<span class="muted">Add people on the Ledger tab first.</span>'}</div>
         <div class="form-row tight"><button class="btn" type="submit">Create group</button></div>
       </form>
+    </div>`;
+
+  return `
+    <div class="detail-head">
+      <h2 class="section-title">Groups</h2>
+      ${state.groups.length && !showCreate
+        ? '<button class="btn ghost head-action" data-action="new-group">+ New group</button>' : ''}
     </div>
+    <p class="section-sub">People can live in many groups at once. Balances are global — record a payment in one group and it shows up in every other group instantly.</p>
+
+    ${showCreate ? createPanel : ''}
 
     ${state.groups.length ? `<div class="group-grid">${cards}</div>`
-      : '<div class="empty-state">No groups yet. Trips, flatmates, that one fantasy league — they all start here.</div>'}
+      : (ui.creatingGroup ? '' : '<div class="empty-state">No groups yet. Trips, flatmates, that one fantasy league — they all start here.</div>')}
   `;
 }
 
@@ -406,7 +436,10 @@ function renderGroupDetail() {
   return `
     ${selectBar}
     ${confirmOverlay}
-    <button class="back-link" data-action="close-group">← All groups</button>
+    <button class="back-link" data-action="close-group">
+      <svg class="back-arrow" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      All groups
+    </button>
     ${ui.renamingGroup ? `
     <form data-form="rename-group" data-group="${g.id}" class="form-row">
       <input name="name" value="${esc(g.name)}" required maxlength="60" autofocus>
@@ -966,7 +999,7 @@ function renderModal() {
       <div class="form-row">
         <button class="btn ghost" data-action="capitalize" data-id="${p.id}" ${detail.total > 0.005 ? '' : 'disabled'}>Capitalize interest</button>
         <button class="btn" data-action="settle" data-id="${p.id}" ${Math.abs(total) > 0.005 ? '' : 'disabled'}>Settle up</button>
-        <button class="btn danger" data-action="delete-person" data-id="${p.id}">Delete person</button>
+        <button class="btn quiet-danger" data-action="delete-person" data-id="${p.id}">Delete person</button>
       </div>
 
       <div class="panel" style="margin-top:16px">
@@ -1074,6 +1107,8 @@ document.addEventListener('click', e => {
 
     case 'open-indirect': ui.indirectOpen = true; pushNav(); render(); break;
     case 'close-indirect': goBack(); break;
+    case 'new-group': ui.creatingGroup = true; render(); document.querySelector('[data-form="add-group"] input')?.focus(); break;
+    case 'cancel-create-group': ui.creatingGroup = false; render(); break;
     case 'open-group': ui.openGroupId = id; ui.tab = 'groups'; ui.renamingGroup = false; pushNav(); render(); break;
     case 'close-group': goBack(); break;
     case 'rename-group': ui.renamingGroup = true; render(); document.querySelector('[data-form="rename-group"] input')?.focus(); break;
@@ -1192,6 +1227,7 @@ document.addEventListener('submit', e => {
       const name = fd.get('name').trim();
       if (!name) return;
       addGroup(name, fd.getAll('member'));
+      ui.creatingGroup = false;
       commit();
       break;
     }
@@ -1343,17 +1379,31 @@ document.addEventListener('input', e => {
     box.setSelectionRange(pos, pos);
   }
   if (e.target.closest('[data-form="add-transfer"]')) updateTransferPreview();
+
+  // ledger quick-entry: arm the +lent / −paid buttons once an amount is typed
+  const qa = e.target.closest('.quick-add');
+  if (qa && e.target.type === 'number') {
+    qa.classList.toggle('active', e.target.value.trim() !== '');
+  }
 });
 
 document.getElementById('tabs').addEventListener('click', e => {
   const tab = e.target.closest('.tab');
   if (!tab) return;
   const newTab = tab.dataset.tab;
-  if (newTab === ui.tab && !ui.openGroupId && !ui.modalPersonId && !ui.selectMode) return;
+  // already here with nothing drilled in → no-op
+  if (newTab === ui.tab && !ui.openGroupId && !ui.modalPersonId && !ui.indirectOpen && !ui.shareGroupId && !ui.selectMode && !ui.memberSelect) return;
+
+  // Ledger is home/floor: returning to it unwinds the back stack so the next
+  // OS-back exits the app instead of replaying earlier tabs. popstate then
+  // restores the floor state and re-renders.
+  if (newTab === 'ledger' && navDepth > 0) { history.go(-navDepth); return; }
+
   ui.tab = newTab;
   ui.openGroupId = null;
   ui.modalPersonId = null;
   ui.shareGroupId = null;
+  ui.indirectOpen = false;
   ui.renamingGroup = false;
   ui.selectMode = false;
   ui.selected = new Set();
