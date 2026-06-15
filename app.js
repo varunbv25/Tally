@@ -48,6 +48,37 @@ function fmtDate(iso) {
 
 function commit() { saveState(); render(); runNotificationCheck(); }
 
+/* ---------- theme ----------
+   The user's choice ('light' | 'dark' | 'device') lives in settings.
+   We resolve it to a concrete light/dark value, stamp <html data-theme>
+   (styles.css overrides the palette tokens for "dark"), and keep the
+   address-bar/status-bar colour in step. On "device" we follow the OS
+   and update live when it flips. */
+const THEME_BAR_COLOR = { light: '#1e5b3f', dark: '#211f18' };
+
+function prefersDark() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+}
+
+function resolvedTheme() {
+  const pref = (state && state.settings && state.settings.theme) || 'device';
+  if (pref === 'light' || pref === 'dark') return pref;
+  return prefersDark() ? 'dark' : 'light';
+}
+
+function applyTheme() {
+  const theme = resolvedTheme();
+  document.documentElement.setAttribute('data-theme', theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', THEME_BAR_COLOR[theme]);
+}
+
+if (window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (((state && state.settings && state.settings.theme) || 'device') === 'device') applyTheme();
+  });
+}
+
 /* ---------- back-button / gesture navigation ----------
    Each drill-in (tab switch, group detail, person modal) pushes a
    history entry encoding the nav state. Close buttons call goBack(),
@@ -916,6 +947,27 @@ function updateSharePreview() {
   node.textContent = groupShareText(g, Date.now(), shareExcludedIds());
 }
 
+/* ---------- appearance / theme ---------- */
+const THEME_OPTIONS = [
+  ['light',  'Light'],
+  ['dark',   'Dark'],
+  ['device', 'Device default'],
+];
+
+function appearancePanel() {
+  const current = state.settings.theme || 'device';
+  const opts = THEME_OPTIONS.map(([value, label]) =>
+    `<button type="button" class="theme-opt${value === current ? ' active' : ''}"
+       data-action="set-theme" data-theme="${value}"
+       aria-pressed="${value === current}">${label}</button>`).join('');
+  return `
+    <div class="panel">
+      <h3>Appearance</h3>
+      <div class="theme-toggle" role="group" aria-label="Theme">${opts}</div>
+      <p class="muted">Choose a light or dark look, or follow your device's setting automatically.</p>
+    </div>`;
+}
+
 function renderSettings() {
   return `
     <h2 class="section-title">Settings</h2>
@@ -924,6 +976,8 @@ function renderSettings() {
     ${interestRulesPanel()}
 
     ${notificationsPanel()}
+
+    ${appearancePanel()}
 
     <div class="panel">
       <h3>Currency</h3>
@@ -1198,7 +1252,16 @@ document.addEventListener('click', e => {
       if (confirm('Erase ALL data? This cannot be undone.')) {
         localStorage.removeItem(LS_KEY);
         loadState();
+        applyTheme();
         render();
+      }
+      break;
+
+    case 'set-theme':
+      if (state.settings.theme !== btn.dataset.theme) {
+        state.settings.theme = btn.dataset.theme;
+        applyTheme();
+        commit();
       }
       break;
   }
@@ -1455,6 +1518,7 @@ setInterval(render, 60_000);
 /* ---------- boot ---------- */
 
 loadState();
+applyTheme();            // stamp the saved (or OS-default) theme before first paint
 recordDeviceTimezone(); // pin interest timing to the device's current timezone
 saveState();            // ensure the IDB mirror exists even before the first edit
 /* Notice timezone changes when the user reopens the app after travelling, so

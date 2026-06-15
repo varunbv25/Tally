@@ -46,6 +46,7 @@ function defaultState() {
       baseCurrency: 'INR',        // default currency for new people
       resetInterestOnDrop: false, // wipe accrued interest when balance stops matching any rule
       tzHistory: [],              // device-timezone segments {since, offsetMin} for interest timing
+      theme: 'device',            // 'light' | 'dark' | 'device' (follow OS preference)
     },
   };
 }

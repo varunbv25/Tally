@@ -56,6 +56,36 @@
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* =========================================================
+   Dark theme — only the palette tokens are overridden, so
+   every component that references the tokens flips together.
+   Applied via <html data-theme="dark"> (set in app.js from the
+   user's Settings choice, or the OS preference when on "device").
+   ========================================================= */
+[data-theme="dark"] {
+  --bg: #16140f;
+  --card: #211f18;
+  --ink: #ece7da;
+  --ink-soft: #9d9789;
+  --green: #3f9266;
+  --green-deep: #6cbf91;   /* headings on dark; also the .btn hover/toast surface */
+  --green-tint: rgba(108,191,145,0.14);
+  --red: #d9694f;
+  --amber: #cf9a48;
+  --blue: #74a8d8;
+  --gold: #c8a85e;
+  --line: #322f27;
+  --line-strong: #4a4639;
+}
+
+/* A few spots use hard-coded colours that don't read on a dark surface. */
+[data-theme="dark"] .hist-tag.paid { background: rgba(255,255,255,0.06); }
+[data-theme="dark"] .toast { background: #1f4a35; }
+
+/* match the OS chrome (form controls, scrollbars) to the active theme */
+:root { color-scheme: light; }
+[data-theme="dark"] { color-scheme: dark; }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -670,6 +700,32 @@ button { font-family: var(--body); cursor: pointer; }
   .modal { padding: var(--sp-4); }
   .form-row { row-gap: var(--sp-2); }
   input[type="date"] { width: auto; }
+}
+
+/* ---------- appearance / theme toggle ---------- */
+
+.theme-toggle {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: var(--sp-3);
+}
+.theme-opt {
+  font-family: var(--body); font-size: var(--fs-sm); font-weight: 500;
+  background: var(--card); color: var(--ink-soft);
+  border: none; border-left: 1px solid var(--line-strong);
+  padding: 8px 16px; cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+.theme-opt:first-child { border-left: none; }
+.theme-opt:hover { color: var(--green-deep); }
+.theme-opt.active { background: var(--green); color: #fff; }
+
+@media (max-width: 680px) {
+  .theme-toggle { display: flex; width: 100%; }
+  .theme-opt { flex: 1; text-align: center; padding: 10px 8px; }
 }
 
 /* ---------- notifications settings ---------- */
