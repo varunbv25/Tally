@@ -566,7 +566,7 @@ function interestRulesPanel() {
       </form>
       <div class="form-row tight" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
         <label><input type="checkbox" id="reset-interest-drop" ${state.settings.resetInterestOnDrop ? 'checked' : ''}>
-          Reset accrued interest when the balance falls below the rule's condition</label>
+          When a repayment drops the balance below the rule's condition, roll the accrued interest into the principal (instead of leaving it as separate interest)</label>
       </div>
     </div>
 
@@ -1174,6 +1174,7 @@ document.addEventListener('click', e => {
       if (!Number.isFinite(amt) || amt <= 0) { input?.focus(); return; }
       const before = totalOf(getPerson(id));
       const note = document.getElementById(`qr-${id}`)?.value.trim() || '';
+      capitalizeOnDrop(id, amt * Number(sign));
       addTransaction({ personId: id, groupId: group || null, amount: amt * Number(sign), note });
       commit();
       maybeCelebrate(id, before);
@@ -1316,6 +1317,7 @@ document.addEventListener('submit', e => {
       const dateStr = fd.get('date');
       const pid = form.dataset.person;
       const before = totalOf(getPerson(pid));
+      if (!dateStr) capitalizeOnDrop(pid, amt * Number(fd.get('sign')));  // only for entries dated now
       addTransaction({
         personId: pid,
         groupId: fd.get('groupId') || null,

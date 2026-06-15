@@ -44,7 +44,7 @@ function defaultState() {
                        // groupId null = applies to everyone; otherwise only to members of that group
     settings: {
       baseCurrency: 'INR',        // default currency for new people
-      resetInterestOnDrop: false, // wipe accrued interest when balance stops matching any rule
+      resetInterestOnDrop: false, // on: a repayment that drops the balance below every rule capitalizes the accrued interest into the principal
       tzHistory: [],              // device-timezone segments {since, offsetMin} for interest timing
       theme: 'device',            // 'light' | 'dark' | 'device' (follow OS preference)
     },
@@ -146,6 +146,7 @@ function addIndirectPayment({ lenderId, receiverId, amount, note = '', date = nu
 
   const linkId = uid();
   const when = date || new Date().toISOString();
+  if (!date) capitalizeOnDrop(lenderId, -amt);   // routing drops the lender's balance
   const lenderTxn = addTransaction({ personId: lenderId, amount: -amt, note, date: when });
   const receiverTxn = addTransaction({ personId: receiverId, amount: amt, note, date: when });
   lenderTxn.indirect = receiverTxn.indirect = true;
@@ -238,8 +239,11 @@ function firstMatchingInterestRule(balance, personId) {
        (no stacking). A rule scoped to a group only applies to current
        members of that group.
     5. A rule with capPeriods stops charging after that many periods.
-    6. If settings.resetInterestOnDrop is on, accrued (uncapitalized)
-       interest is wiped the moment the balance stops matching any rule.
+    6. If settings.resetInterestOnDrop is on, a repayment that pushes the
+       balance below every rule's condition capitalizes the accrued interest
+       into the principal first (see capitalizeOnDrop), so it is rolled into
+       the balance rather than discarded. The engine itself never wipes
+       accrued interest; it only stops accruing while no rule matches.
 */
 /* Interest is timed against the device's own clock — "each day starts at
    12am" wherever the user is — not a flat 24h after the condition is met.
@@ -306,8 +310,7 @@ function accruedInterestDetail(person, now = Date.now()) {
     const rule = balance > 0.005 ? firstMatchingInterestRule(balance, person.id) : null;
 
     if (!rule) {
-      stretch = null;
-      if (state.settings.resetInterestOnDrop) { out.total = 0; out.byRule = {}; }
+      stretch = null;                 // stop accruing; keep what's accrued so far
     } else if (!stretch || stretch.rule.id !== rule.id) {
       const off = deviceOffsetAt(eventTime);
       stretch = { rule, accrued: 0, nextTick: localMidnightAfter(eventTime, off), tzOff: off };
@@ -362,6 +365,23 @@ function capitalizeInterest(personId) {
   });
   person.interestAnchor = new Date().toISOString();
   return accrued;
+}
+
+/* With resetInterestOnDrop on, a repayment that pushes the balance below every
+   interest rule's condition would otherwise leave the accrued interest stranded
+   (it stops growing but stays as separate interest). Instead, capitalize it into
+   the principal first, so the repayment is deducted from the capitalised total
+   and the visible interest resets to zero. Pass the SIGNED amount about to be
+   recorded and call BEFORE recording it. Returns the amount capitalized
+   (0 if nothing happened). */
+function capitalizeOnDrop(personId, amount) {
+  if (!state.settings.resetInterestOnDrop) return 0;
+  const before = principalOf(personId);
+  const after = before + Number(amount);
+  const wasMatching = before > 0.005 && firstMatchingInterestRule(before, personId);
+  const nowMatching = after > 0.005 && firstMatchingInterestRule(after, personId);
+  if (wasMatching && !nowMatching) return capitalizeInterest(personId);
+  return 0;
 }
 
 /* Settle everything to zero (capitalizes outstanding interest first). */
