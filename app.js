@@ -54,7 +54,7 @@ function commit() { saveState(); render(); runNotificationCheck(); }
    (styles.css overrides the palette tokens for "dark"), and keep the
    address-bar/status-bar colour in step. On "device" we follow the OS
    and update live when it flips. */
-const THEME_BAR_COLOR = { light: '#1e5b3f', dark: '#1e211a' };
+const THEME_BAR_COLOR = { light: '#1e5b3f', dark: '#1e1e1e' };
 
 function prefersDark() {
   return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
