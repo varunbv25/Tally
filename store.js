@@ -45,6 +45,7 @@ function defaultState() {
     settings: {
       baseCurrency: 'INR',        // default currency for new people
       resetInterestOnDrop: false, // wipe accrued interest when balance stops matching any rule
+      tzHistory: [],              // device-timezone segments {since, offsetMin} for interest timing
     },
   };
 }
@@ -239,14 +240,47 @@ function firstMatchingInterestRule(balance, personId) {
     6. If settings.resetInterestOnDrop is on, accrued (uncapitalized)
        interest is wiped the moment the balance stops matching any rule.
 */
-/* The first charge lands at the start of the next calendar day in the
-   device's own timezone — "each day starts at 12am" wherever the user is —
-   not a flat 24h after the condition is met. Building a Date from local
-   wall-clock fields applies the device's current offset for us, and reading
-   it back as an instant absorbs any DST shift across the boundary. */
-function startOfNextDay(ts) {
-  const d = new Date(ts);                              // local wall-clock fields
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+/* Interest is timed against the device's own clock — "each day starts at
+   12am" wherever the user is — not a flat 24h after the condition is met.
+
+   The device timezone is persisted as a history of segments in
+   settings.tzHistory: each { since, offsetMin } records the UTC offset
+   (Date.getTimezoneOffset() convention: minutes, e.g. -330 for IST) that
+   took effect at instant `since`. This lets the engine pin already-accrued
+   interest to the timezone it accrued in: past charges are recomputed with
+   the offset that was live back then, so they never shift, while a move to a
+   new timezone re-phases only the charges dated after the switch. With no
+   history recorded yet, we fall back to the device's current offset. */
+function deviceOffsetAt(ts) {
+  const hist = state && state.settings && state.settings.tzHistory;
+  if (!hist || !hist.length) return new Date(ts).getTimezoneOffset();
+  let off = hist[0].offsetMin;
+  for (const seg of hist) { if (seg.since <= ts) off = seg.offsetMin; else break; }
+  return off;
+}
+
+/* The next local midnight strictly after `ts`, for a fixed UTC offset. */
+function localMidnightAfter(ts, offsetMin) {
+  const shift = -offsetMin * 60_000;                   // add to a UTC instant to read wall-clock
+  const wall = new Date(ts + shift);
+  const next = Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate() + 1);
+  return next - shift;                                 // back to a real UTC instant
+}
+
+/* Record a timezone change the moment the app notices one. Earlier segments
+   stay frozen, so interest already accrued never re-phases; only charges
+   dated after the switch land at the new local midnight. Call on boot (and
+   whenever the app regains focus) from a context that knows the live clock. */
+function recordDeviceTimezone(now = Date.now()) {
+  if (!state) return false;
+  if (!state.settings.tzHistory) state.settings.tzHistory = [];
+  const hist = state.settings.tzHistory;
+  const off = new Date(now).getTimezoneOffset();
+  if (!hist.length) { hist.push({ since: 0, offsetMin: off }); saveState(); return false; } // seed past
+  if (hist[hist.length - 1].offsetMin === off) return false;          // unchanged → nothing to do
+  hist.push({ since: now, offsetMin: off });                          // travelled → new segment
+  saveState();
+  return true;
 }
 
 function accruedInterestDetail(person, now = Date.now()) {
@@ -274,7 +308,8 @@ function accruedInterestDetail(person, now = Date.now()) {
       stretch = null;
       if (state.settings.resetInterestOnDrop) { out.total = 0; out.byRule = {}; }
     } else if (!stretch || stretch.rule.id !== rule.id) {
-      stretch = { rule, accrued: 0, nextTick: startOfNextDay(eventTime) };
+      const off = deviceOffsetAt(eventTime);
+      stretch = { rule, accrued: 0, nextTick: localMidnightAfter(eventTime, off), tzOff: off };
     }
 
     if (!stretch) continue;
@@ -293,6 +328,14 @@ function accruedInterestDetail(person, now = Date.now()) {
       out.byRule[stretch.rule.id] = (out.byRule[stretch.rule.id] || 0) + charge;
       usedPeriods[stretch.rule.id] = used + 1;
       stretch.nextTick += periodMs;
+      /* If the device moved timezones before this next charge, re-phase it to
+         the new local midnight. Charges already booked above keep their old
+         phase; only those dated after the switch shift. */
+      const off = deviceOffsetAt(stretch.nextTick);
+      if (off !== stretch.tzOff) {
+        stretch.nextTick += (off - stretch.tzOff) * 60_000;
+        stretch.tzOff = off;
+      }
     }
   }
   return out;

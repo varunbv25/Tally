@@ -44,6 +44,9 @@ interest per `month`, capped at `N` periods (optional).*
   rule's condition is met, then one charge per period after that.
   The engine walks each person's real transaction timeline, so partial
   repayments immediately shrink the base.
+- Timing follows the device's timezone, recorded as it changes. If you
+  travel, interest already charged stays exactly as it was; only the
+  charges dated after the move re-phase to the new local midnight.
 
 Interest never accrues on money *you* owe (negative or zero balances earn
 nothing), people can be marked "interest exempt", rules are evaluated

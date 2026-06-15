@@ -1455,7 +1455,11 @@ setInterval(render, 60_000);
 /* ---------- boot ---------- */
 
 loadState();
+recordDeviceTimezone(); // pin interest timing to the device's current timezone
 saveState();            // ensure the IDB mirror exists even before the first edit
+/* Notice timezone changes when the user reopens the app after travelling, so
+   interest going forward re-phases to the new local midnight. */
+window.addEventListener('focus', () => { if (recordDeviceTimezone()) render(); });
 history.replaceState(navState(), '');   // anchor root so back-navigation has a floor
 render();
 runNotificationCheck();
