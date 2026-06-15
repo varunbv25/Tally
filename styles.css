@@ -63,24 +63,32 @@
    user's Settings choice, or the OS preference when on "device").
    ========================================================= */
 [data-theme="dark"] {
-  --bg: #16140f;
-  --card: #211f18;
-  --ink: #ece7da;
-  --ink-soft: #9d9789;
-  --green: #3f9266;
-  --green-deep: #6cbf91;   /* headings on dark; also the .btn hover/toast surface */
-  --green-tint: rgba(108,191,145,0.14);
-  --red: #d9694f;
-  --amber: #cf9a48;
-  --blue: #74a8d8;
-  --gold: #c8a85e;
-  --line: #322f27;
-  --line-strong: #4a4639;
+  --bg: #131109;
+  --card: #1e1c14;
+  --ink: #f4efe4;          /* crisp near-white body text (~14:1 on card) */
+  --ink-soft: #bcb6a4;     /* brighter secondary text so captions/labels stay legible (~8.5:1) */
+  --green: #45a376;
+  --green-deep: #82d6a4;   /* bright, punchy headings (~10:1); also the .btn hover/toast surface */
+  --green-tint: rgba(130,214,164,0.16);
+  --red: #ec7b60;
+  --amber: #dba955;
+  --blue: #84b3e3;
+  --gold: #d2b56a;
+  --line: #343026;
+  --line-strong: #4d493b;
 }
 
 /* A few spots use hard-coded colours that don't read on a dark surface. */
 [data-theme="dark"] .hist-tag.paid { background: rgba(255,255,255,0.06); }
 [data-theme="dark"] .toast { background: #1f4a35; }
+
+/* Thin text renders lighter on dark backgrounds — give the small, muted
+   secondary text a touch more weight so it reads clearly. */
+[data-theme="dark"] .section-sub,
+[data-theme="dark"] .muted,
+[data-theme="dark"] label,
+[data-theme="dark"] .notif-value,
+[data-theme="dark"] .chip { font-weight: 500; }
 
 /* match the OS chrome (form controls, scrollbars) to the active theme */
 :root { color-scheme: light; }
