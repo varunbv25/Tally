@@ -49,23 +49,34 @@ function fmtDate(iso) {
 function commit() { saveState(); render(); runNotificationCheck(); }
 
 /* ---------- theme ----------
-   settings.theme is 'light' | 'dark' | 'system'. 'system' follows the
-   device's prefers-color-scheme. applyTheme() reflects the resolved value
-   onto <html data-theme>, which drives the palette in styles.css. */
+   The user's choice ('light' | 'dark' | 'device') lives in settings.
+   We resolve it to a concrete light/dark value, stamp <html data-theme>
+   (styles.css overrides the palette tokens for "dark"), and keep the
+   address-bar/status-bar colour in step. On "device" we follow the OS
+   and update live when it flips. */
+const THEME_BAR_COLOR = { light: '#1e5b3f', dark: '#1e211a' };
+
 function prefersDark() {
-  return !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
 }
 
 function resolvedTheme() {
-  const pref = (state.settings && state.settings.theme) || 'system';
+  const pref = (state && state.settings && state.settings.theme) || 'device';
   if (pref === 'light' || pref === 'dark') return pref;
   return prefersDark() ? 'dark' : 'light';
 }
 
 function applyTheme() {
-  const el = document.documentElement;
-  if (resolvedTheme() === 'dark') el.setAttribute('data-theme', 'dark');
-  else el.removeAttribute('data-theme');
+  const theme = resolvedTheme();
+  document.documentElement.setAttribute('data-theme', theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', THEME_BAR_COLOR[theme]);
+}
+
+if (window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (((state && state.settings && state.settings.theme) || 'device') === 'device') applyTheme();
+  });
 }
 
 /* ---------- back-button / gesture navigation ----------
@@ -254,9 +265,7 @@ function renderLedger() {
   const showAdd = query.length > 0 && !exactMatch;
 
   const rows = people.map(p => {
-    const principal = principalOf(p.id);
-    const interest = accruedInterest(p);
-    const total = principal + interest;
+    const { principal, interest, total } = balanceDisplay(p);
     const groups = groupsOf(p.id).map(g => `<span class="chip">${esc(g.name)}</span>`).join('');
     const exempt = p.interestExempt ? '<span class="chip exempt">no interest</span>' : '';
 
@@ -560,10 +569,8 @@ function interestRulesPanel() {
         </div>
         <div class="form-row tight"><button class="btn" type="submit">Add interest rule</button></div>
       </form>
-      <div class="form-row tight" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
-        <label><input type="checkbox" id="reset-interest-drop" ${state.settings.resetInterestOnDrop ? 'checked' : ''}>
-          Reset accrued interest when the balance falls below the rule's condition</label>
-      </div>
+      <p class="muted" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
+        When a repayment drops the balance below a rule's condition, the accrued interest is rolled into the principal and the interest column goes blank. It stays part of the principal — so the next time the balance crosses a condition, fresh interest accrues on that larger principal.</p>
     </div>
 
   `;
@@ -943,16 +950,21 @@ function updateSharePreview() {
   node.textContent = groupShareText(g, Date.now(), shareExcludedIds());
 }
 
+/* ---------- appearance / theme ---------- */
+const THEME_OPTIONS = [
+  ['light',  'Light'],
+  ['dark',   'Dark'],
+  ['device', 'Device default'],
+];
+
 function appearancePanel() {
-  const pref = (state.settings && state.settings.theme) || 'system';
-  const seg = (val, label) =>
-    `<button type="button" class="seg${pref === val ? ' active' : ''}" data-action="set-theme" data-theme="${val}" aria-pressed="${pref === val}">${label}</button>`;
+  const current = (state.settings && state.settings.theme) || 'device';
+  const seg = ([value, label]) =>
+    `<button type="button" class="seg${value === current ? ' active' : ''}" data-action="set-theme" data-theme="${value}" aria-pressed="${value === current}">${label}</button>`;
   return `
     <div class="panel">
       <h3>Appearance</h3>
-      <div class="seg-control" role="group" aria-label="Theme">
-        ${seg('light', 'Light')}${seg('dark', 'Dark')}${seg('system', 'Device default')}
-      </div>
+      <div class="seg-control" role="group" aria-label="Theme">${THEME_OPTIONS.map(seg).join('')}</div>
       <p class="muted">Pick a fixed look, or follow your device’s light/dark setting.</p>
     </div>`;
 }
@@ -1013,9 +1025,8 @@ function renderModal() {
   const p = getPerson(ui.modalPersonId);
   if (!p) { ui.modalPersonId = null; root.innerHTML = ''; return; }
 
-  const principal = principalOf(p.id);
   const detail = accruedInterestDetail(p);
-  const total = principal + detail.total;
+  const { principal, interest, total } = balanceDisplay(p);
   const ruleNames = Object.keys(detail.byRule)
     .map(id => state.interestRules.find(r => r.id === id)?.name).filter(Boolean).join(', ');
 
@@ -1047,7 +1058,7 @@ function renderModal() {
 
       <div class="balance-strip">
         <span>Principal<b class="money ${moneyClass(principal)}">${fmtMoney(principal, p.currency)}</b></span>
-        <span>Accrued interest<b class="money interest">${detail.total > 0.005 ? '+' + fmtMoney(detail.total, p.currency) : '—'}</b></span>
+        <span>Accrued interest<b class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</b></span>
         <span>Total<b class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</b></span>
       </div>
       ${ruleNames ? `<p class="muted" style="margin:-8px 0 14px">Interest from rule: <em>${esc(ruleNames)}</em></p>` : ''}
@@ -1162,13 +1173,6 @@ document.addEventListener('click', e => {
     case 'clear-search': ui.search = ''; render(); document.getElementById('search-box')?.focus(); break;
     case 'focus-search': document.getElementById('search-box')?.focus(); break;
 
-    case 'set-theme':
-      state.settings.theme = btn.dataset.theme;
-      saveState();
-      applyTheme();
-      render();   // refresh the active segment
-      break;
-
     case 'open-indirect': ui.indirectOpen = true; pushNav(); render(); break;
     case 'close-indirect': goBack(); break;
     case 'new-group': ui.creatingGroup = true; render(); document.querySelector('[data-form="add-group"] input')?.focus(); break;
@@ -1184,6 +1188,7 @@ document.addEventListener('click', e => {
       if (!Number.isFinite(amt) || amt <= 0) { input?.focus(); return; }
       const before = totalOf(getPerson(id));
       const note = document.getElementById(`qr-${id}`)?.value.trim() || '';
+      capitalizeOnDrop(id, amt * Number(sign));
       addTransaction({ personId: id, groupId: group || null, amount: amt * Number(sign), note });
       commit();
       maybeCelebrate(id, before);
@@ -1273,7 +1278,16 @@ document.addEventListener('click', e => {
       if (confirm('Erase ALL data? This cannot be undone.')) {
         localStorage.removeItem(LS_KEY);
         loadState();
+        applyTheme();
         render();
+      }
+      break;
+
+    case 'set-theme':
+      if (state.settings.theme !== btn.dataset.theme) {
+        state.settings.theme = btn.dataset.theme;
+        applyTheme();
+        commit();
       }
       break;
   }
@@ -1328,6 +1342,7 @@ document.addEventListener('submit', e => {
       const dateStr = fd.get('date');
       const pid = form.dataset.person;
       const before = totalOf(getPerson(pid));
+      if (!dateStr) capitalizeOnDrop(pid, amt * Number(fd.get('sign')));  // only for entries dated now
       addTransaction({
         personId: pid,
         groupId: fd.get('groupId') || null,
@@ -1385,10 +1400,6 @@ document.addEventListener('submit', e => {
 document.addEventListener('change', e => {
   if (e.target.id === 'base-currency') {
     state.settings.baseCurrency = e.target.value;
-    commit();
-  }
-  if (e.target.id === 'reset-interest-drop') {
-    state.settings.resetInterestOnDrop = e.target.checked;
     commit();
   }
   if (e.target.id === 'person-currency' && ui.modalPersonId) {
@@ -1562,16 +1573,12 @@ setInterval(render, 60_000);
 /* ---------- boot ---------- */
 
 loadState();
+applyTheme();            // stamp the saved (or OS-default) theme before first paint
+recordDeviceTimezone(); // pin interest timing to the device's current timezone
 saveState();            // ensure the IDB mirror exists even before the first edit
-applyTheme();           // reflect saved/system theme (the inline head script set first paint)
-
-/* When following the device, repaint if the OS flips light/dark mid-session. */
-if (window.matchMedia) {
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    if (((state.settings && state.settings.theme) || 'system') === 'system') applyTheme();
-  });
-}
-
+/* Notice timezone changes when the user reopens the app after travelling, so
+   interest going forward re-phases to the new local midnight. */
+window.addEventListener('focus', () => { if (recordDeviceTimezone()) render(); });
 history.replaceState(navState(), '');   // anchor root so back-navigation has a floor
 render();
 runNotificationCheck();

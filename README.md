@@ -39,17 +39,23 @@ interest per `month`, capped at `N` periods (optional).*
   plus accrued interest).
 - Period: day / week / month / year. Optional total-duration cap (the
   "time period T").
-- Interest lands in full-period steps: the first charge arrives one day
-  after a rule's condition is met, then one charge per period after that.
+- Interest lands in full-period steps: the first charge arrives at the
+  start of the next calendar day (the device's local midnight) after a
+  rule's condition is met, then one charge per period after that.
   The engine walks each person's real transaction timeline, so partial
   repayments immediately shrink the base.
+- Timing follows the device's timezone, recorded as it changes. If you
+  travel, interest already charged stays exactly as it was; only the
+  charges dated after the move re-phase to the new local midnight.
 
 Interest never accrues on money *you* owe (negative or zero balances earn
 nothing), people can be marked "interest exempt", rules are evaluated
 top-down with first match winning, and capitalizing or settling moves the
-accrual anchor so past time is never billed twice. An optional setting
-resets accrued interest the moment a balance falls below the rule's
-condition.
+accrual anchor so past time is never billed twice. Accrued interest only
+shows as its own column while the balance still meets a rule's condition;
+once a repayment drops it below, the interest is rolled into the principal
+and the column goes blank — so the next time the balance crosses a
+condition, fresh interest accrues on that larger principal.
 
 ### Indirect payments
 When someone who owes you (the **lender**) is themselves owed by a third

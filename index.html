@@ -30,6 +30,21 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<script>
+/* Stamp the theme before first paint to avoid a flash of the wrong palette.
+   app.js re-applies this once state is loaded; keep the storage key and the
+   resolution logic in sync with applyTheme() there. */
+(function () {
+  try {
+    var pref = 'device';
+    var raw = localStorage.getItem('tally-ledger-v1');
+    if (raw) { var s = JSON.parse(raw); if (s && s.settings && s.settings.theme) pref = s.settings.theme; }
+    var dark = pref === 'dark' || (pref === 'device' &&
+      window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  } catch (e) {}
+})();
+</script>
 </head>
 <body>
 

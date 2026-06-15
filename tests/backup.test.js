@@ -36,7 +36,7 @@ function sampleState() {
     interestRules: [
       { id: 'r1', name: '5% monthly', enabled: true, op: '>', value: 100, type: 'compound', rate: 5, periodUnit: 'month', capPeriods: null, groupId: null },
     ],
-    settings: { baseCurrency: 'USD', resetInterestOnDrop: true, theme: 'dark' },
+    settings: { baseCurrency: 'USD', tzHistory: [], theme: 'dark' },
   };
 }
 
@@ -74,7 +74,7 @@ test('importJSON fills missing settings keys from defaults', () => {
   ctx.importJSON(JSON.stringify(partial));
   const s = getState();
   assert.strictEqual(s.settings.baseCurrency, 'EUR');
-  assert.strictEqual(s.settings.resetInterestOnDrop, false);   // default backfilled
+  assert.strictEqual(s.settings.theme, 'device');   // default backfilled
 });
 
 test('importJSON rejects malformed JSON', () => {

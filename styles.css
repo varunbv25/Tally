@@ -84,14 +84,15 @@
    so money figures and tags stay legible on dark surfaces; solid green and
    neutral buttons flip to dark ink, while the danger fill stays deep enough
    for white text. Toast keeps a deep-green chip with light text in both
-   themes. Applied via [data-theme="dark"] on <html> by app.js. */
+   themes. Overriding the tokens flips every component together. Applied via
+   [data-theme="dark"] on <html> by app.js (and the inline boot script). */
 :root[data-theme="dark"] {
   color-scheme: dark;
 
   --bg: #14160f;
   --card: #1e211a;
   --ink: #ecebdf;
-  --ink-soft: #9ba093;
+  --ink-soft: #bcb6a4;     /* brighter secondary text so captions/labels stay legible */
   --green: #5cb487;
   --green-deep: #93d7b1;
   --green-tint: rgba(92,180,135,0.15);
@@ -116,6 +117,14 @@
   --toast-bg: #21674a;
   --toast-ink: #f2f4ea;
 }
+
+/* Thin text renders lighter on dark backgrounds — give the small, muted
+   secondary text a touch more weight so it reads clearly. */
+:root[data-theme="dark"] .section-sub,
+:root[data-theme="dark"] .muted,
+:root[data-theme="dark"] label,
+:root[data-theme="dark"] .notif-value,
+:root[data-theme="dark"] .chip { font-weight: 500; }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 

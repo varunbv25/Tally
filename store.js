@@ -44,8 +44,8 @@ function defaultState() {
                        // groupId null = applies to everyone; otherwise only to members of that group
     settings: {
       baseCurrency: 'INR',        // default currency for new people
-      resetInterestOnDrop: false, // wipe accrued interest when balance stops matching any rule
-      theme: 'system',            // 'light' | 'dark' | 'system' (follow device)
+      tzHistory: [],              // device-timezone segments {since, offsetMin} for interest timing
+      theme: 'device',            // 'light' | 'dark' | 'device' (follow OS preference)
     },
   };
 }
@@ -145,6 +145,7 @@ function addIndirectPayment({ lenderId, receiverId, amount, note = '', date = nu
 
   const linkId = uid();
   const when = date || new Date().toISOString();
+  if (!date) capitalizeOnDrop(lenderId, -amt);   // routing drops the lender's balance
   const lenderTxn = addTransaction({ personId: lenderId, amount: -amt, note, date: when });
   const receiverTxn = addTransaction({ personId: receiverId, amount: amt, note, date: when });
   lenderTxn.indirect = receiverTxn.indirect = true;
@@ -222,7 +223,8 @@ function firstMatchingInterestRule(balance, personId) {
 /*
   Interest is charged in DISCRETE STEPS, not continuously:
     - A rule's clock starts the moment the balance meets its condition.
-    - The first FULL period's interest lands one day later, all at once.
+    - The first FULL period's interest lands at the start of the next
+      calendar day (the device's local midnight), all at once.
     - One more full period's interest is added every period after that.
     - Compound rules charge on principal + accrued; simple rules charge
       on principal only.
@@ -236,10 +238,55 @@ function firstMatchingInterestRule(balance, personId) {
        (no stacking). A rule scoped to a group only applies to current
        members of that group.
     5. A rule with capPeriods stops charging after that many periods.
-    6. If settings.resetInterestOnDrop is on, accrued (uncapitalized)
-       interest is wiped the moment the balance stops matching any rule.
+    6. A repayment that pushes the balance below every rule's condition
+       capitalizes the accrued interest into the principal first (see
+       capitalizeOnDrop), so it is rolled into the balance rather than left as
+       separate interest. The fresh, larger principal is what later interest
+       accrues on once a rule matches again. The engine itself never wipes
+       accrued interest; it only stops accruing while no rule matches.
 */
-const INTEREST_GRACE_MS = PERIOD_MS.day; // first charge lands 1 day after the condition is met
+/* Interest is timed against the device's own clock — "each day starts at
+   12am" wherever the user is — not a flat 24h after the condition is met.
+
+   The device timezone is persisted as a history of segments in
+   settings.tzHistory: each { since, offsetMin } records the UTC offset
+   (Date.getTimezoneOffset() convention: minutes, e.g. -330 for IST) that
+   took effect at instant `since`. This lets the engine pin already-accrued
+   interest to the timezone it accrued in: past charges are recomputed with
+   the offset that was live back then, so they never shift, while a move to a
+   new timezone re-phases only the charges dated after the switch. With no
+   history recorded yet, we fall back to the device's current offset. */
+function deviceOffsetAt(ts) {
+  const hist = state && state.settings && state.settings.tzHistory;
+  if (!hist || !hist.length) return new Date(ts).getTimezoneOffset();
+  let off = hist[0].offsetMin;
+  for (const seg of hist) { if (seg.since <= ts) off = seg.offsetMin; else break; }
+  return off;
+}
+
+/* The next local midnight strictly after `ts`, for a fixed UTC offset. */
+function localMidnightAfter(ts, offsetMin) {
+  const shift = -offsetMin * 60_000;                   // add to a UTC instant to read wall-clock
+  const wall = new Date(ts + shift);
+  const next = Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate() + 1);
+  return next - shift;                                 // back to a real UTC instant
+}
+
+/* Record a timezone change the moment the app notices one. Earlier segments
+   stay frozen, so interest already accrued never re-phases; only charges
+   dated after the switch land at the new local midnight. Call on boot (and
+   whenever the app regains focus) from a context that knows the live clock. */
+function recordDeviceTimezone(now = Date.now()) {
+  if (!state) return false;
+  if (!state.settings.tzHistory) state.settings.tzHistory = [];
+  const hist = state.settings.tzHistory;
+  const off = new Date(now).getTimezoneOffset();
+  if (!hist.length) { hist.push({ since: 0, offsetMin: off }); saveState(); return false; } // seed past
+  if (hist[hist.length - 1].offsetMin === off) return false;          // unchanged → nothing to do
+  hist.push({ since: now, offsetMin: off });                          // travelled → new segment
+  saveState();
+  return true;
+}
 
 function accruedInterestDetail(person, now = Date.now()) {
   const out = { total: 0, byRule: {} };
@@ -263,10 +310,10 @@ function accruedInterestDetail(person, now = Date.now()) {
     const rule = balance > 0.005 ? firstMatchingInterestRule(balance, person.id) : null;
 
     if (!rule) {
-      stretch = null;
-      if (state.settings.resetInterestOnDrop) { out.total = 0; out.byRule = {}; }
+      stretch = null;                 // stop accruing; keep what's accrued so far
     } else if (!stretch || stretch.rule.id !== rule.id) {
-      stretch = { rule, accrued: 0, nextTick: eventTime + INTEREST_GRACE_MS };
+      const off = deviceOffsetAt(eventTime);
+      stretch = { rule, accrued: 0, nextTick: localMidnightAfter(eventTime, off), tzOff: off };
     }
 
     if (!stretch) continue;
@@ -285,6 +332,14 @@ function accruedInterestDetail(person, now = Date.now()) {
       out.byRule[stretch.rule.id] = (out.byRule[stretch.rule.id] || 0) + charge;
       usedPeriods[stretch.rule.id] = used + 1;
       stretch.nextTick += periodMs;
+      /* If the device moved timezones before this next charge, re-phase it to
+         the new local midnight. Charges already booked above keep their old
+         phase; only those dated after the switch shift. */
+      const off = deviceOffsetAt(stretch.nextTick);
+      if (off !== stretch.tzOff) {
+        stretch.nextTick += (off - stretch.tzOff) * 60_000;
+        stretch.tzOff = off;
+      }
     }
   }
   return out;
@@ -296,6 +351,30 @@ function accruedInterest(person, now = Date.now()) {
 
 function totalOf(person, now = Date.now()) {
   return principalOf(person.id) + accruedInterest(person, now);
+}
+
+/* How a person's balance should be PRESENTED, split into principal and
+   interest columns. Accrued interest is shown on its own only while the balance
+   still meets an interest rule's condition (i.e. it has "crossed the conditional
+   amount"). Below every rule the interest column is blank.
+
+   In normal use a repayment that drops the balance below every rule already
+   capitalizes the accrued interest into the principal (see capitalizeOnDrop),
+   so there is no separate interest to hide. This helper also folds any residual
+   accrued interest into the principal for display in the edge case where the
+   balance sits below a condition without a triggering repayment (e.g. a rule's
+   threshold was raised after interest had accrued). The total is identical
+   either way. */
+function balanceDisplay(person, now = Date.now()) {
+  const principal = principalOf(person.id);
+  const interest = accruedInterest(person, now);
+  const crossing = principal > 0.005 && !!firstMatchingInterestRule(principal, person.id);
+  return {
+    crossing,
+    principal: crossing ? principal : principal + interest,
+    interest: crossing ? interest : 0,
+    total: principal + interest,
+  };
 }
 
 /* Capitalize accrued interest into the ledger as a real transaction,
@@ -310,6 +389,24 @@ function capitalizeInterest(personId) {
   });
   person.interestAnchor = new Date().toISOString();
   return accrued;
+}
+
+/* A repayment that pushes the balance below every interest rule's condition
+   would otherwise leave the accrued interest stranded (it stops growing but
+   stays as separate interest). Instead, capitalize it into the principal first,
+   so the repayment is deducted from the capitalised total and the visible
+   interest resets to zero. Because the interest is now genuinely part of the
+   principal, when the balance next crosses a rule's condition the fresh
+   interest accrues on this larger principal. Pass the SIGNED amount about to be
+   recorded and call BEFORE recording it. Returns the amount capitalized
+   (0 if nothing happened). */
+function capitalizeOnDrop(personId, amount) {
+  const before = principalOf(personId);
+  const after = before + Number(amount);
+  const wasMatching = before > 0.005 && firstMatchingInterestRule(before, personId);
+  const nowMatching = after > 0.005 && firstMatchingInterestRule(after, personId);
+  if (wasMatching && !nowMatching) return capitalizeInterest(personId);
+  return 0;
 }
 
 /* Settle everything to zero (capitalizes outstanding interest first). */
