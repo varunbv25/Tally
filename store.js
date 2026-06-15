@@ -44,7 +44,6 @@ function defaultState() {
                        // groupId null = applies to everyone; otherwise only to members of that group
     settings: {
       baseCurrency: 'INR',        // default currency for new people
-      resetInterestOnDrop: false, // on: a repayment that drops the balance below every rule capitalizes the accrued interest into the principal
       tzHistory: [],              // device-timezone segments {since, offsetMin} for interest timing
       theme: 'device',            // 'light' | 'dark' | 'device' (follow OS preference)
     },
@@ -239,10 +238,11 @@ function firstMatchingInterestRule(balance, personId) {
        (no stacking). A rule scoped to a group only applies to current
        members of that group.
     5. A rule with capPeriods stops charging after that many periods.
-    6. If settings.resetInterestOnDrop is on, a repayment that pushes the
-       balance below every rule's condition capitalizes the accrued interest
-       into the principal first (see capitalizeOnDrop), so it is rolled into
-       the balance rather than discarded. The engine itself never wipes
+    6. A repayment that pushes the balance below every rule's condition
+       capitalizes the accrued interest into the principal first (see
+       capitalizeOnDrop), so it is rolled into the balance rather than left as
+       separate interest. The fresh, larger principal is what later interest
+       accrues on once a rule matches again. The engine itself never wipes
        accrued interest; it only stops accruing while no rule matches.
 */
 /* Interest is timed against the device's own clock — "each day starts at
@@ -353,6 +353,30 @@ function totalOf(person, now = Date.now()) {
   return principalOf(person.id) + accruedInterest(person, now);
 }
 
+/* How a person's balance should be PRESENTED, split into principal and
+   interest columns. Accrued interest is shown on its own only while the balance
+   still meets an interest rule's condition (i.e. it has "crossed the conditional
+   amount"). Below every rule the interest column is blank.
+
+   In normal use a repayment that drops the balance below every rule already
+   capitalizes the accrued interest into the principal (see capitalizeOnDrop),
+   so there is no separate interest to hide. This helper also folds any residual
+   accrued interest into the principal for display in the edge case where the
+   balance sits below a condition without a triggering repayment (e.g. a rule's
+   threshold was raised after interest had accrued). The total is identical
+   either way. */
+function balanceDisplay(person, now = Date.now()) {
+  const principal = principalOf(person.id);
+  const interest = accruedInterest(person, now);
+  const crossing = principal > 0.005 && !!firstMatchingInterestRule(principal, person.id);
+  return {
+    crossing,
+    principal: crossing ? principal : principal + interest,
+    interest: crossing ? interest : 0,
+    total: principal + interest,
+  };
+}
+
 /* Capitalize accrued interest into the ledger as a real transaction,
    then move the anchor so history is not re-charged. */
 function capitalizeInterest(personId) {
@@ -367,15 +391,16 @@ function capitalizeInterest(personId) {
   return accrued;
 }
 
-/* With resetInterestOnDrop on, a repayment that pushes the balance below every
-   interest rule's condition would otherwise leave the accrued interest stranded
-   (it stops growing but stays as separate interest). Instead, capitalize it into
-   the principal first, so the repayment is deducted from the capitalised total
-   and the visible interest resets to zero. Pass the SIGNED amount about to be
+/* A repayment that pushes the balance below every interest rule's condition
+   would otherwise leave the accrued interest stranded (it stops growing but
+   stays as separate interest). Instead, capitalize it into the principal first,
+   so the repayment is deducted from the capitalised total and the visible
+   interest resets to zero. Because the interest is now genuinely part of the
+   principal, when the balance next crosses a rule's condition the fresh
+   interest accrues on this larger principal. Pass the SIGNED amount about to be
    recorded and call BEFORE recording it. Returns the amount capitalized
    (0 if nothing happened). */
 function capitalizeOnDrop(personId, amount) {
-  if (!state.settings.resetInterestOnDrop) return 0;
   const before = principalOf(personId);
   const after = before + Number(amount);
   const wasMatching = before > 0.005 && firstMatchingInterestRule(before, personId);

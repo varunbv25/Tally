@@ -234,7 +234,7 @@ test('a timezone change freezes booked interest and re-phases the next charge', 
                  type: 'simple', rate: 1, periodUnit: 'day', capPeriods: null, groupId: null };
   const make = tzHistory => ({
     people: [p], groups: [], transactions: [t1], interestRules: [rule],
-    settings: { baseCurrency: 'INR', resetInterestOnDrop: false, tzHistory },
+    settings: { baseCurrency: 'INR', tzHistory },
   });
   const istOnly = [{ since: 0, offsetMin: IST }];
   const travel  = [{ since: 0, offsetMin: IST }, { since: start + 5 * DAY, offsetMin: EDT }];

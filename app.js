@@ -265,9 +265,7 @@ function renderLedger() {
   const showAdd = query.length > 0 && !exactMatch;
 
   const rows = people.map(p => {
-    const principal = principalOf(p.id);
-    const interest = accruedInterest(p);
-    const total = principal + interest;
+    const { principal, interest, total } = balanceDisplay(p);
     const groups = groupsOf(p.id).map(g => `<span class="chip">${esc(g.name)}</span>`).join('');
     const exempt = p.interestExempt ? '<span class="chip exempt">no interest</span>' : '';
 
@@ -564,10 +562,8 @@ function interestRulesPanel() {
         </div>
         <div class="form-row tight"><button class="btn" type="submit">Add interest rule</button></div>
       </form>
-      <div class="form-row tight" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
-        <label><input type="checkbox" id="reset-interest-drop" ${state.settings.resetInterestOnDrop ? 'checked' : ''}>
-          When a repayment drops the balance below the rule's condition, roll the accrued interest into the principal (instead of leaving it as separate interest)</label>
-      </div>
+      <p class="muted" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
+        When a repayment drops the balance below a rule's condition, the accrued interest is rolled into the principal and the interest column goes blank. It stays part of the principal — so the next time the balance crosses a condition, fresh interest accrues on that larger principal.</p>
     </div>
 
   `;
@@ -1011,9 +1007,8 @@ function renderModal() {
   const p = getPerson(ui.modalPersonId);
   if (!p) { ui.modalPersonId = null; root.innerHTML = ''; return; }
 
-  const principal = principalOf(p.id);
   const detail = accruedInterestDetail(p);
-  const total = principal + detail.total;
+  const { principal, interest, total } = balanceDisplay(p);
   const ruleNames = Object.keys(detail.byRule)
     .map(id => state.interestRules.find(r => r.id === id)?.name).filter(Boolean).join(', ');
 
@@ -1045,7 +1040,7 @@ function renderModal() {
 
       <div class="balance-strip">
         <span>Principal<b class="money ${moneyClass(principal)}">${fmtMoney(principal, p.currency)}</b></span>
-        <span>Accrued interest<b class="money interest">${detail.total > 0.005 ? '+' + fmtMoney(detail.total, p.currency) : '—'}</b></span>
+        <span>Accrued interest<b class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</b></span>
         <span>Total<b class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</b></span>
       </div>
       ${ruleNames ? `<p class="muted" style="margin:-8px 0 14px">Interest from rule: <em>${esc(ruleNames)}</em></p>` : ''}
@@ -1375,10 +1370,6 @@ document.addEventListener('submit', e => {
 document.addEventListener('change', e => {
   if (e.target.id === 'base-currency') {
     state.settings.baseCurrency = e.target.value;
-    commit();
-  }
-  if (e.target.id === 'reset-interest-drop') {
-    state.settings.resetInterestOnDrop = e.target.checked;
     commit();
   }
   if (e.target.id === 'person-currency' && ui.modalPersonId) {
