@@ -39,8 +39,9 @@ interest per `month`, capped at `N` periods (optional).*
   plus accrued interest).
 - Period: day / week / month / year. Optional total-duration cap (the
   "time period T").
-- Interest lands in full-period steps: the first charge arrives one day
-  after a rule's condition is met, then one charge per period after that.
+- Interest lands in full-period steps: the first charge arrives at the
+  start of the next calendar day (local midnight) after a rule's condition
+  is met, then one charge per period after that.
   The engine walks each person's real transaction timeline, so partial
   repayments immediately shrink the base.
 
