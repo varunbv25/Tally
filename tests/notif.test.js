@@ -10,6 +10,9 @@ const ctx = vm.createContext({});
 for (const file of ['store.js', 'notif.js', 'push.js']) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), ctx, { filename: file });
 }
+/* store.js keeps `state` as a module-scoped binding; assign it the same way
+   the engine does internally so tests can drive accruedInterest directly. */
+function setState(st) { ctx.__st = st; vm.runInContext('state = __st', ctx); }
 
 const DAY = 86_400_000;
 const NOW = new Date('2026-06-12T12:00:00Z').getTime();
@@ -204,7 +207,8 @@ test('projectSchedule excludes currently-due and already-fired items', () => {
 test('projectSchedule finds interest-driven crossings', () => {
   /* 1000 at 1%/day simple -> interest hits 100 (milestone) after 10 charges.
      The debt is dated at noon UTC (NOW) and the first charge lands at the
-     next IST midnight, so the 10th charge falls ~9.5 days out. */
+     next local midnight, so the 10th charge falls ~9.5 days out (tests run
+     in UTC: noon -> midnight is +12h, landing the 10th charge at +9.5d). */
   const st = makeState({
     people: [person('a')], transactions: [txn('a', 1000, 0)], interestRules: DAILY_1PCT,
     notifications: { recurringNudge: { enabled: false }, agingDebt: { enabled: false },
@@ -213,6 +217,39 @@ test('projectSchedule finds interest-driven crossings', () => {
   const m = ctx.projectSchedule(st, freshLog(), NOW).filter(e => e.key === 'milestone:a');
   assert.strictEqual(m.length, 1);
   assert.ok(Math.abs(m[0].fireAt - (NOW + 9.5 * DAY)) <= 6 * 3600 * 1000 + 1);
+});
+
+test('a timezone change freezes booked interest and re-phases the next charge', () => {
+  /* 1000 at 1%/day simple = 10 per charge. The device is in IST (offset -330)
+     until day 5, then moves to EDT (offset +240). Charges already booked under
+     IST must stay; only charges dated after the move shift to EDT's midnight,
+     which lands ~9.5h later — so the travelling timeline lags by one charge
+     right after the move while keeping every earlier charge identical. */
+  const IST = -330, EDT = 240;
+  const start = Date.parse('2026-01-01T00:00:00Z');
+  const p = person('a');
+  const t1 = { id: 't1', personId: 'a', groupId: null, amount: 1000, note: '',
+               date: new Date(start).toISOString(), isInterest: false };
+  const rule = { id: 'r', name: 'r', enabled: true, op: '>', value: 0,
+                 type: 'simple', rate: 1, periodUnit: 'day', capPeriods: null, groupId: null };
+  const make = tzHistory => ({
+    people: [p], groups: [], transactions: [t1], interestRules: [rule],
+    settings: { baseCurrency: 'INR', resetInterestOnDrop: false, tzHistory },
+  });
+  const istOnly = [{ since: 0, offsetMin: IST }];
+  const travel  = [{ since: 0, offsetMin: IST }, { since: start + 5 * DAY, offsetMin: EDT }];
+  const charges = (tzHistory, t) => { setState(make(tzHistory)); return Math.round(ctx.accruedInterest(p, t) / 10); };
+
+  /* Before the move, both timelines are identical. */
+  const tPre = start + 4.78 * DAY;
+  assert.strictEqual(charges(istOnly, tPre), 5);
+  assert.strictEqual(charges(travel,  tPre), 5);
+
+  /* Just past the 6th IST midnight: staying put books 6 charges, but after the
+     move the 6th charge waits for EDT midnight, so the traveller still has 5. */
+  const tPost = start + 5.78 * DAY;
+  assert.strictEqual(charges(istOnly, tPost), 6);
+  assert.strictEqual(charges(travel,  tPost), 5);
 });
 
 test('projectSchedule repeats the nudge at its cadence across the horizon', () => {
