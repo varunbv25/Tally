@@ -79,19 +79,20 @@
 }
 
 /* ---------- dark theme ----------
-   A warm, green-tinted dark — espresso-forest, not flat black — so it reads
-   as the same brand with the lights off. Accents lift to lighter sage/coral
-   so money figures and tags stay legible on dark surfaces; solid green and
-   neutral buttons flip to dark ink, while the danger fill stays deep enough
-   for white text. Toast keeps a deep-green chip with light text in both
+   A neutral grey-black dark — close to flat black, not green-tinted — so
+   surfaces read as quiet charcoal while the green stays purely an accent.
+   Body text is crisp near-white (~14:1 on card) and secondary text is
+   brightened so captions/labels stay legible; solid green and neutral
+   buttons flip to dark ink, while the danger fill stays deep enough for
+   white text. Toast keeps a deep-green chip with light text in both
    themes. Overriding the tokens flips every component together. Applied via
    [data-theme="dark"] on <html> by app.js (and the inline boot script). */
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #14160f;
-  --card: #1e211a;
-  --ink: #ecebdf;
+  --bg: #121212;
+  --card: #1e1e1e;
+  --ink: #f4efe4;          /* crisp near-white body text (~14:1 on card) */
   --ink-soft: #bcb6a4;     /* brighter secondary text so captions/labels stay legible */
   --green: #5cb487;
   --green-deep: #93d7b1;
@@ -100,10 +101,10 @@
   --amber: #d6a548;
   --blue: #7aa6d4;
   --gold: #c9a85f;
-  --line: #30342a;
-  --line-strong: #424636;
+  --line: #2e2e2e;
+  --line-strong: #404040;
 
-  --btn-ink: #11140d;
+  --btn-ink: #121212;
   --danger: #c8432c;
   --danger-hover: #a8351f;
   --focus-ring: rgba(92,180,135,0.22);
