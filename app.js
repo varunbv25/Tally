@@ -265,9 +265,7 @@ function renderLedger() {
   const showAdd = query.length > 0 && !exactMatch;
 
   const rows = people.map(p => {
-    const principal = principalOf(p.id);
-    const interest = accruedInterest(p);
-    const total = principal + interest;
+    const { principal, interest, total } = balanceDisplay(p);
     const groups = groupsOf(p.id).map(g => `<span class="chip">${esc(g.name)}</span>`).join('');
     const exempt = p.interestExempt ? '<span class="chip exempt">no interest</span>' : '';
 
@@ -1011,9 +1009,8 @@ function renderModal() {
   const p = getPerson(ui.modalPersonId);
   if (!p) { ui.modalPersonId = null; root.innerHTML = ''; return; }
 
-  const principal = principalOf(p.id);
   const detail = accruedInterestDetail(p);
-  const total = principal + detail.total;
+  const { principal, interest, total } = balanceDisplay(p);
   const ruleNames = Object.keys(detail.byRule)
     .map(id => state.interestRules.find(r => r.id === id)?.name).filter(Boolean).join(', ');
 
@@ -1045,7 +1042,7 @@ function renderModal() {
 
       <div class="balance-strip">
         <span>Principal<b class="money ${moneyClass(principal)}">${fmtMoney(principal, p.currency)}</b></span>
-        <span>Accrued interest<b class="money interest">${detail.total > 0.005 ? '+' + fmtMoney(detail.total, p.currency) : '—'}</b></span>
+        <span>Accrued interest<b class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</b></span>
         <span>Total<b class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</b></span>
       </div>
       ${ruleNames ? `<p class="muted" style="margin:-8px 0 14px">Interest from rule: <em>${esc(ruleNames)}</em></p>` : ''}

@@ -353,6 +353,27 @@ function totalOf(person, now = Date.now()) {
   return principalOf(person.id) + accruedInterest(person, now);
 }
 
+/* How a person's balance should be PRESENTED, split into principal and
+   interest columns. Accrued interest is shown on its own only while the
+   balance still meets an interest rule's condition (i.e. it has "crossed the
+   conditional amount"). Once a repayment drops the balance back below every
+   rule, the accrued interest is folded into the principal and the interest
+   column goes blank — until the balance crosses a condition again. This is a
+   display rule only; the engine still preserves the accrued interest, so it
+   re-appears as separate interest the moment a rule matches once more. The
+   total is identical either way. */
+function balanceDisplay(person, now = Date.now()) {
+  const principal = principalOf(person.id);
+  const interest = accruedInterest(person, now);
+  const crossing = principal > 0.005 && !!firstMatchingInterestRule(principal, person.id);
+  return {
+    crossing,
+    principal: crossing ? principal : principal + interest,
+    interest: crossing ? interest : 0,
+    total: principal + interest,
+  };
+}
+
 /* Capitalize accrued interest into the ledger as a real transaction,
    then move the anchor so history is not re-charged. */
 function capitalizeInterest(personId) {
