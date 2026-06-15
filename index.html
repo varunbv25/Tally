@@ -3,8 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
 <title>TALLY — the ledger that keeps score</title>
 <meta name="theme-color" content="#1e5b3f">
+<script>
+/* Apply the saved theme before first paint so there's no light-mode flash
+   when the user has chosen (or their device prefers) dark. Mirrors
+   applyTheme() in app.js; LS_KEY must match store.js. */
+(function () {
+  try {
+    var raw = localStorage.getItem('tally-ledger-v1');
+    var pref = raw ? (JSON.parse(raw).settings || {}).theme : null;
+    var dark = pref === 'dark' ||
+      ((!pref || pref === 'system') &&
+        window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+    if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+  } catch (e) { /* default light */ }
+})();
+</script>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">

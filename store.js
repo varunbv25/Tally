@@ -45,6 +45,7 @@ function defaultState() {
     settings: {
       baseCurrency: 'INR',        // default currency for new people
       resetInterestOnDrop: false, // wipe accrued interest when balance stops matching any rule
+      theme: 'system',            // 'light' | 'dark' | 'system' (follow device)
     },
   };
 }
@@ -522,6 +523,51 @@ function importCSV(text) {
     transactions: txns,
     interestRules: state.interestRules,   // kept as-is (not in the sheet)
     settings: state.settings,             // kept as-is (not in the sheet)
+  });
+  saveState();
+}
+
+/* ---------- full backup / restore (JSON) ----------
+   Unlike the CSV, this round-trips EVERYTHING — people, groups,
+   transactions, interest rules and settings — so a restored device is
+   byte-for-byte the original. This is the safe answer to "clearing my
+   browser wiped my ledger": back up to a file, restore it anywhere. */
+
+const BACKUP_VERSION = 1;
+
+function exportJSON() {
+  return JSON.stringify({
+    app: 'tally',
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    state,
+  }, null, 2);
+}
+
+function importJSON(text) {
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch { throw new Error('This file isn’t valid Tally backup JSON.'); }
+
+  // Accept either a wrapped backup {app,version,state} or a bare state object.
+  const incoming = parsed && parsed.state && typeof parsed.state === 'object'
+    ? parsed.state
+    : parsed;
+  if (parsed && parsed.app && parsed.app !== 'tally') {
+    throw new Error('This backup was made by a different app.');
+  }
+  if (!incoming || !Array.isArray(incoming.people) || !Array.isArray(incoming.transactions)) {
+    throw new Error('This file doesn’t look like a Tally backup.');
+  }
+
+  // Merge onto a fresh default so any field added in a newer version still
+  // has a sane fallback when restoring an older backup.
+  state = Object.assign(defaultState(), {
+    people: incoming.people,
+    groups: Array.isArray(incoming.groups) ? incoming.groups : [],
+    transactions: incoming.transactions,
+    interestRules: Array.isArray(incoming.interestRules) ? incoming.interestRules : [],
+    settings: Object.assign(defaultState().settings, incoming.settings || {}),
   });
   saveState();
 }

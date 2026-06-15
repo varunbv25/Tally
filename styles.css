@@ -6,7 +6,14 @@
    ========================================================= */
 
 :root {
-  /* palette */
+  /* Light is the default theme. The dark theme lives under
+     [data-theme="dark"] below; app.js sets that attribute (Light / Dark /
+     System) and `color-scheme` follows so native UI — select option menus,
+     date pickers, scrollbars, autofill — matches the chosen palette instead
+     of the OS default. */
+  color-scheme: light;
+
+  /* palette — light */
   --bg: #faf8f2;
   --card: #ffffff;
   --ink: #232a23;
@@ -20,6 +27,21 @@
   --gold: #a3823a;
   --line: #e4ded0;
   --line-strong: #cfc7b2;
+
+  /* semantic tokens — let each theme tune contrast independently */
+  --btn-ink: #ffffff;                  /* text on solid green / ink-soft fills */
+  --danger: #b23a26;                   /* danger button fill (always white text) */
+  --danger-hover: #8c2d1d;
+  --focus-ring: rgba(30,91,63,0.12);
+  --overlay: rgba(20,61,43,0.30);      /* modal / confirm scrim */
+  --row-tint: rgba(30,91,63,0.11);     /* pressed / selected table rows */
+  --tag-neutral: rgba(0,0,0,0.05);     /* neutral chip background */
+  --shadow-card: rgba(20,61,43,0.06);
+  --shadow-bar: rgba(20,61,43,0.08);
+  --shadow-modal: rgba(20,61,43,0.35);
+  --shadow-toast: rgba(20,61,43,0.28);
+  --toast-bg: var(--green-deep);
+  --toast-ink: #ffffff;
 
   /* fonts */
   --display: 'Fraunces', Georgia, serif;
@@ -54,6 +76,45 @@
   --duration-fast: 150ms;
   --duration-normal: 300ms;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---------- dark theme ----------
+   A warm, green-tinted dark — espresso-forest, not flat black — so it reads
+   as the same brand with the lights off. Accents lift to lighter sage/coral
+   so money figures and tags stay legible on dark surfaces; solid green and
+   neutral buttons flip to dark ink, while the danger fill stays deep enough
+   for white text. Toast keeps a deep-green chip with light text in both
+   themes. Applied via [data-theme="dark"] on <html> by app.js. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #14160f;
+  --card: #1e211a;
+  --ink: #ecebdf;
+  --ink-soft: #9ba093;
+  --green: #5cb487;
+  --green-deep: #93d7b1;
+  --green-tint: rgba(92,180,135,0.15);
+  --red: #e98368;
+  --amber: #d6a548;
+  --blue: #7aa6d4;
+  --gold: #c9a85f;
+  --line: #30342a;
+  --line-strong: #424636;
+
+  --btn-ink: #11140d;
+  --danger: #c8432c;
+  --danger-hover: #a8351f;
+  --focus-ring: rgba(92,180,135,0.22);
+  --overlay: rgba(0,0,0,0.6);
+  --row-tint: rgba(92,180,135,0.14);
+  --tag-neutral: rgba(255,255,255,0.07);
+  --shadow-card: rgba(0,0,0,0.45);
+  --shadow-bar: rgba(0,0,0,0.5);
+  --shadow-modal: rgba(0,0,0,0.6);
+  --shadow-toast: rgba(0,0,0,0.5);
+  --toast-bg: #21674a;
+  --toast-ink: #f2f4ea;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -171,7 +232,7 @@ input, select, textarea {
 }
 input:focus, select:focus {
   border-color: var(--green);
-  box-shadow: 0 0 0 3px rgba(30,91,63,0.12);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 input[type="number"] { width: 110px; font-family: var(--mono); font-size: var(--fs-sm); }
 input[type="date"] { width: 150px; }
@@ -186,7 +247,7 @@ button { font-family: var(--body); cursor: pointer; }
   font-size: var(--fs-sm); font-weight: 600;
   padding: 8px 16px; border-radius: var(--radius-sm);
   border: 1px solid var(--green);
-  background: var(--green); color: #fff;
+  background: var(--green); color: var(--btn-ink);
   transition: background var(--duration-fast);
 }
 .btn:hover { background: var(--green-deep); }
@@ -197,8 +258,8 @@ button { font-family: var(--body); cursor: pointer; }
 }
 .btn.ghost:hover { background: var(--bg); }
 
-.btn.danger { background: var(--red); border-color: var(--red); }
-.btn.danger:hover { background: #8c2d1d; }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger:hover { background: var(--danger-hover); }
 
 .btn.small { font-size: var(--fs-cap); padding: 5px 10px; }
 
@@ -246,7 +307,7 @@ button { font-family: var(--body); cursor: pointer; }
 .add-suggestion-plus {
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0; width: 22px; height: 22px;
-  border-radius: 50%; background: var(--green); color: #fff;
+  border-radius: 50%; background: var(--green); color: var(--btn-ink);
   font-size: 16px; line-height: 1; font-weight: 600;
 }
 
@@ -322,9 +383,9 @@ button { font-family: var(--body); cursor: pointer; }
 .quick-add .btn.plus:hover { color: var(--green-deep); border-color: var(--green); }
 .quick-add .btn.minus:hover { color: var(--ink); border-color: var(--ink-soft); }
 /* armed: an amount is present — restore full colour so the action reads as ready */
-.quick-add.active .btn.plus { background: var(--green); color: #fff; border-color: var(--green); }
+.quick-add.active .btn.plus { background: var(--green); color: var(--btn-ink); border-color: var(--green); }
 .quick-add.active .btn.plus:hover { background: var(--green-deep); }
-.quick-add.active .btn.minus { background: var(--ink-soft); color: #fff; border-color: var(--ink-soft); }
+.quick-add.active .btn.minus { background: var(--ink-soft); color: var(--btn-ink); border-color: var(--ink-soft); }
 .quick-add.active .btn.minus:hover { background: var(--ink); }
 
 /* destructive action: low-emphasis text button pushed away from the primaries */
@@ -345,7 +406,7 @@ button { font-family: var(--body); cursor: pointer; }
   text-align: left; width: 100%;
   transition: border-color var(--duration-fast);
 }
-.group-card:hover { border-color: var(--green); box-shadow: 0 2px 12px rgba(20, 61, 43, 0.06); }
+.group-card:hover { border-color: var(--green); box-shadow: 0 2px 12px var(--shadow-card); }
 .group-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-2); }
 .group-card h3 { font-family: var(--display); font-size: var(--fs-h2); color: var(--green-deep); margin-bottom: var(--sp-1); }
 .group-card-head .chip { flex: 0 0 auto; }
@@ -363,7 +424,7 @@ button { font-family: var(--body); cursor: pointer; }
 
 .banner {
   font-size: var(--fs-sm); color: var(--green-deep);
-  background: rgba(30,91,63,0.06); border: 1px solid var(--line);
+  background: var(--green-tint); border: 1px solid var(--line);
   border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 18px;
 }
 
@@ -430,7 +491,7 @@ button { font-family: var(--body); cursor: pointer; }
 
 .modal-overlay {
   position: fixed; inset: 0; z-index: 50;
-  background: rgba(35,42,35,0.32);
+  background: var(--overlay);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   display: flex; align-items: flex-start; justify-content: center;
@@ -488,7 +549,7 @@ button { font-family: var(--body); cursor: pointer; }
 }
 .hist-tag { padding: 2px 7px; border-radius: var(--pill); }
 .hist-tag.lent { color: var(--green); background: var(--green-tint); }
-.hist-tag.paid { color: var(--ink-soft); background: rgba(0,0,0,0.05); }
+.hist-tag.paid { color: var(--ink-soft); background: var(--tag-neutral); }
 .hist-tag.indirect { color: var(--blue); background: rgba(43,91,138,0.10); margin-left: var(--sp-1); }
 .interest-tag { color: var(--gold); }
 .hist-amount { display: none; }   /* shown only on mobile cards */
@@ -497,11 +558,11 @@ button { font-family: var(--body); cursor: pointer; }
 .history-table tr[data-txn-id],
 .ledger-table tr[data-member-id] { transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
 .history-table tr.lp-pressing,
-.ledger-table tr.lp-pressing { background: rgba(30, 91, 63, 0.10) !important; }
+.ledger-table tr.lp-pressing { background: var(--row-tint) !important; }
 
 /* multi-select mode */
 .history-table tr.selected,
-.ledger-table tr.selected { background: rgba(30, 91, 63, 0.12) !important; box-shadow: inset 3px 0 0 var(--green); }
+.ledger-table tr.selected { background: var(--row-tint) !important; box-shadow: inset 3px 0 0 var(--green); }
 .history-table tr[data-txn-id] { cursor: default; }
 .sel-check {
   display: inline-block; width: 18px; height: 18px; border-radius: 50%;
@@ -511,7 +572,7 @@ button { font-family: var(--body); cursor: pointer; }
 .sel-check.on { background: var(--green); border-color: var(--green); }
 .sel-check.on::after {
   content: ''; position: absolute; left: 5px; top: 1.5px;
-  width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+  width: 4px; height: 8px; border: solid var(--btn-ink); border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
 
 /* selection top bar */
@@ -520,7 +581,7 @@ button { font-family: var(--body); cursor: pointer; }
   display: flex; align-items: center; gap: var(--sp-3);
   padding: calc(env(safe-area-inset-top, 0px) + 12px) 18px 12px;
   background: var(--card); border-bottom: 1px solid var(--line-strong);
-  box-shadow: 0 2px 10px rgba(20, 61, 43, 0.08);
+  box-shadow: 0 2px 10px var(--shadow-bar);
 }
 .select-cancel {
   background: none; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
@@ -531,10 +592,10 @@ button { font-family: var(--body); cursor: pointer; }
 .select-bin {
   display: inline-flex; align-items: center; justify-content: center;
   width: 42px; height: 42px; border-radius: var(--radius-lg);
-  background: var(--red); color: #fff; border: none; cursor: pointer;
+  background: var(--danger); color: #fff; border: none; cursor: pointer;
   transition: transform 0.1s, background 0.15s, opacity 0.15s;
 }
-.select-bin:hover { background: #8c2d1d; }
+.select-bin:hover { background: var(--danger-hover); }
 .select-bin:active { transform: scale(0.94); }
 .select-bin:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -542,7 +603,7 @@ button { font-family: var(--body); cursor: pointer; }
 .confirm-overlay {
   position: fixed; inset: 0; z-index: 200;
   display: flex; align-items: center; justify-content: center; padding: var(--sp-5);
-  background: rgba(20, 61, 43, 0.28);
+  background: var(--overlay);
   -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   animation: fade 0.18s ease both;
 }
@@ -550,7 +611,7 @@ button { font-family: var(--body); cursor: pointer; }
 .confirm-card {
   background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
   padding: 22px; max-width: 360px; width: 100%;
-  box-shadow: 0 18px 50px rgba(20, 61, 43, 0.35);
+  box-shadow: 0 18px 50px var(--shadow-modal);
   animation: rise 0.2s ease both;
 }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -584,6 +645,65 @@ button { font-family: var(--body); cursor: pointer; }
 .empty-state {
   text-align: center; padding: 48px var(--sp-5); color: var(--ink-soft);
   font-size: var(--fs-lead);
+}
+
+/* First-run onboarding: a real surface with a single clear action, not a
+   blank <main> that reads as "the app is broken". */
+.empty-onboard {
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--sp-3);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 56px var(--sp-5);
+}
+.empty-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 64px; height: 64px; border-radius: 50%;
+  background: var(--green-tint); color: var(--green);
+  margin-bottom: var(--sp-1);
+}
+.empty-title {
+  font-family: var(--display); font-size: var(--fs-h1); font-weight: 700;
+  color: var(--green-deep); margin: 0;
+}
+.empty-copy {
+  max-width: 360px; margin: 0; color: var(--ink-soft);
+  font-size: var(--fs-base); line-height: 1.5;
+}
+.empty-onboard .btn { margin-top: var(--sp-2); }
+
+.data-subhead {
+  font-family: var(--body); font-size: var(--fs-sm); font-weight: 600;
+  color: var(--ink); text-transform: uppercase; letter-spacing: 0.04em;
+  margin: var(--sp-4) 0 var(--sp-2);
+}
+.data-subhead:first-of-type { margin-top: 0; }
+
+/* ---------- segmented control (theme switcher) ----------
+   One uniform track; every segment looks the same until selected. The active
+   segment lifts to the accent fill — and because every colour is a token, the
+   whole control re-themes the instant a new theme is applied. */
+.seg-control {
+  display: flex; gap: var(--sp-1);
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--pill);
+  padding: var(--sp-1);
+  max-width: 440px; margin-bottom: var(--sp-3);
+}
+.seg {
+  flex: 1; padding: 9px 12px;
+  border: none; background: transparent;
+  border-radius: var(--pill);
+  font-family: var(--body); font-size: var(--fs-base); font-weight: 500;
+  color: var(--ink-soft); cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+.seg:hover { color: var(--ink); }
+.seg.active {
+  background: var(--green); color: var(--btn-ink); font-weight: 600;
+  box-shadow: 0 1px 3px var(--shadow-card);
 }
 
 .muted { color: var(--ink-soft); font-size: var(--fs-cap); }
@@ -703,13 +823,13 @@ button { font-family: var(--body); cursor: pointer; }
   pointer-events: none;
 }
 .toast {
-  background: var(--green-deep);
-  color: #fff;
+  background: var(--toast-bg);
+  color: var(--toast-ink);
   padding: 11px 18px;
   border-radius: var(--radius-lg);
   font-size: var(--fs-base);
   font-family: var(--body);
-  box-shadow: 0 8px 24px rgba(20, 61, 43, 0.28);
+  box-shadow: 0 8px 24px var(--shadow-toast);
   text-align: center;
   opacity: 0;
   transform: translateY(-20px);

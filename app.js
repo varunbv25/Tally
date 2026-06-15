@@ -48,6 +48,26 @@ function fmtDate(iso) {
 
 function commit() { saveState(); render(); runNotificationCheck(); }
 
+/* ---------- theme ----------
+   settings.theme is 'light' | 'dark' | 'system'. 'system' follows the
+   device's prefers-color-scheme. applyTheme() reflects the resolved value
+   onto <html data-theme>, which drives the palette in styles.css. */
+function prefersDark() {
+  return !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+}
+
+function resolvedTheme() {
+  const pref = (state.settings && state.settings.theme) || 'system';
+  if (pref === 'light' || pref === 'dark') return pref;
+  return prefersDark() ? 'dark' : 'light';
+}
+
+function applyTheme() {
+  const el = document.documentElement;
+  if (resolvedTheme() === 'dark') el.setAttribute('data-theme', 'dark');
+  else el.removeAttribute('data-theme');
+}
+
 /* ---------- back-button / gesture navigation ----------
    Each drill-in (tab switch, group detail, person modal) pushes a
    history entry encoding the nav state. Close buttons call goBack(),
@@ -286,7 +306,14 @@ function renderLedger() {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>` : (state.people.length === 0
-      ? `<div class="empty-state">The ledger is blank. Type a name above to add your first person — or live a debt-free life, your call.</div>`
+      ? `<div class="empty-state empty-onboard">
+          <div class="empty-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 12h16M4 19h10"/><circle cx="19" cy="19" r="3"/><path d="M19 17.6v2.8M17.6 19h2.8"/></svg>
+          </div>
+          <h3 class="empty-title">Your ledger is empty</h3>
+          <p class="empty-copy">Add the first person you’ve lent to or borrowed from. Everything stays in this browser — nothing is uploaded.</p>
+          <button class="btn" data-action="focus-search">+ Add your first person</button>
+        </div>`
       : `<div class="empty-state">No one matches “${esc(query)}”.${showAdd ? ' Add them with the button above.' : ''}</div>`)}
   `;
 }
@@ -916,10 +943,26 @@ function updateSharePreview() {
   node.textContent = groupShareText(g, Date.now(), shareExcludedIds());
 }
 
+function appearancePanel() {
+  const pref = (state.settings && state.settings.theme) || 'system';
+  const seg = (val, label) =>
+    `<button type="button" class="seg${pref === val ? ' active' : ''}" data-action="set-theme" data-theme="${val}" aria-pressed="${pref === val}">${label}</button>`;
+  return `
+    <div class="panel">
+      <h3>Appearance</h3>
+      <div class="seg-control" role="group" aria-label="Theme">
+        ${seg('light', 'Light')}${seg('dark', 'Dark')}${seg('system', 'Device default')}
+      </div>
+      <p class="muted">Pick a fixed look, or follow your device’s light/dark setting.</p>
+    </div>`;
+}
+
 function renderSettings() {
   return `
     <h2 class="section-title">Settings</h2>
-    <p class="section-sub">Interest rules, currency, and your data — which never leaves this browser unless you export it.</p>
+    <p class="section-sub">Appearance, interest rules, currency, and your data — which never leaves this browser unless you export it.</p>
+
+    ${appearancePanel()}
 
     ${interestRulesPanel()}
 
@@ -935,14 +978,27 @@ function renderSettings() {
 
     <div class="panel">
       <h3>Data</h3>
+      <p class="muted" style="margin-bottom:12px">Your ledger lives only in this browser. Clearing site data or switching devices wipes it — so keep a backup.</p>
+
+      <h4 class="data-subhead">Full backup</h4>
+      <div class="form-row">
+        <button class="btn" data-action="backup-data">Back up everything (JSON)</button>
+        <label class="btn ghost" style="display:inline-block">Restore backup
+          <input type="file" id="restore-file" accept=".json,application/json" style="display:none">
+        </label>
+      </div>
+      <p class="muted">A complete snapshot — people, groups, entries, interest rules <em>and</em> settings. Restoring replaces everything on this device with the file’s contents.</p>
+
+      <h4 class="data-subhead">Spreadsheet</h4>
       <div class="form-row">
         <button class="btn ghost" data-action="export-data">Export spreadsheet (CSV)</button>
         <label class="btn ghost" style="display:inline-block">Import spreadsheet
           <input type="file" id="import-file" accept=".csv,text/csv" style="display:none">
         </label>
       </div>
-      <p class="muted">Opens in Excel, Google Sheets or Numbers — one row per entry. Importing replaces people, groups and entries; your interest rules and settings stay on this device.</p>
-      <div class="form-row tight">
+      <p class="muted">Opens in Excel, Google Sheets or Numbers — one row per entry. Importing replaces people, groups and entries; interest rules and settings are <strong>not</strong> in the sheet, so use a full backup if you want those too.</p>
+
+      <div class="form-row tight" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
         <button class="btn danger" data-action="reset-data">Erase everything</button>
       </div>
     </div>
@@ -1104,6 +1160,14 @@ document.addEventListener('click', e => {
     }
 
     case 'clear-search': ui.search = ''; render(); document.getElementById('search-box')?.focus(); break;
+    case 'focus-search': document.getElementById('search-box')?.focus(); break;
+
+    case 'set-theme':
+      state.settings.theme = btn.dataset.theme;
+      saveState();
+      applyTheme();
+      render();   // refresh the active segment
+      break;
 
     case 'open-indirect': ui.indirectOpen = true; pushNav(); render(); break;
     case 'close-indirect': goBack(); break;
@@ -1191,6 +1255,17 @@ document.addEventListener('click', e => {
       a.download = `tally-export-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(a.href);
+      break;
+    }
+
+    case 'backup-data': {
+      const blob = new Blob([exportJSON()], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `tally-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showToast('Backup saved');
       break;
     }
 
@@ -1339,6 +1414,25 @@ document.addEventListener('change', e => {
       e.target.value = '';   // allow re-importing the same file
     });
   }
+  if (e.target.id === 'restore-file') {
+    const file = e.target.files[0];
+    if (!file) return;
+    const proceed = state.people.length === 0
+      || confirm('Restore this backup? It replaces everyone, every entry, your interest rules and settings on this device. This cannot be undone.');
+    if (!proceed) { e.target.value = ''; return; }
+    file.text().then(text => {
+      try {
+        importJSON(text);
+        ui.selectMode = false; ui.selected = new Set(); ui.confirmDelete = false;
+        ui.memberSelect = false; ui.selectedMembers = new Set(); ui.confirmRemoveMembers = false;
+        history.replaceState(navState(), '');
+        render();
+        runNotificationCheck();
+        showToast('Backup restored');
+      } catch (err) { alert('Restore failed: ' + err.message); }
+      e.target.value = '';   // allow re-restoring the same file
+    });
+  }
   if (e.target.id === 'notif-master') {
     const ns = notifSettings(state);
     ns.enabled = e.target.checked;
@@ -1385,6 +1479,19 @@ document.addEventListener('input', e => {
   if (qa && e.target.type === 'number') {
     qa.classList.toggle('active', e.target.value.trim() !== '');
   }
+});
+
+/* Quick-entry rows aren't a <form> (two submit verbs, +lent / −paid), so
+   Enter is wired by hand: it fires the default "+ lent" action, matching the
+   spreadsheet-row feel. Shift+Enter records a repayment instead. */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const input = e.target.closest('.quick-add input');
+  if (!input) return;
+  const row = input.closest('.quick-add');
+  const sign = e.shiftKey ? '-1' : '1';
+  const btn = row.querySelector(`[data-action="quick-add"][data-sign="${sign}"]`);
+  if (btn) { e.preventDefault(); btn.click(); }
 });
 
 document.getElementById('tabs').addEventListener('click', e => {
@@ -1456,6 +1563,15 @@ setInterval(render, 60_000);
 
 loadState();
 saveState();            // ensure the IDB mirror exists even before the first edit
+applyTheme();           // reflect saved/system theme (the inline head script set first paint)
+
+/* When following the device, repaint if the OS flips light/dark mid-session. */
+if (window.matchMedia) {
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (((state.settings && state.settings.theme) || 'system') === 'system') applyTheme();
+  });
+}
+
 history.replaceState(navState(), '');   // anchor root so back-navigation has a floor
 render();
 runNotificationCheck();
