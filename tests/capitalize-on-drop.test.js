@@ -21,7 +21,7 @@ const RULE = [{
   type: 'simple', rate: 1, periodUnit: 'day', capPeriods: null, groupId: null,
 }];
 
-function freshState(resetInterestOnDrop) {
+function freshState() {
   // principal 1057 lent 10 real-days ago, so interest has been accruing to now
   const lentAt = new Date(Date.now() - 10 * DAY).toISOString();
   return {
@@ -29,13 +29,13 @@ function freshState(resetInterestOnDrop) {
     groups: [],
     transactions: [{ id: 't1', personId: 'a', groupId: null, amount: 1057, note: '', date: lentAt, isInterest: false }],
     interestRules: RULE,
-    settings: { baseCurrency: 'INR', resetInterestOnDrop, tzHistory: [] },
+    settings: { baseCurrency: 'INR', tzHistory: [] },
   };
 }
 const personA = () => ctx.getPerson('a');
 
-test('repayment below the rule capitalizes interest into the principal (reset on)', () => {
-  setState(freshState(true));
+test('repayment below the rule capitalizes interest into the principal', () => {
+  setState(freshState());
   const totalBefore = ctx.totalOf(personA());
   const interestBefore = ctx.accruedInterest(personA());
   assert.ok(interestBefore > 0.005, 'interest should have accrued before the repayment');
@@ -51,20 +51,24 @@ test('repayment below the rule capitalizes interest into the principal (reset on
   assert.ok(Math.abs(ctx.totalOf(personA()) - (totalBefore - 111)) < 0.01);
 });
 
-test('repayment below the rule keeps interest as interest when reset is off', () => {
-  setState(freshState(false));
-  const totalBefore = ctx.totalOf(personA());
+test('after capitalizing on a drop, fresh interest accrues on the larger principal', () => {
+  setState(freshState());
+  const capitalized = ctx.capitalizeOnDrop('a', -111);
+  ctx.addTransaction({ personId: 'a', amount: -111 }); // 1057 -> 946, below 1000
+  const principalBelow = ctx.principalOf('a');         // 1057 + capitalized - 111
+  assert.strictEqual(round2(ctx.accruedInterest(personA())), 0, 'no interest while below the rule');
 
-  assert.strictEqual(ctx.capitalizeOnDrop('a', -111), 0, 'no capitalization when the setting is off');
-  ctx.addTransaction({ personId: 'a', amount: -111 });
-
-  // interest is retained (not wiped, not capitalized), so the total still only drops by 111
-  assert.ok(ctx.accruedInterest(personA()) > 0.005, 'accrued interest is preserved, not wiped');
-  assert.strictEqual(ctx.principalOf('a'), 946);
-  assert.ok(Math.abs(ctx.totalOf(personA()) - (totalBefore - 111)) < 0.01);
+  // climb back over the condition; the rolled-in interest is part of the principal now
+  ctx.addTransaction({ personId: 'a', amount: 200 });  // -> 1146-ish, above 1000 again
+  const principalAbove = ctx.principalOf('a');
+  assert.ok(Math.abs(principalAbove - (principalBelow + 200)) < 0.01,
+    'principal carries the previously-capitalized interest');
+  // and fresh interest starts accruing again on that larger principal
+  // (anchor was moved on capitalize, so this is genuinely new interest)
+  assert.ok(principalAbove > 1146 - 0.5, 'principal includes the rolled-in interest, not just the raw 1146');
 });
 
 test('repayment that stays above the rule does not capitalize', () => {
-  setState(freshState(true));
+  setState(freshState());
   assert.strictEqual(ctx.capitalizeOnDrop('a', -10), 0, 'balance stays above 1000, no drop');
 });

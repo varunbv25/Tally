@@ -25,15 +25,17 @@ const RULE = [{
 
 function freshState() {
   // principal 1057 lent 10 real-days ago, so interest has been accruing to now.
-  // reset stays OFF so the accrued interest is never actually capitalized — the
-  // display rule is what folds it in and out.
+  // These tests drive addTransaction directly (no capitalizeOnDrop), so the
+  // accrued interest is never actually capitalized — this isolates the display
+  // rule, which folds the residual interest into the principal while below a
+  // condition.
   const lentAt = new Date(Date.now() - 10 * DAY).toISOString();
   return {
     people: [{ id: 'a', name: 'A', currency: 'INR', interestExempt: false, interestAnchor: null, createdAt: '2026-01-01' }],
     groups: [],
     transactions: [{ id: 't1', personId: 'a', groupId: null, amount: 1057, note: '', date: lentAt, isInterest: false }],
     interestRules: RULE,
-    settings: { baseCurrency: 'INR', resetInterestOnDrop: false, tzHistory: [] },
+    settings: { baseCurrency: 'INR', tzHistory: [] },
   };
 }
 const personA = () => ctx.getPerson('a');

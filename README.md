@@ -51,9 +51,11 @@ interest per `month`, capped at `N` periods (optional).*
 Interest never accrues on money *you* owe (negative or zero balances earn
 nothing), people can be marked "interest exempt", rules are evaluated
 top-down with first match winning, and capitalizing or settling moves the
-accrual anchor so past time is never billed twice. An optional setting
-resets accrued interest the moment a balance falls below the rule's
-condition.
+accrual anchor so past time is never billed twice. Accrued interest only
+shows as its own column while the balance still meets a rule's condition;
+once a repayment drops it below, the interest is rolled into the principal
+and the column goes blank — so the next time the balance crosses a
+condition, fresh interest accrues on that larger principal.
 
 ### Indirect payments
 When someone who owes you (the **lender**) is themselves owed by a third
