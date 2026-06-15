@@ -202,7 +202,9 @@ test('projectSchedule excludes currently-due and already-fired items', () => {
 });
 
 test('projectSchedule finds interest-driven crossings', () => {
-  /* 1000 at 1%/day simple -> interest hits 100 (milestone) at ~10 days */
+  /* 1000 at 1%/day simple -> interest hits 100 (milestone) after 10 charges.
+     The debt is dated at noon UTC (NOW) and the first charge lands at the
+     next IST midnight, so the 10th charge falls ~9.5 days out. */
   const st = makeState({
     people: [person('a')], transactions: [txn('a', 1000, 0)], interestRules: DAILY_1PCT,
     notifications: { recurringNudge: { enabled: false }, agingDebt: { enabled: false },
@@ -210,7 +212,7 @@ test('projectSchedule finds interest-driven crossings', () => {
   });
   const m = ctx.projectSchedule(st, freshLog(), NOW).filter(e => e.key === 'milestone:a');
   assert.strictEqual(m.length, 1);
-  assert.ok(Math.abs(m[0].fireAt - (NOW + 10 * DAY)) <= 6 * 3600 * 1000 + 1);
+  assert.ok(Math.abs(m[0].fireAt - (NOW + 9.5 * DAY)) <= 6 * 3600 * 1000 + 1);
 });
 
 test('projectSchedule repeats the nudge at its cadence across the horizon', () => {

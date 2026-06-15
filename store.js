@@ -221,7 +221,8 @@ function firstMatchingInterestRule(balance, personId) {
 /*
   Interest is charged in DISCRETE STEPS, not continuously:
     - A rule's clock starts the moment the balance meets its condition.
-    - The first FULL period's interest lands one day later, all at once.
+    - The first FULL period's interest lands at the start of the next
+      calendar day (IST midnight, UTC+5:30), all at once.
     - One more full period's interest is added every period after that.
     - Compound rules charge on principal + accrued; simple rules charge
       on principal only.
@@ -238,7 +239,16 @@ function firstMatchingInterestRule(balance, personId) {
     6. If settings.resetInterestOnDrop is on, accrued (uncapitalized)
        interest is wiped the moment the balance stops matching any rule.
 */
-const INTEREST_GRACE_MS = PERIOD_MS.day; // first charge lands 1 day after the condition is met
+/* The first charge lands at the start of the next calendar day in Indian
+   Standard Time (IST, UTC+5:30) — "each day starts at 12am" — regardless
+   of the device's timezone, not a flat 24h after the condition is met.
+   IST observes no DST, so a fixed offset is exact. */
+const IST_OFFSET_MS = (5 * 60 + 30) * 60_000; // UTC+5:30
+function startOfNextDay(ts) {
+  const ist = new Date(ts + IST_OFFSET_MS);            // UTC fields now read as IST wall-clock
+  const nextMidnight = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() + 1);
+  return nextMidnight - IST_OFFSET_MS;                 // back to a real UTC instant
+}
 
 function accruedInterestDetail(person, now = Date.now()) {
   const out = { total: 0, byRule: {} };
@@ -265,7 +275,7 @@ function accruedInterestDetail(person, now = Date.now()) {
       stretch = null;
       if (state.settings.resetInterestOnDrop) { out.total = 0; out.byRule = {}; }
     } else if (!stretch || stretch.rule.id !== rule.id) {
-      stretch = { rule, accrued: 0, nextTick: eventTime + INTEREST_GRACE_MS };
+      stretch = { rule, accrued: 0, nextTick: startOfNextDay(eventTime) };
     }
 
     if (!stretch) continue;
