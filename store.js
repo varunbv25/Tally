@@ -222,7 +222,7 @@ function firstMatchingInterestRule(balance, personId) {
   Interest is charged in DISCRETE STEPS, not continuously:
     - A rule's clock starts the moment the balance meets its condition.
     - The first FULL period's interest lands at the start of the next
-      calendar day (local midnight), all at once.
+      calendar day (IST midnight, UTC+5:30), all at once.
     - One more full period's interest is added every period after that.
     - Compound rules charge on principal + accrued; simple rules charge
       on principal only.
@@ -239,13 +239,15 @@ function firstMatchingInterestRule(balance, personId) {
     6. If settings.resetInterestOnDrop is on, accrued (uncapitalized)
        interest is wiped the moment the balance stops matching any rule.
 */
-/* The first charge lands at the start of the next calendar day in the
-   device's local time ("each day starts at 12am"), not a flat 24h after
-   the condition is met. */
+/* The first charge lands at the start of the next calendar day in Indian
+   Standard Time (IST, UTC+5:30) — "each day starts at 12am" — regardless
+   of the device's timezone, not a flat 24h after the condition is met.
+   IST observes no DST, so a fixed offset is exact. */
+const IST_OFFSET_MS = (5 * 60 + 30) * 60_000; // UTC+5:30
 function startOfNextDay(ts) {
-  const d = new Date(ts);
-  d.setHours(24, 0, 0, 0); // rolls over to 00:00 local on the following day
-  return d.getTime();
+  const ist = new Date(ts + IST_OFFSET_MS);            // UTC fields now read as IST wall-clock
+  const nextMidnight = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() + 1);
+  return nextMidnight - IST_OFFSET_MS;                 // back to a real UTC instant
 }
 
 function accruedInterestDetail(person, now = Date.now()) {
