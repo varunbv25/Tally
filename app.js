@@ -303,10 +303,21 @@ function renderLedger() {
       ${query ? `<button type="button" class="people-search-clear" data-action="clear-search" aria-label="Clear search">×</button>` : ''}
     </form>
     ${showAdd ? `
-      <button type="submit" form="person-search" class="add-suggestion">
-        <span class="add-suggestion-plus" aria-hidden="true">+</span>
-        <span>Add “<b>${esc(query)}</b>” as a new person</span>
-      </button>` : ''}
+      <div class="add-person-quick">
+        <div class="add-person-quick-head">
+          <span class="add-suggestion-plus" aria-hidden="true">+</span>
+          <span>Add “<b>${esc(query)}</b>” as a new person</span>
+        </div>
+        <div class="quick-add">
+          <div class="quick-add-main">
+            <input type="number" step="any" min="0" placeholder="amount" id="qa-new">
+            <button class="btn small plus" data-action="add-person-entry" data-sign="1" title="They borrowed / you lent">+ lent</button>
+            <button class="btn small minus" data-action="add-person-entry" data-sign="-1" title="They paid you back">− paid</button>
+          </div>
+          <input class="qa-reason" placeholder="reason" id="qr-new" maxlength="80">
+        </div>
+        <span class="add-person-quick-hint">Leave the amount blank to just add the name.</span>
+      </div>` : ''}
 
     ${people.length ? `
     <table class="ledger-table">
@@ -1186,6 +1197,26 @@ document.addEventListener('click', e => {
     case 'rename-group': ui.renamingGroup = true; render(); document.querySelector('[data-form="rename-group"] input')?.focus(); break;
     case 'cancel-rename': ui.renamingGroup = false; render(); break;
 
+    case 'add-person-entry': {
+      const name = ui.search.trim();
+      if (!name) { document.getElementById('search-box')?.focus(); return; }
+      if (state.people.some(p => p.name.toLowerCase() === name.toLowerCase())) return;
+      const person = addPerson(name, state.settings.baseCurrency);
+      const amt = parseFloat(document.getElementById('qa-new')?.value);
+      // Amount is optional: with one, record the opening entry; without, just add the name.
+      if (Number.isFinite(amt) && amt > 0) {
+        const note = document.getElementById('qr-new')?.value.trim() || '';
+        const signed = amt * Number(sign);
+        capitalizeOnDrop(person.id, signed);
+        addTransaction({ personId: person.id, amount: signed, note });
+        maybeCelebrate(person.id, 0);
+      }
+      ui.search = '';
+      commit();
+      document.getElementById('search-box')?.focus();
+      break;
+    }
+
     case 'quick-add': {
       const input = document.getElementById(`qa-${id}`);
       const amt = parseFloat(input?.value);
@@ -1505,7 +1536,7 @@ document.addEventListener('keydown', e => {
   if (!input) return;
   const row = input.closest('.quick-add');
   const sign = e.shiftKey ? '-1' : '1';
-  const btn = row.querySelector(`[data-action="quick-add"][data-sign="${sign}"]`);
+  const btn = row.querySelector(`.btn[data-sign="${sign}"]`);
   if (btn) { e.preventDefault(); btn.click(); }
 });
 
