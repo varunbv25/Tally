@@ -269,8 +269,8 @@ function renderLedger() {
     const groups = groupsOf(p.id).map(g => `<span class="chip">${esc(g.name)}</span>`).join('');
     const exempt = p.interestExempt ? '<span class="chip exempt">no interest</span>' : '';
 
-    return `<tr class="row">
-      <td class="col-person"><button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button> ${exempt} ${shareIconBtn('share-person', p.id, `Share ${p.name}'s balance`)}</td>
+    return `<tr class="row" data-person-id="${p.id}">
+      <td class="col-person"><button class="person-name" data-action="open-person" data-id="${p.id}" title="Tap to open · long-press to delete">${esc(p.name)}</button> ${exempt} ${shareIconBtn('share-person', p.id, `Share ${p.name}'s balance`)}</td>
       <td class="col-groups">${groups}</td>
       <td class="num" data-label="Principal"><span class="money ${moneyClass(principal)}">${fmtMoney(principal, p.currency)}</span></td>
       <td class="num" data-label="Interest"><span class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</span></td>
@@ -293,7 +293,7 @@ function renderLedger() {
       <h2 class="section-title">The Ledger</h2>
       <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
     </div>
-    <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− paid</em>, just like a spreadsheet row.</p>
+    <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− paid</em>, just like a spreadsheet row. Long-press a name to remove someone.</p>
 
     <form id="person-search" data-form="person-search" class="people-search" role="search">
       <span class="people-search-icon" aria-hidden="true">
@@ -1577,10 +1577,23 @@ function lpClear() {
   lpStart = null;
 }
 
+/* Long-pressing a name on the main ledger removes that person outright. */
+function confirmDeletePerson(id) {
+  const p = getPerson(id);
+  if (!p) return;
+  if (confirm(`Delete ${p.name} and ALL their transactions? This cannot be undone.`)) {
+    deletePerson(id);
+    commit();
+  }
+}
+
 document.addEventListener('pointerdown', e => {
   const histRow = e.target.closest('.history-table tr[data-txn-id]');
   const memRow = histRow ? null : e.target.closest('.ledger-table tr[data-member-id]');
-  const row = histRow || memRow;
+  // Main-ledger person names long-press to delete (group rows carry data-member-id).
+  const nameEl = (histRow || memRow) ? null : e.target.closest('.ledger-table tr[data-person-id] .person-name');
+  const personRow = nameEl ? nameEl.closest('tr') : null;
+  const row = histRow || memRow || personRow;
   if (!row) return;
   lpFired = false;
   lpStart = { x: e.clientX, y: e.clientY };
@@ -1592,7 +1605,8 @@ document.addEventListener('pointerdown', e => {
     lpFired = true;
     if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
     if (histRow) enterSelectMode(histRow.dataset.txnId);
-    else enterMemberSelectMode(memRow.dataset.memberId);
+    else if (memRow) enterMemberSelectMode(memRow.dataset.memberId);
+    else confirmDeletePerson(personRow.dataset.personId);
   }, 500);
 });
 document.addEventListener('pointermove', e => {

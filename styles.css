@@ -601,7 +601,8 @@ button { font-family: var(--body); cursor: pointer; }
 
 /* long-press to start selecting: row tints while held */
 .history-table tr[data-txn-id],
-.ledger-table tr[data-member-id] { transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
+.ledger-table tr[data-member-id],
+.ledger-table tr[data-person-id] { transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
 .history-table tr.lp-pressing,
 .ledger-table tr.lp-pressing { background: var(--row-tint) !important; }
 
