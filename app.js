@@ -277,10 +277,12 @@ function renderLedger() {
       <td class="num" data-label="Total"><span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span></td>
       <td class="col-quick">
         <div class="quick-add">
-          <input type="number" step="any" min="0" placeholder="amount" id="qa-${p.id}">
+          <div class="quick-add-main">
+            <input type="number" step="any" min="0" placeholder="amount" id="qa-${p.id}">
+            <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" title="They borrowed / you lent">+ lent</button>
+            <button class="btn small minus" data-action="quick-add" data-id="${p.id}" data-sign="-1" title="They paid you back">− paid</button>
+          </div>
           <input class="qa-reason" placeholder="reason" id="qr-${p.id}" maxlength="80">
-          <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" title="They borrowed / you lent">+ lent</button>
-          <button class="btn small minus" data-action="quick-add" data-id="${p.id}" data-sign="-1" title="They paid you back">− paid</button>
         </div>
       </td>
     </tr>`;
@@ -293,7 +295,7 @@ function renderLedger() {
     </div>
     <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− paid</em>, just like a spreadsheet row.</p>
 
-    <form data-form="person-search" class="people-search" role="search">
+    <form id="person-search" data-form="person-search" class="people-search" role="search">
       <span class="people-search-icon" aria-hidden="true">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
       </span>
@@ -419,10 +421,12 @@ function renderGroupDetail() {
       <td class="num" data-label="Total owed"><span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span></td>
       <td class="col-quick">
         <div class="quick-add">
-          <input type="number" step="any" min="0" placeholder="amount" id="qa-${p.id}">
+          <div class="quick-add-main">
+            <input type="number" step="any" min="0" placeholder="amount" id="qa-${p.id}">
+            <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" data-group="${g.id}">+ lent</button>
+            <button class="btn small minus" data-action="quick-add" data-id="${p.id}" data-sign="-1" data-group="${g.id}">− paid</button>
+          </div>
           <input class="qa-reason" placeholder="reason" id="qr-${p.id}" maxlength="80">
-          <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" data-group="${g.id}">+ lent</button>
-          <button class="btn small minus" data-action="quick-add" data-id="${p.id}" data-sign="-1" data-group="${g.id}">− paid</button>
         </div>
       </td>
     </tr>`;
