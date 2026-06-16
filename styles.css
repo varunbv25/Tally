@@ -362,23 +362,39 @@ button { font-family: var(--body); cursor: pointer; }
 
 .chip.exempt { color: var(--blue); border-color: var(--blue); }
 
-.quick-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.quick-add input { width: 90px; }
-.quick-add .qa-reason { width: 110px; }
+/* amount + buttons sit on one row, the reason field drops onto its own line below */
+.quick-add { display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 200px; }
+.quick-add-main { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.quick-add input[type="number"] { width: 90px; }
+.quick-add .qa-reason { width: 100%; }
 
-/* quick entry stays quiet until used, so balances are the visual subject.
-   inputs read as faint affordances; the +lent/−paid buttons sit in a muted
-   ghost state and only light up once an amount is typed (.active toggled in JS). */
-.quick-add input {
+/* the amount is a defined box so it reads as a real field; the +lent/−paid
+   buttons sit in a muted ghost state and only light up once an amount is typed
+   (.active toggled in JS). */
+.quick-add input[type="number"] {
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+.quick-add input[type="number"]:hover { border-color: var(--ink-soft); }
+.quick-add input[type="number"]:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* the reason stays a quiet underline — a light affordance, not a heavy box */
+.quick-add .qa-reason {
   background: transparent;
   border-color: transparent;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
-  padding: 8px 4px;
+  padding: 6px 4px;
   transition: border-color var(--duration-fast), background var(--duration-fast);
 }
-.quick-add input:hover { border-bottom-color: var(--line-strong); }
-.quick-add input:focus {
+.quick-add .qa-reason:hover { border-bottom-color: var(--line-strong); }
+.quick-add .qa-reason:focus {
   background: var(--card);
   border-color: var(--green);
   border-radius: var(--radius-sm);
@@ -647,6 +663,7 @@ button { font-family: var(--body); cursor: pointer; }
 .detail-head {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: var(--sp-3); flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
 }
 .detail-head .section-title { margin-bottom: var(--sp-1); }
 .share-group-btn, .head-action { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
