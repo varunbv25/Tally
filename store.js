@@ -145,7 +145,7 @@ function addIndirectPayment({ lenderId, receiverId, amount, note = '', date = nu
 
   const linkId = uid();
   const when = date || new Date().toISOString();
-  if (!date) capitalizeOnDrop(lenderId, -amt);   // routing drops the lender's balance
+  capitalizeOnDrop(lenderId, -amt, new Date(when).getTime());   // routing drops the lender's balance
   const lenderTxn = addTransaction({ personId: lenderId, amount: -amt, note, date: when });
   const receiverTxn = addTransaction({ personId: receiverId, amount: amt, note, date: when });
   lenderTxn.indirect = receiverTxn.indirect = true;
@@ -378,16 +378,22 @@ function balanceDisplay(person, now = Date.now()) {
 }
 
 /* Capitalize accrued interest into the ledger as a real transaction,
-   then move the anchor so history is not re-charged. */
-function capitalizeInterest(personId) {
+   then move the anchor so history is not re-charged. `asOf` is the instant
+   to capitalize at: the accrued total is taken as of that moment, and both
+   the capitalization transaction and the new anchor are dated there. It
+   defaults to now, but a dated/backdated repayment passes the entry's own
+   date so interest is frozen at the date the balance actually dropped — not
+   at today, which would over-capitalize everything accrued since. */
+function capitalizeInterest(personId, asOf = Date.now()) {
   const person = getPerson(personId);
-  const accrued = accruedInterest(person);
+  const accrued = accruedInterest(person, asOf);
   if (accrued < 0.005) return 0;
+  const at = new Date(asOf).toISOString();
   addTransaction({
     personId, amount: round2(accrued),
-    note: 'Interest capitalized', isInterest: true,
+    note: 'Interest capitalized', isInterest: true, date: at,
   });
-  person.interestAnchor = new Date().toISOString();
+  person.interestAnchor = at;
   return accrued;
 }
 
@@ -398,14 +404,16 @@ function capitalizeInterest(personId) {
    interest resets to zero. Because the interest is now genuinely part of the
    principal, when the balance next crosses a rule's condition the fresh
    interest accrues on this larger principal. Pass the SIGNED amount about to be
-   recorded and call BEFORE recording it. Returns the amount capitalized
-   (0 if nothing happened). */
-function capitalizeOnDrop(personId, amount) {
+   recorded and call BEFORE recording it. `asOf` is the date the entry will
+   carry (defaults to now); it is forwarded to capitalizeInterest so a dated
+   repayment freezes the accrued interest at its own date instead of today.
+   Returns the amount capitalized (0 if nothing happened). */
+function capitalizeOnDrop(personId, amount, asOf = Date.now()) {
   const before = principalOf(personId);
   const after = before + Number(amount);
   const wasMatching = before > 0.005 && firstMatchingInterestRule(before, personId);
   const nowMatching = after > 0.005 && firstMatchingInterestRule(after, personId);
-  if (wasMatching && !nowMatching) return capitalizeInterest(personId);
+  if (wasMatching && !nowMatching) return capitalizeInterest(personId, asOf);
   return 0;
 }
 
