@@ -72,3 +72,40 @@ test('repayment that stays above the rule does not capitalize', () => {
   setState(freshState());
   assert.strictEqual(ctx.capitalizeOnDrop('a', -10), 0, 'balance stays above 1000, no drop');
 });
+
+test('a dated drop capitalizes at the entry date, not today, and leaves nothing stranded', () => {
+  // 1500 lent 10 days ago; a repayment is recorded dated 5 days ago. Interest
+  // must be frozen at the 5-day-ago value (not the full 10 days), and the
+  // accrued total must not re-surface when the balance later climbs back over.
+  const lentAt = Date.now() - 10 * DAY;
+  const dropAt = Date.now() - 5 * DAY;
+  setState({
+    people: [{ id: 'a', name: 'A', currency: 'INR', interestExempt: false, interestAnchor: null, createdAt: '2026-01-01' }],
+    groups: [],
+    transactions: [{ id: 't1', personId: 'a', amount: 1500, note: '', date: new Date(lentAt).toISOString(), isInterest: false }],
+    interestRules: RULE,
+    settings: { baseCurrency: 'INR', tzHistory: [] },
+  });
+
+  const accruedToNow = ctx.accruedInterest(personA());        // ~10 daily charges
+  const accruedAtDrop = ctx.accruedInterest(personA(), dropAt); // ~5 daily charges
+  assert.ok(accruedAtDrop > 0.005 && accruedAtDrop < accruedToNow - 0.005,
+    'as-of-drop interest is real but less than as-of-now');
+
+  const capitalized = ctx.capitalizeOnDrop('a', -700, dropAt); // 1500 -> 800, below 1000
+  assert.ok(Math.abs(capitalized - accruedAtDrop) < 0.01,
+    'capitalizes the interest accrued up to the drop date, not today');
+  ctx.addTransaction({ personId: 'a', amount: -700, date: new Date(dropAt).toISOString() });
+
+  // the capitalization landed as a transaction dated at the drop, not now
+  const capTxn = ctx.personTxns('a').find(t => t.isInterest);
+  assert.strictEqual(capTxn.date, new Date(dropAt).toISOString(), 'capitalization is dated at the drop');
+  assert.strictEqual(round2(ctx.accruedInterest(personA())), 0, 'nothing accrues while below the rule');
+
+  // climb back over: the rolled-in interest is now principal, so it does NOT
+  // re-appear as a separate interest jump the instant the balance crosses.
+  ctx.addTransaction({ personId: 'a', amount: 400 }); // 800 -> 1200, above again
+  const d = ctx.balanceDisplay(personA());
+  assert.strictEqual(d.crossing, true, 'a rule matches again above 1000');
+  assert.strictEqual(round2(d.interest), 0, 'no stranded interest re-surfaces on crossing; only future midnights charge');
+});

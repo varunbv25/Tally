@@ -1452,13 +1452,18 @@ document.addEventListener('submit', e => {
       const dateStr = fd.get('date');
       const pid = form.dataset.person;
       const before = totalOf(getPerson(pid));
-      if (!dateStr) capitalizeOnDrop(pid, amt * Number(fd.get('sign')));  // only for entries dated now
+      const signed = amt * Number(fd.get('sign'));
+      // Capitalize before recording, dating it to the entry itself so a
+      // dated/backdated repayment freezes interest at its own date rather
+      // than leaving it stranded to re-surface when the balance next crosses.
+      const when = dateStr ? new Date(dateStr + 'T12:00:00') : new Date();
+      capitalizeOnDrop(pid, signed, when.getTime());
       addTransaction({
         personId: pid,
         groupId: fd.get('groupId') || null,
-        amount: amt * Number(fd.get('sign')),
+        amount: signed,
         note: fd.get('note') || '',
-        date: dateStr ? new Date(dateStr + 'T12:00:00').toISOString() : null,
+        date: dateStr ? when.toISOString() : null,
       });
       commit();
       maybeCelebrate(pid, before);
