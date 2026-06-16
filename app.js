@@ -1658,6 +1658,8 @@ function lpClear() {
 }
 
 document.addEventListener('pointerdown', e => {
+  // Never hijack a press that starts inside a text field — let people type/select freely.
+  if (e.target.closest('input, textarea, select')) return;
   const histRow = e.target.closest('.history-table tr[data-txn-id]');
   const memRow = histRow ? null : e.target.closest('.ledger-table tr[data-member-id]');
   // Main-ledger person cells long-press to start a delete selection (group rows carry data-member-id).
