@@ -282,7 +282,8 @@ button { font-family: var(--body); cursor: pointer; }
   position: relative; display: flex; align-items: center;
   margin-bottom: var(--sp-5);
 }
-.people-search:has(~ .add-suggestion) { margin-bottom: var(--sp-3); }
+.people-search:has(~ .add-suggestion),
+.people-search:has(~ .add-person-quick) { margin-bottom: var(--sp-3); }
 
 .people-search-icon {
   position: absolute; left: 13px; display: inline-flex;
@@ -320,6 +321,24 @@ button { font-family: var(--body); cursor: pointer; }
   border-radius: 50%; background: var(--green); color: var(--btn-ink);
   font-size: 16px; line-height: 1; font-weight: 600;
 }
+
+/* Inline new-person panel: name (from the search box) plus amount + reason,
+   so a person and their opening balance are recorded in one step. */
+.add-person-quick {
+  display: flex; flex-direction: column; gap: 10px;
+  width: 100%; margin-bottom: var(--sp-5);
+  padding: 12px 14px;
+  background: var(--green-tint);
+  border: 1px dashed var(--green); border-radius: var(--radius);
+}
+.add-person-quick-head {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--green-deep); font-size: var(--fs-base);
+}
+.add-person-quick-head b { font-weight: 700; }
+.add-person-quick .quick-add { min-width: 0; }
+.add-person-quick .quick-add input[type="number"] { flex: 0 0 110px; }
+.add-person-quick-hint { color: var(--ink-soft); font-size: var(--fs-sm); }
 
 /* ---------- ledger table ---------- */
 
@@ -582,7 +601,8 @@ button { font-family: var(--body); cursor: pointer; }
 
 /* long-press to start selecting: row tints while held */
 .history-table tr[data-txn-id],
-.ledger-table tr[data-member-id] { transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
+.ledger-table tr[data-member-id],
+.ledger-table tr[data-person-id] { transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
 .history-table tr.lp-pressing,
 .ledger-table tr.lp-pressing { background: var(--row-tint) !important; }
 

@@ -20,6 +20,9 @@ const ui = {
   memberSelect: false,      // group-member multi-select for removal
   selectedMembers: new Set(), // selected member ids
   confirmRemoveMembers: false, // remove-members confirmation overlay open
+  personSelect: false,      // ledger person multi-select for deletion
+  selectedPeople: new Set(), // selected person ids
+  confirmDeletePeople: false, // delete-people confirmation overlay open
 };
 
 /* ---------- helpers ---------- */
@@ -91,7 +94,7 @@ if (window.matchMedia) {
 let navDepth = 0;
 
 function navState() {
-  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, shareGroupId: ui.shareGroupId, selectMode: ui.selectMode, memberSelect: ui.memberSelect };
+  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, shareGroupId: ui.shareGroupId, selectMode: ui.selectMode, memberSelect: ui.memberSelect, personSelect: ui.personSelect };
 }
 
 function pushNav() {
@@ -110,6 +113,8 @@ function applyNav(s) {
   if (!ui.selectMode) { ui.selected = new Set(); ui.confirmDelete = false; }
   ui.memberSelect = !!(s && s.memberSelect);
   if (!ui.memberSelect) { ui.selectedMembers = new Set(); ui.confirmRemoveMembers = false; }
+  ui.personSelect = !!(s && s.personSelect);
+  if (!ui.personSelect) { ui.selectedPeople = new Set(); ui.confirmDeletePeople = false; }
 }
 
 function goBack() { history.back(); }
@@ -268,9 +273,12 @@ function renderLedger() {
     const { principal, interest, total } = balanceDisplay(p);
     const groups = groupsOf(p.id).map(g => `<span class="chip">${esc(g.name)}</span>`).join('');
     const exempt = p.interestExempt ? '<span class="chip exempt">no interest</span>' : '';
+    const isSel = ui.selectedPeople.has(p.id);
+    const selCls = ui.personSelect ? (isSel ? ' selected' : '') : '';
+    const check = ui.personSelect ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
 
-    return `<tr class="row">
-      <td class="col-person"><button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button> ${exempt} ${shareIconBtn('share-person', p.id, `Share ${p.name}'s balance`)}</td>
+    return `<tr class="row${selCls}" data-person-id="${p.id}">
+      <td class="col-person">${check}<button class="person-name" data-action="open-person" data-id="${p.id}" title="Tap to open · long-press to select &amp; delete">${esc(p.name)}</button> ${exempt} ${shareIconBtn('share-person', p.id, `Share ${p.name}'s balance`)}</td>
       <td class="col-groups">${groups}</td>
       <td class="num" data-label="Principal"><span class="money ${moneyClass(principal)}">${fmtMoney(principal, p.currency)}</span></td>
       <td class="num" data-label="Interest"><span class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</span></td>
@@ -288,12 +296,37 @@ function renderLedger() {
     </tr>`;
   }).join('');
 
+  const selCount = ui.selectedPeople.size;
+  const selectBar = ui.personSelect ? `
+    <div class="select-bar">
+      <button class="select-cancel" data-action="exit-person-select" aria-label="Cancel selection">✕</button>
+      <span class="select-count">${selCount} selected</span>
+      <button class="select-bin" data-action="open-delete-people-confirm" ${selCount ? '' : 'disabled'} aria-label="Delete selected people">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/>
+          <path d="M10 11v6M14 11v6"/>
+        </svg>
+      </button>
+    </div>` : '';
+
+  const confirmOverlay = ui.confirmDeletePeople ? `
+    <div class="confirm-overlay" id="person-confirm-overlay">
+      <div class="confirm-card">
+        <h3>Delete ${selCount} ${selCount === 1 ? 'person' : 'people'}?</h3>
+        <p class="muted">They'll be removed along with ALL of their transactions, and taken out of every group. This cannot be undone.</p>
+        <button class="btn danger block" data-action="confirm-delete-people">Delete ${selCount === 1 ? 'person' : 'people'}</button>
+        <button class="btn ghost block" data-action="cancel-delete-people">Cancel</button>
+      </div>
+    </div>` : '';
+
   return `
+    ${selectBar}
+    ${confirmOverlay}
     <div class="detail-head">
       <h2 class="section-title">The Ledger</h2>
       <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
     </div>
-    <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− paid</em>, just like a spreadsheet row.</p>
+    <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− paid</em>, just like a spreadsheet row. Long-press a name to select people, then tap the bin to delete.</p>
 
     <form id="person-search" data-form="person-search" class="people-search" role="search">
       <span class="people-search-icon" aria-hidden="true">
@@ -303,10 +336,21 @@ function renderLedger() {
       ${query ? `<button type="button" class="people-search-clear" data-action="clear-search" aria-label="Clear search">×</button>` : ''}
     </form>
     ${showAdd ? `
-      <button type="submit" form="person-search" class="add-suggestion">
-        <span class="add-suggestion-plus" aria-hidden="true">+</span>
-        <span>Add “<b>${esc(query)}</b>” as a new person</span>
-      </button>` : ''}
+      <div class="add-person-quick">
+        <div class="add-person-quick-head">
+          <span class="add-suggestion-plus" aria-hidden="true">+</span>
+          <span>Add “<b>${esc(query)}</b>” as a new person</span>
+        </div>
+        <div class="quick-add">
+          <div class="quick-add-main">
+            <input type="number" step="any" min="0" placeholder="amount" id="qa-new">
+            <button class="btn small plus" data-action="add-person-entry" data-sign="1" title="They borrowed / you lent">+ lent</button>
+            <button class="btn small minus" data-action="add-person-entry" data-sign="-1" title="They paid you back">− paid</button>
+          </div>
+          <input class="qa-reason" placeholder="reason" id="qr-new" maxlength="80">
+        </div>
+        <span class="add-person-quick-hint">Leave the amount blank to just add the name.</span>
+      </div>` : ''}
 
     ${people.length ? `
     <table class="ledger-table">
@@ -807,6 +851,36 @@ function performRemoveMembers() {
   showToast(`${n} ${n === 1 ? 'person' : 'people'} removed from ${g.name}`);
 }
 
+/* ---------- ledger person multi-select deletion ---------- */
+function enterPersonSelectMode(personId) {
+  if (ui.personSelect) {
+    togglePersonSelected(personId);
+    return;
+  }
+  ui.personSelect = true;
+  ui.selectedPeople = new Set([personId]);
+  pushNav();
+  render();
+}
+
+function togglePersonSelected(personId) {
+  if (ui.selectedPeople.has(personId)) ui.selectedPeople.delete(personId);
+  else ui.selectedPeople.add(personId);
+  render();
+}
+
+function performDeletePeople() {
+  const ids = new Set(ui.selectedPeople);
+  if (!ids.size) return;
+  ids.forEach(id => deletePerson(id));   // also drops their transactions and group memberships
+  saveState();
+  runNotificationCheck();
+  const n = ids.size;
+  ui.confirmDeletePeople = false;
+  goBack();   // pops the person-select entry; popstate clears selection and re-renders
+  showToast(`${n} ${n === 1 ? 'person' : 'people'} deleted`);
+}
+
 /* ---------- indirect payments view ---------- */
 
 function balancePhrase(n, currency) {
@@ -1138,6 +1212,12 @@ document.addEventListener('click', e => {
     if (memRow) { toggleMemberSelected(memRow.dataset.memberId); return; }
   }
 
+  // in ledger person-selection mode, tapping a person row toggles its selection
+  if (ui.personSelect && !e.target.closest('.select-bar, .confirm-overlay')) {
+    const personRow = e.target.closest('.ledger-table tr[data-person-id]');
+    if (personRow) { togglePersonSelected(personRow.dataset.personId); return; }
+  }
+
   const btn = e.target.closest('[data-action]');
 
   if (e.target.id === 'modal-overlay') { goBack(); return; }
@@ -1145,6 +1225,7 @@ document.addEventListener('click', e => {
   if (e.target.id === 'share-overlay') { goBack(); return; }
   if (e.target.id === 'confirm-overlay') { ui.confirmDelete = false; render(); return; }
   if (e.target.id === 'member-confirm-overlay') { ui.confirmRemoveMembers = false; render(); return; }
+  if (e.target.id === 'person-confirm-overlay') { ui.confirmDeletePeople = false; render(); return; }
   if (!btn) return;
 
   const { action, id, sign, group } = btn.dataset;
@@ -1186,6 +1267,26 @@ document.addEventListener('click', e => {
     case 'rename-group': ui.renamingGroup = true; render(); document.querySelector('[data-form="rename-group"] input')?.focus(); break;
     case 'cancel-rename': ui.renamingGroup = false; render(); break;
 
+    case 'add-person-entry': {
+      const name = ui.search.trim();
+      if (!name) { document.getElementById('search-box')?.focus(); return; }
+      if (state.people.some(p => p.name.toLowerCase() === name.toLowerCase())) return;
+      const person = addPerson(name, state.settings.baseCurrency);
+      const amt = parseFloat(document.getElementById('qa-new')?.value);
+      // Amount is optional: with one, record the opening entry; without, just add the name.
+      if (Number.isFinite(amt) && amt > 0) {
+        const note = document.getElementById('qr-new')?.value.trim() || '';
+        const signed = amt * Number(sign);
+        capitalizeOnDrop(person.id, signed);
+        addTransaction({ personId: person.id, amount: signed, note });
+        maybeCelebrate(person.id, 0);
+      }
+      ui.search = '';
+      commit();
+      document.getElementById('search-box')?.focus();
+      break;
+    }
+
     case 'quick-add': {
       const input = document.getElementById(`qa-${id}`);
       const amt = parseFloat(input?.value);
@@ -1203,6 +1304,11 @@ document.addEventListener('click', e => {
     case 'cancel-remove-members': ui.confirmRemoveMembers = false; render(); break;
     case 'confirm-remove-members': performRemoveMembers(); break;
     case 'exit-member-select': goBack(); break;
+
+    case 'open-delete-people-confirm': if (ui.selectedPeople.size) { ui.confirmDeletePeople = true; render(); } break;
+    case 'cancel-delete-people': ui.confirmDeletePeople = false; render(); break;
+    case 'confirm-delete-people': performDeletePeople(); break;
+    case 'exit-person-select': goBack(); break;
 
     case 'delete-group':
       if (confirm('Delete this group? People and their balances are kept.')) {
@@ -1422,6 +1528,7 @@ document.addEventListener('change', e => {
         importCSV(text);
         ui.selectMode = false; ui.selected = new Set(); ui.confirmDelete = false;
         ui.memberSelect = false; ui.selectedMembers = new Set(); ui.confirmRemoveMembers = false;
+        ui.personSelect = false; ui.selectedPeople = new Set(); ui.confirmDeletePeople = false;
         history.replaceState(navState(), '');
         render();
         showToast('Spreadsheet imported');
@@ -1440,6 +1547,7 @@ document.addEventListener('change', e => {
         importJSON(text);
         ui.selectMode = false; ui.selected = new Set(); ui.confirmDelete = false;
         ui.memberSelect = false; ui.selectedMembers = new Set(); ui.confirmRemoveMembers = false;
+        ui.personSelect = false; ui.selectedPeople = new Set(); ui.confirmDeletePeople = false;
         history.replaceState(navState(), '');
         render();
         runNotificationCheck();
@@ -1505,7 +1613,7 @@ document.addEventListener('keydown', e => {
   if (!input) return;
   const row = input.closest('.quick-add');
   const sign = e.shiftKey ? '-1' : '1';
-  const btn = row.querySelector(`[data-action="quick-add"][data-sign="${sign}"]`);
+  const btn = row.querySelector(`.btn[data-sign="${sign}"]`);
   if (btn) { e.preventDefault(); btn.click(); }
 });
 
@@ -1514,7 +1622,7 @@ document.getElementById('tabs').addEventListener('click', e => {
   if (!tab) return;
   const newTab = tab.dataset.tab;
   // already here with nothing drilled in → no-op
-  if (newTab === ui.tab && !ui.openGroupId && !ui.modalPersonId && !ui.indirectOpen && !ui.shareGroupId && !ui.selectMode && !ui.memberSelect) return;
+  if (newTab === ui.tab && !ui.openGroupId && !ui.modalPersonId && !ui.indirectOpen && !ui.shareGroupId && !ui.selectMode && !ui.memberSelect && !ui.personSelect) return;
 
   // Ledger is home/floor: returning to it unwinds the back stack so the next
   // OS-back exits the app instead of replaying earlier tabs. popstate then
@@ -1533,6 +1641,9 @@ document.getElementById('tabs').addEventListener('click', e => {
   ui.memberSelect = false;
   ui.selectedMembers = new Set();
   ui.confirmRemoveMembers = false;
+  ui.personSelect = false;
+  ui.selectedPeople = new Set();
+  ui.confirmDeletePeople = false;
   pushNav();
   render();
 });
@@ -1549,7 +1660,10 @@ function lpClear() {
 document.addEventListener('pointerdown', e => {
   const histRow = e.target.closest('.history-table tr[data-txn-id]');
   const memRow = histRow ? null : e.target.closest('.ledger-table tr[data-member-id]');
-  const row = histRow || memRow;
+  // Main-ledger person names long-press to start a delete selection (group rows carry data-member-id).
+  const nameEl = (histRow || memRow) ? null : e.target.closest('.ledger-table tr[data-person-id] .person-name');
+  const personRow = nameEl ? nameEl.closest('tr') : null;
+  const row = histRow || memRow || personRow;
   if (!row) return;
   lpFired = false;
   lpStart = { x: e.clientX, y: e.clientY };
@@ -1561,7 +1675,8 @@ document.addEventListener('pointerdown', e => {
     lpFired = true;
     if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
     if (histRow) enterSelectMode(histRow.dataset.txnId);
-    else enterMemberSelectMode(memRow.dataset.memberId);
+    else if (memRow) enterMemberSelectMode(memRow.dataset.memberId);
+    else enterPersonSelectMode(personRow.dataset.personId);
   }, 500);
 });
 document.addEventListener('pointermove', e => {
