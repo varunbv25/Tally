@@ -1658,11 +1658,13 @@ function lpClear() {
 }
 
 document.addEventListener('pointerdown', e => {
+  // Never hijack a press that starts inside a text field — let people type/select freely.
+  if (e.target.closest('input, textarea, select')) return;
   const histRow = e.target.closest('.history-table tr[data-txn-id]');
   const memRow = histRow ? null : e.target.closest('.ledger-table tr[data-member-id]');
-  // Main-ledger person names long-press to start a delete selection (group rows carry data-member-id).
-  const nameEl = (histRow || memRow) ? null : e.target.closest('.ledger-table tr[data-person-id] .person-name');
-  const personRow = nameEl ? nameEl.closest('tr') : null;
+  // Main-ledger person cells long-press to start a delete selection (group rows carry data-member-id).
+  const personCell = (histRow || memRow) ? null : e.target.closest('.ledger-table tr[data-person-id] .col-person');
+  const personRow = personCell ? personCell.closest('tr') : null;
   const row = histRow || memRow || personRow;
   if (!row) return;
   lpFired = false;
