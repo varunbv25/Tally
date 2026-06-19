@@ -678,9 +678,11 @@ function renderHistory() {
   const q = ui.historySearch.trim().toLowerCase();
 
   const entries = state.transactions
-    .map(t => ({ t, p: getPerson(t.personId), g: t.groupId ? getGroup(t.groupId) : null }))
+    .map((t, i) => ({ t, i, p: getPerson(t.personId), g: t.groupId ? getGroup(t.groupId) : null }))
     .filter(x => (x.p || x.t.self) && !x.t.archived)           // skip orphaned + hidden entries (keep your own split shares)
-    .sort((a, b) => new Date(b.t.date) - new Date(a.t.date));  // newest first
+    // newest first; date-picked entries all land at noon, so ties fall back to
+    // insertion order (later-added = more recent) instead of drifting to the bottom
+    .sort((a, b) => (new Date(b.t.date) - new Date(a.t.date)) || (b.i - a.i));
 
   const matches = entries.filter(({ t, p, g }) => {
     if (!q) return true;
