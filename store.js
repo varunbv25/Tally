@@ -185,6 +185,42 @@ function deleteIndirectPayment(linkId) {
   state.transactions = state.transactions.filter(t => t.linkId !== linkId);
 }
 
+/* ---------- split expense ----------
+   Divide one expense equally across several people. Each selected person is
+   charged an equal share (positive => they owe you), recorded as its own
+   transaction so it can be settled or deleted independently. The legs share a
+   splitId so the whole split can be recognised as one event in history. */
+
+/* Equal shares of `amount` across `n` people, in whole cents, with the leftover
+   cents handed out one at a time so the shares sum to the total exactly
+   (100 ÷ 3 → 33.34, 33.33, 33.33). The first `extra` people pay one cent more. */
+function splitShares(amount, n) {
+  const cents = Math.round(Number(amount) * 100);
+  const base = Math.floor(cents / n);
+  const extra = cents - base * n;
+  const out = [];
+  for (let i = 0; i < n; i++) out.push((base + (i < extra ? 1 : 0)) / 100);
+  return out;
+}
+
+function addSplitExpense({ personIds, amount, groupId = null, note = '', date = null }) {
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt <= 0) throw new Error('Enter an amount greater than zero.');
+  const ids = [...new Set(personIds)].filter(id => getPerson(id));
+  if (ids.length < 1) throw new Error('Pick at least one person to split with.');
+
+  const splitId = uid();
+  const when = date || new Date().toISOString();
+  const shares = splitShares(amt, ids.length);
+  const txns = ids.map((id, i) => {
+    const t = addTransaction({ personId: id, groupId, amount: shares[i], note, date: when });
+    t.split = true;
+    t.splitId = splitId;
+    return t;
+  });
+  return { splitId, txns, shares };
+}
+
 function personTxns(personId) {
   return state.transactions
     .filter(t => t.personId === personId)
@@ -522,7 +558,7 @@ function exportCSV() {
     const g = t.groupId ? getGroup(t.groupId) : null;
     rows.push([
       t.date, p.name, p.currency,
-      t.isInterest ? 'Interest' : (t.indirect ? 'Indirect' : (t.amount >= 0 ? 'Lent' : 'Paid')),
+      t.isInterest ? 'Interest' : (t.indirect ? 'Indirect' : (t.split ? 'Split' : (t.amount >= 0 ? 'Lent' : 'Paid'))),
       t.amount, g ? g.name : '', t.note || '',
       memberOf(p), p.interestExempt ? 'yes' : '', t.archived ? 'yes' : '',
     ]);

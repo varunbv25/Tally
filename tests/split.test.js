@@ -1,0 +1,92 @@
+/* Split-expense tests. store.js is a classic script using a module global
+   `state`; load it into a vm context and drive it like the other suites. */
+const { test } = require('node:test');
+const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+const ctx = vm.createContext({});
+vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'store.js'), 'utf8'), ctx, { filename: 'store.js' });
+function setState(s) { ctx.__state = s; vm.runInContext('state = __state', ctx); }
+
+const round2 = n => Math.round(n * 100) / 100;
+const sum = arr => round2(arr.reduce((s, n) => s + n, 0));
+/* store.js arrays live in the vm realm, so their prototype differs from this
+   file's and deepStrictEqual would reject structurally-identical values.
+   Compare by serialization instead (same approach as backup.test.js). */
+const sameArr = (a, b) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b));
+
+function freshState() {
+  return {
+    people: [
+      { id: 'a', name: 'A', currency: 'INR', interestExempt: false, interestAnchor: null, createdAt: '2026-01-01' },
+      { id: 'b', name: 'B', currency: 'INR', interestExempt: false, interestAnchor: null, createdAt: '2026-01-01' },
+      { id: 'c', name: 'C', currency: 'USD', interestExempt: false, interestAnchor: null, createdAt: '2026-01-01' },
+    ],
+    groups: [{ id: 'g1', name: 'Trip', memberIds: ['a', 'b', 'c'] }],
+    transactions: [],
+    interestRules: [],
+    settings: { baseCurrency: 'INR', tzHistory: [] },
+  };
+}
+
+test('splitShares divides evenly when it divides cleanly', () => {
+  setState(freshState());
+  sameArr(ctx.splitShares(100, 4), [25, 25, 25, 25]);
+});
+
+test('splitShares distributes leftover cents so shares sum to the total', () => {
+  setState(freshState());
+  const s = ctx.splitShares(100, 3);
+  sameArr(s, [33.34, 33.33, 33.33]);
+  assert.strictEqual(sum(s), 100);
+});
+
+test('splitShares handles tiny amounts without losing or inventing cents', () => {
+  setState(freshState());
+  const s = ctx.splitShares(0.10, 3);
+  sameArr(s, [0.04, 0.03, 0.03]);
+  assert.strictEqual(sum(s), 0.10);
+});
+
+test('addSplitExpense records one positive entry per person, summing to the total', () => {
+  setState(freshState());
+  const { txns, splitId } = ctx.addSplitExpense({ personIds: ['a', 'b', 'c'], amount: 100, note: 'Dinner' });
+  assert.strictEqual(txns.length, 3);
+  assert.ok(txns.every(t => t.amount > 0), 'every share is positive (they owe you)');
+  assert.ok(txns.every(t => t.split === true && t.splitId === splitId), 'all legs share the splitId');
+  assert.ok(txns.every(t => t.note === 'Dinner'), 'note carried onto each leg');
+  assert.strictEqual(sum(txns.map(t => t.amount)), 100);
+  // balances reflect each person's share
+  assert.strictEqual(round2(ctx.principalOf('a')), 33.34);
+  assert.strictEqual(round2(ctx.principalOf('b')), 33.33);
+  assert.strictEqual(round2(ctx.principalOf('c')), 33.33);
+});
+
+test('addSplitExpense tags the group and date when given', () => {
+  setState(freshState());
+  const when = '2026-03-01T12:00:00.000Z';
+  const { txns } = ctx.addSplitExpense({ personIds: ['a', 'b'], amount: 50, groupId: 'g1', date: when });
+  assert.ok(txns.every(t => t.groupId === 'g1'), 'each leg is tagged to the group');
+  assert.ok(txns.every(t => t.date === when), 'each leg carries the supplied date');
+});
+
+test('addSplitExpense ignores duplicate and unknown people ids', () => {
+  setState(freshState());
+  const { txns } = ctx.addSplitExpense({ personIds: ['a', 'a', 'nope'], amount: 30 });
+  assert.strictEqual(txns.length, 1);
+  assert.strictEqual(round2(ctx.principalOf('a')), 30);
+});
+
+test('addSplitExpense rejects a non-positive amount', () => {
+  setState(freshState());
+  assert.throws(() => ctx.addSplitExpense({ personIds: ['a', 'b'], amount: 0 }), /greater than zero/);
+  assert.throws(() => ctx.addSplitExpense({ personIds: ['a', 'b'], amount: -5 }), /greater than zero/);
+});
+
+test('addSplitExpense rejects an empty selection', () => {
+  setState(freshState());
+  assert.throws(() => ctx.addSplitExpense({ personIds: [], amount: 50 }), /at least one person/);
+  assert.throws(() => ctx.addSplitExpense({ personIds: ['ghost'], amount: 50 }), /at least one person/);
+});

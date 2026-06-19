@@ -9,6 +9,7 @@ const ui = {
   openGroupId: null,
   modalPersonId: null,
   indirectOpen: false,      // indirect-payment popup open
+  splitOpen: false,         // split-expense popup open
   shareGroupId: null,       // group share-picker popup open (which group)
   search: '',
   historySearch: '',
@@ -94,7 +95,7 @@ if (window.matchMedia) {
 let navDepth = 0;
 
 function navState() {
-  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, shareGroupId: ui.shareGroupId, selectMode: ui.selectMode, memberSelect: ui.memberSelect, personSelect: ui.personSelect };
+  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, splitOpen: ui.splitOpen, shareGroupId: ui.shareGroupId, selectMode: ui.selectMode, memberSelect: ui.memberSelect, personSelect: ui.personSelect };
 }
 
 function pushNav() {
@@ -107,6 +108,7 @@ function applyNav(s) {
   ui.openGroupId = (s && s.openGroupId) || null;
   ui.modalPersonId = (s && s.modalPersonId) || null;
   ui.indirectOpen = !!(s && s.indirectOpen);
+  ui.splitOpen = !!(s && s.splitOpen);
   ui.shareGroupId = (s && s.shareGroupId) || null;
   ui.renamingGroup = false;
   ui.selectMode = !!(s && s.selectMode);
@@ -324,7 +326,10 @@ function renderLedger() {
     ${confirmOverlay}
     <div class="detail-head">
       <h2 class="section-title">The Ledger</h2>
-      <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
+      <div class="head-actions">
+        <button class="btn ghost head-action" data-action="open-split" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>÷ Split expense</button>
+        <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
+      </div>
     </div>
     <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− paid</em>, just like a spreadsheet row. Long-press a name to select people, then tap the bin to delete.</p>
 
@@ -680,6 +685,7 @@ function renderHistory() {
     if (!q) return true;
     const kind = t.isInterest ? 'interest'
       : t.indirect ? 'indirect transfer'
+      : t.split ? 'split expense lent'
       : (t.amount >= 0 ? 'lent borrowed' : 'paid back');
     const counterparty = t.indirect && t.counterpartyId ? (getPerson(t.counterpartyId)?.name || '') : '';
     const hay = [
@@ -703,7 +709,9 @@ function renderHistory() {
       ? '<span class="interest-tag">INTEREST</span>'
       : t.indirect
         ? '<span class="hist-tag indirect">indirect</span>'
-        : (t.amount >= 0 ? '<span class="hist-tag lent">lent</span>' : '<span class="hist-tag paid">paid</span>');
+        : t.split
+          ? '<span class="hist-tag split">split</span>'
+          : (t.amount >= 0 ? '<span class="hist-tag lent">lent</span>' : '<span class="hist-tag paid">paid</span>');
     const isSel = ui.selected.has(t.id);
     const selCls = ui.selectMode ? (isSel ? ' selected' : '') : '';
     const check = ui.selectMode ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
@@ -971,6 +979,91 @@ function renderIndirectModal() {
   </div>`;
 }
 
+/* ---------- split expense ----------
+   A popup over a blurred page: tick who shares the cost, enter the total, and
+   a live preview shows each person's exact share before it's recorded. Each
+   share becomes its own "they owe you" entry (tagged SPLIT). */
+
+/* ids of people whose split checkbox is currently ticked, in checklist order
+   so the remainder cents land on the same people the preview shows. */
+function splitSelectedIds() {
+  return [...document.querySelectorAll('[data-split-member]')]
+    .filter(cb => cb.checked)
+    .map(cb => cb.dataset.splitMember);
+}
+
+function splitPreviewHTML(ids, amt) {
+  if (!ids.length || !Number.isFinite(amt) || amt <= 0) {
+    return '<span class="muted">Tick who is splitting and enter an amount to see each share.</span>';
+  }
+  const people = ids.map(getPerson).filter(Boolean);
+  const shares = splitShares(amt, people.length);
+  const multiCurrency = new Set(people.map(p => p.currency)).size > 1;
+  const head = `<div class="split-head">${people.length} ${people.length === 1 ? 'person' : 'people'}${
+    multiCurrency ? '' : ` · ${fmtMoney(amt, people[0].currency)} total`}</div>`;
+  const lines = people.map((p, i) => `
+    <div class="xfer-line">
+      <span><b>${esc(p.name)}</b> owes you</span>
+      <span class="xfer-delta pos">+${fmtMoney(shares[i], p.currency)}</span>
+    </div>`).join('');
+  const mismatch = multiCurrency
+    ? `<div class="xfer-warn">Selected people use different currencies — each share is applied in that person's own currency, nothing is converted.</div>`
+    : '';
+  return head + lines + mismatch;
+}
+
+function updateSplitPreview() {
+  const form = document.querySelector('[data-form="add-split"]');
+  const node = document.getElementById('split-preview');
+  if (!form || !node) return;
+  node.innerHTML = splitPreviewHTML(splitSelectedIds(), parseFloat(form.amount.value));
+}
+
+function renderSplitModal() {
+  const root = document.getElementById('split-root');
+  if (!ui.splitOpen) { root.innerHTML = ''; return; }
+
+  const rows = state.people.map(p =>
+    `<label class="share-pick-row">
+      <input type="checkbox" data-split-member="${p.id}">
+      <span class="share-pick-name">${esc(p.name)}</span>
+      <span class="chip">${p.currency}</span>
+    </label>`).join('');
+
+  const groupOptions = ['<option value="">No group (personal)</option>']
+    .concat(state.groups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`)).join('');
+
+  root.innerHTML = `
+  <div class="modal-overlay" id="split-overlay">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Split an expense</h2>
+        <button class="modal-close" data-action="close-split">✕</button>
+      </div>
+      <p class="section-sub" style="margin-bottom:18px">Pick who shares the cost and enter the total. Tally divides it equally and records each person's share as money they owe you.</p>
+
+      <form data-form="add-split">
+        <h3 class="subhead">Split between</h3>
+        <div class="share-pick-list">${rows}</div>
+
+        <div class="form-row">
+          <input name="amount" type="number" step="any" min="0.01" placeholder="total amount" required>
+          <input name="date" type="date" value="${new Date().toISOString().slice(0, 10)}">
+          <select name="groupId">${groupOptions}</select>
+        </div>
+        <div class="form-row">
+          <input name="note" placeholder="reason (optional)" maxlength="80" style="flex:1">
+        </div>
+
+        <h3 class="subhead" style="margin-top:6px">Each person's share</h3>
+        <div id="split-preview" class="xfer-preview"></div>
+
+        <div class="form-row tight"><button class="btn" type="submit">Record split</button></div>
+      </form>
+    </div>
+  </div>`;
+}
+
 /* ---------- group share picker ----------
    A popup over a blurred page: every member with a checkbox (ticked by
    default) and a live preview of exactly what will be shared. Unticked
@@ -1113,7 +1206,7 @@ function renderModal() {
     return `<tr>
       <td>${fmtDate(t.date)}</td>
       <td>${g ? `<span class="chip">${esc(g.name)}</span>` : '<span class="muted">personal</span>'}</td>
-      <td>${esc(t.note) || '<span class="muted">—</span>'} ${t.isInterest ? '<span class="interest-tag">INTEREST</span>' : ''}${t.indirect ? `<span class="hist-tag indirect">indirect${t.counterpartyId ? ' · ' + esc(getPerson(t.counterpartyId)?.name || '') : ''}</span>` : ''}</td>
+      <td>${esc(t.note) || '<span class="muted">—</span>'} ${t.isInterest ? '<span class="interest-tag">INTEREST</span>' : ''}${t.indirect ? `<span class="hist-tag indirect">indirect${t.counterpartyId ? ' · ' + esc(getPerson(t.counterpartyId)?.name || '') : ''}</span>` : ''}${t.split ? '<span class="hist-tag split">split</span>' : ''}</td>
       <td class="num"><span class="money ${moneyClass(t.amount)}">${fmtMoney(t.amount, p.currency)}</span></td>
       <td><button class="del-x" data-action="delete-txn" data-id="${t.id}" title="Delete entry">✕</button></td>
     </tr>`;
@@ -1190,8 +1283,10 @@ function render() {
   }
   renderModal();
   renderIndirectModal();
+  renderSplitModal();
   renderShareModal();
   if (ui.indirectOpen) updateTransferPreview();
+  if (ui.splitOpen) updateSplitPreview();
   if (ui.shareGroupId) updateSharePreview();
 }
 
@@ -1222,6 +1317,7 @@ document.addEventListener('click', e => {
 
   if (e.target.id === 'modal-overlay') { goBack(); return; }
   if (e.target.id === 'indirect-overlay') { goBack(); return; }
+  if (e.target.id === 'split-overlay') { goBack(); return; }
   if (e.target.id === 'share-overlay') { goBack(); return; }
   if (e.target.id === 'confirm-overlay') { ui.confirmDelete = false; render(); return; }
   if (e.target.id === 'member-confirm-overlay') { ui.confirmRemoveMembers = false; render(); return; }
@@ -1260,6 +1356,8 @@ document.addEventListener('click', e => {
 
     case 'open-indirect': ui.indirectOpen = true; pushNav(); render(); break;
     case 'close-indirect': goBack(); break;
+    case 'open-split': ui.splitOpen = true; pushNav(); render(); break;
+    case 'close-split': goBack(); break;
     case 'new-group': ui.creatingGroup = true; render(); document.querySelector('[data-form="add-group"] input')?.focus(); break;
     case 'cancel-create-group': ui.creatingGroup = false; render(); break;
     case 'open-group': ui.openGroupId = id; ui.tab = 'groups'; ui.renamingGroup = false; pushNav(); render(); break;
@@ -1491,6 +1589,28 @@ document.addEventListener('submit', e => {
       break;
     }
 
+    case 'add-split': {
+      const ids = splitSelectedIds();
+      const dateStr = fd.get('date');
+      try {
+        const { txns } = addSplitExpense({
+          personIds: ids,
+          amount: parseFloat(fd.get('amount')),
+          groupId: fd.get('groupId') || null,
+          note: fd.get('note') || '',
+          date: dateStr ? new Date(dateStr + 'T12:00:00').toISOString() : null,
+        });
+        ui.splitOpen = false;
+        goBack();          // pop the nav entry the popup pushed, then commit re-renders
+        commit();
+        const n = txns.length;
+        showToast(`Split recorded across ${n} ${n === 1 ? 'person' : 'people'}`);
+      } catch (err) {
+        alert(err.message);
+      }
+      break;
+    }
+
     case 'add-interest-rule': {
       const cap = parseFloat(fd.get('capPeriods'));
       state.interestRules.push({
@@ -1580,6 +1700,7 @@ document.addEventListener('change', e => {
     commit();
   }
   if (e.target.closest('[data-form="add-transfer"]')) updateTransferPreview();
+  if (e.target.closest('[data-form="add-split"]')) updateSplitPreview();
   if (e.target.matches('[data-share-member]')) updateSharePreview();
 });
 
@@ -1601,6 +1722,7 @@ document.addEventListener('input', e => {
     box.setSelectionRange(pos, pos);
   }
   if (e.target.closest('[data-form="add-transfer"]')) updateTransferPreview();
+  if (e.target.closest('[data-form="add-split"]')) updateSplitPreview();
 
   // ledger quick-entry: arm the +lent / −paid buttons once an amount is typed
   const qa = e.target.closest('.quick-add');
@@ -1627,7 +1749,7 @@ document.getElementById('tabs').addEventListener('click', e => {
   if (!tab) return;
   const newTab = tab.dataset.tab;
   // already here with nothing drilled in → no-op
-  if (newTab === ui.tab && !ui.openGroupId && !ui.modalPersonId && !ui.indirectOpen && !ui.shareGroupId && !ui.selectMode && !ui.memberSelect && !ui.personSelect) return;
+  if (newTab === ui.tab && !ui.openGroupId && !ui.modalPersonId && !ui.indirectOpen && !ui.splitOpen && !ui.shareGroupId && !ui.selectMode && !ui.memberSelect && !ui.personSelect) return;
 
   // Ledger is home/floor: returning to it unwinds the back stack so the next
   // OS-back exits the app instead of replaying earlier tabs. popstate then
@@ -1639,6 +1761,7 @@ document.getElementById('tabs').addEventListener('click', e => {
   ui.modalPersonId = null;
   ui.shareGroupId = null;
   ui.indirectOpen = false;
+  ui.splitOpen = false;
   ui.renamingGroup = false;
   ui.selectMode = false;
   ui.selected = new Set();

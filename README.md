@@ -57,6 +57,16 @@ once a repayment drops it below, the interest is rolled into the principal
 and the column goes blank — so the next time the balance crosses a
 condition, fresh interest accrues on that larger principal.
 
+### Split an expense
+Paid for something shared? From the **Ledger**, hit **÷ Split expense**,
+tick everyone who's in on it, and enter the total (with an optional reason,
+date and group tag). Tally divides it equally and records each person's
+share as money they owe you — one entry per person, tagged **SPLIT** in
+History. Shares are rounded to whole cents with the remainder spread one
+cent at a time, so they always sum back to the exact total. A live preview
+shows precisely what each person will owe before you commit; mixed
+currencies are applied in each person's own currency, never converted.
+
 ### Indirect payments
 When someone who owes you (the **lender**) is themselves owed by a third
 person (the **receiver**), route the debt onto your ledger from the
