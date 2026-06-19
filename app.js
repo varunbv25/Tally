@@ -51,6 +51,17 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+/* Turn a date-picker value into a timestamp. For today we record the real
+   clock time so entries order naturally (newest last); for a backdated day
+   there's no real time to capture, so we use noon — far from the day's edges
+   so the calendar date never drifts across timezones (search keys off the UTC
+   date). Empty input means "now". */
+function entryDate(dateStr) {
+  if (!dateStr) return new Date();
+  const today = new Date().toISOString().slice(0, 10);
+  return dateStr === today ? new Date() : new Date(dateStr + 'T12:00:00');
+}
+
 function commit() { saveState(); render(); runNotificationCheck(); }
 
 /* ---------- theme ----------
@@ -678,24 +689,28 @@ function renderHistory() {
   const q = ui.historySearch.trim().toLowerCase();
 
   const entries = state.transactions
-    .map(t => ({ t, p: getPerson(t.personId), g: t.groupId ? getGroup(t.groupId) : null }))
-    .filter(x => x.p && !x.t.archived)                         // skip orphaned + hidden entries
-    .sort((a, b) => new Date(b.t.date) - new Date(a.t.date));  // newest first
+    .map((t, i) => ({ t, i, p: getPerson(t.personId), g: t.groupId ? getGroup(t.groupId) : null }))
+    .filter(x => (x.p || x.t.self) && !x.t.archived)           // skip orphaned + hidden entries (keep your own split shares)
+    // newest first; date-picked entries all land at noon, so ties fall back to
+    // insertion order (later-added = more recent) instead of drifting to the bottom
+    .sort((a, b) => (new Date(b.t.date) - new Date(a.t.date)) || (b.i - a.i));
 
   const matches = entries.filter(({ t, p, g }) => {
     if (!q) return true;
     const kind = t.isInterest ? 'interest'
       : t.indirect ? 'indirect transfer'
-      : t.split ? 'split expense lent'
+      : t.split ? (t.self ? 'split expense your share' : 'split expense lent')
       : (t.amount >= 0 ? 'lent borrowed' : 'paid back');
     const counterparty = t.indirect && t.counterpartyId ? (getPerson(t.counterpartyId)?.name || '') : '';
+    const name = p ? p.name : 'Me';
+    const cur = p ? p.currency : state.settings.baseCurrency;
     const hay = [
-      p.name,
+      name,
       t.note,
       counterparty,
       g ? g.name : 'personal',
       Math.abs(t.amount),
-      fmtMoney(t.amount, p.currency),
+      fmtMoney(t.amount, cur),
       fmtDate(t.date),
       t.date.slice(0, 10),
       kind,
@@ -716,17 +731,28 @@ function renderHistory() {
     const isSel = ui.selected.has(t.id);
     const selCls = ui.selectMode ? (isSel ? ' selected' : '') : '';
     const check = ui.selectMode ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
+    /* `self` legs (your own share of a split) have no person — they're a record,
+       not a debt — so show "Me", use your base currency, and keep the amount
+       colour-neutral rather than the green/red used for who-owes-whom. */
+    const cur = p ? p.currency : state.settings.baseCurrency;
+    const amtClass = t.self ? 'zero' : moneyClass(t.amount);
+    const personBtn = p
+      ? `<button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>`
+      : `<span class="person-name">Me</span>`;
+    const reason = t.self
+      ? `${esc(t.note) ? esc(t.note) + ' ' : ''}<span class="muted">your share</span>`
+      : `${esc(t.note) || (via ? '' : '<span class="muted">—</span>')} ${via}`;
     return `<tr class="row${selCls}" data-txn-id="${t.id}">
       <td class="col-person">
         ${check}
-        <button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>
-        <span class="money ${moneyClass(t.amount)} hist-amount">${fmtMoney(t.amount, p.currency)}</span>
+        ${personBtn}
+        <span class="money ${amtClass} hist-amount">${fmtMoney(t.amount, cur)}</span>
       </td>
       <td data-label="Date">${fmtDate(t.date)}</td>
       <td data-label="Type">${tag}</td>
       <td data-label="Group">${g ? `<span class="chip">${esc(g.name)}</span>` : '<span class="muted">personal</span>'}</td>
-      <td data-label="Reason">${esc(t.note) || (via ? '' : '<span class="muted">—</span>')} ${via}</td>
-      <td class="num" data-label="Amount"><span class="money ${moneyClass(t.amount)}">${fmtMoney(t.amount, p.currency)}</span></td>
+      <td data-label="Reason">${reason}</td>
+      <td class="num" data-label="Amount"><span class="money ${amtClass}">${fmtMoney(t.amount, cur)}</span></td>
     </tr>`;
   }).join('');
 
@@ -1634,7 +1660,7 @@ document.addEventListener('submit', e => {
       // Capitalize before recording, dating it to the entry itself so a
       // dated/backdated repayment freezes interest at its own date rather
       // than leaving it stranded to re-surface when the balance next crosses.
-      const when = dateStr ? new Date(dateStr + 'T12:00:00') : new Date();
+      const when = entryDate(dateStr);
       capitalizeOnDrop(pid, signed, when.getTime());
       addTransaction({
         personId: pid,
@@ -1657,7 +1683,7 @@ document.addEventListener('submit', e => {
           receiverId,
           amount: parseFloat(fd.get('amount')),
           note: fd.get('note') || '',
-          date: dateStr ? new Date(dateStr + 'T12:00:00').toISOString() : null,
+          date: entryDate(dateStr).toISOString(),
         });
         ui.indirectOpen = false;
         goBack();          // pop the nav entry the popup pushed, then commit re-renders
@@ -1678,7 +1704,7 @@ document.addEventListener('submit', e => {
           amount: parseFloat(fd.get('amount')),
           includeMe: splitIncludesMe(),
           note: fd.get('note') || '',
-          date: dateStr ? new Date(dateStr + 'T12:00:00').toISOString() : null,
+          date: entryDate(dateStr).toISOString(),
         });
         ui.splitOpen = false;
         ui.splitDraft = null;
