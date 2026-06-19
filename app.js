@@ -51,6 +51,17 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+/* Turn a date-picker value into a timestamp. For today we record the real
+   clock time so entries order naturally (newest last); for a backdated day
+   there's no real time to capture, so we use noon — far from the day's edges
+   so the calendar date never drifts across timezones (search keys off the UTC
+   date). Empty input means "now". */
+function entryDate(dateStr) {
+  if (!dateStr) return new Date();
+  const today = new Date().toISOString().slice(0, 10);
+  return dateStr === today ? new Date() : new Date(dateStr + 'T12:00:00');
+}
+
 function commit() { saveState(); render(); runNotificationCheck(); }
 
 /* ---------- theme ----------
@@ -1649,7 +1660,7 @@ document.addEventListener('submit', e => {
       // Capitalize before recording, dating it to the entry itself so a
       // dated/backdated repayment freezes interest at its own date rather
       // than leaving it stranded to re-surface when the balance next crosses.
-      const when = dateStr ? new Date(dateStr + 'T12:00:00') : new Date();
+      const when = entryDate(dateStr);
       capitalizeOnDrop(pid, signed, when.getTime());
       addTransaction({
         personId: pid,
@@ -1672,7 +1683,7 @@ document.addEventListener('submit', e => {
           receiverId,
           amount: parseFloat(fd.get('amount')),
           note: fd.get('note') || '',
-          date: dateStr ? new Date(dateStr + 'T12:00:00').toISOString() : null,
+          date: entryDate(dateStr).toISOString(),
         });
         ui.indirectOpen = false;
         goBack();          // pop the nav entry the popup pushed, then commit re-renders
@@ -1693,7 +1704,7 @@ document.addEventListener('submit', e => {
           amount: parseFloat(fd.get('amount')),
           includeMe: splitIncludesMe(),
           note: fd.get('note') || '',
-          date: dateStr ? new Date(dateStr + 'T12:00:00').toISOString() : null,
+          date: entryDate(dateStr).toISOString(),
         });
         ui.splitOpen = false;
         ui.splitDraft = null;
