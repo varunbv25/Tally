@@ -1048,7 +1048,7 @@ function renderSplitModal() {
 
         <div class="form-row">
           <input name="amount" type="number" step="any" min="0.01" placeholder="total amount" required>
-          <input name="date" type="date" value="${new Date().toISOString().slice(0, 10)}">
+          <input name="date" type="date" value="${new Date().toISOString().slice(0, 10)}" required>
           <select name="groupId">${groupOptions}</select>
         </div>
         <div class="form-row">
