@@ -528,6 +528,13 @@ button { font-family: var(--body); cursor: pointer; }
 .xfer-delta.neg { color: var(--red); }
 .xfer-warn { color: var(--amber); font-size: var(--fs-cap); margin-top: var(--sp-2); }
 
+/* split-expense preview: a header line above the per-person shares */
+.split-head {
+  font-size: var(--fs-cap); color: var(--ink-soft); font-weight: 600;
+  padding-bottom: var(--sp-1); margin-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--line);
+}
+
 .xfer-names { display: block; font-size: var(--fs-base); }
 .xfer-sub { display: block; font-size: var(--fs-cap); margin-top: 2px; }
 .xfer-via { font-style: italic; white-space: nowrap; }
@@ -596,6 +603,7 @@ button { font-family: var(--body); cursor: pointer; }
 .hist-tag.lent { color: var(--green); background: var(--green-tint); }
 .hist-tag.paid { color: var(--ink-soft); background: var(--tag-neutral); }
 .hist-tag.indirect { color: var(--blue); background: rgba(43,91,138,0.10); margin-left: var(--sp-1); }
+.hist-tag.split { color: var(--gold); background: rgba(163,130,58,0.12); margin-left: var(--sp-1); }
 .interest-tag { color: var(--gold); }
 .hist-amount { display: none; }   /* shown only on mobile cards */
 
@@ -688,6 +696,7 @@ button { font-family: var(--body); cursor: pointer; }
 .detail-head .section-title { margin-bottom: var(--sp-1); }
 .share-group-btn, .head-action { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .share-group-btn svg { display: block; }
+.head-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 
 .empty-state {
   text-align: center; padding: 48px var(--sp-5); color: var(--ink-soft);
