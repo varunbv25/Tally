@@ -101,6 +101,30 @@ test('addSplitExpense with includeMe divides by an extra head but records no deb
   assert.strictEqual(round2(ctx.principalOf('b')), 30);
 });
 
+test('addSplitExpense with includeMe records your own share in history without making it a debt', () => {
+  setState(freshState());
+  const { myTxn, splitId } = ctx.addSplitExpense({ personIds: ['a', 'b'], amount: 90, includeMe: true, note: 'Dinner' });
+  // your share is written as a transaction so the whole split shows in History
+  assert.ok(myTxn, 'a self leg is returned');
+  assert.strictEqual(myTxn.self, true, 'it is flagged as your own share');
+  assert.strictEqual(myTxn.split, true);
+  assert.strictEqual(myTxn.splitId, splitId, 'it shares the splitId with the other legs');
+  assert.strictEqual(myTxn.personId, null, 'it belongs to no person, so it never counts as a debt');
+  assert.strictEqual(round2(myTxn.amount), 30);
+  // it lives in state alongside the two real debts (a, b, and you = 3 entries)
+  assert.strictEqual(ctx.__state.transactions.length, 3);
+  // and it changes nobody's balance
+  assert.strictEqual(round2(ctx.principalOf('a')), 30);
+  assert.strictEqual(round2(ctx.principalOf('b')), 30);
+});
+
+test('addSplitExpense without includeMe records no self leg', () => {
+  setState(freshState());
+  const { myTxn } = ctx.addSplitExpense({ personIds: ['a', 'b'], amount: 90 });
+  assert.strictEqual(myTxn, null, 'no self leg when you are not in the split');
+  assert.strictEqual(ctx.__state.transactions.length, 2);
+});
+
 test('addSplitExpense with includeMe lands the leftover cent on you, the payer', () => {
   setState(freshState());
   // 100 across A, B and you → your share 33.34, A and B owe a clean 33.33 each

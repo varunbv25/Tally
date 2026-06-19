@@ -224,7 +224,18 @@ function addSplitExpense({ personIds, amount, groupId = null, note = '', date = 
     t.splitId = splitId;
     return t;
   });
-  return { splitId, txns, shares, myShare: includeMe ? shares[0] : 0 };
+  /* When you're in the split, record your own share too so the whole expense
+     shows in History. This leg carries no personId and is flagged `self`, so it
+     never counts toward anyone's balance — it's a record of what you paid for
+     yourself, not a debt owed to or by you. */
+  let myTxn = null;
+  if (includeMe) {
+    myTxn = addTransaction({ personId: null, groupId, amount: shares[0], note, date: when });
+    myTxn.split = true;
+    myTxn.splitId = splitId;
+    myTxn.self = true;
+  }
+  return { splitId, txns, myTxn, shares, myShare: includeMe ? shares[0] : 0 };
 }
 
 function personTxns(personId) {
@@ -559,7 +570,7 @@ function exportCSV() {
   const rows = [];
   txns.forEach(t => {
     const p = getPerson(t.personId);
-    if (!p) return;
+    if (!p) return;   // skips your own split shares (self legs) — the JSON backup keeps those
     seen.add(p.id);
     const g = t.groupId ? getGroup(t.groupId) : null;
     rows.push([
