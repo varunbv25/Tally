@@ -143,6 +143,10 @@ body {
   -webkit-touch-callout: none;
 }
 
+/* while any popup is open, freeze the page behind it so a scroll gesture
+   stays inside the overlay instead of moving the content underneath */
+body.modal-open { overflow: hidden; }
+
 /* …but real text entry must stay selectable and editable */
 input, textarea, select, [contenteditable="true"] {
   -webkit-user-select: text;
@@ -556,6 +560,24 @@ button { font-family: var(--body); cursor: pointer; }
   padding: var(--sp-6);
 }
 
+/* split picker: header, amount/note fields and the Record button stay put;
+   only the list of people scrolls. */
+.modal-split { display: flex; flex-direction: column; max-height: calc(100vh - 80px); }
+.modal-split .split-intro { margin-bottom: 18px; }
+.modal-split form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.modal-split .split-scroll {
+  flex: 1; min-height: 0; overflow-y: auto;
+  margin-bottom: var(--sp-4); padding-right: 4px;
+}
+.modal-split .split-fixed { flex: none; }
+.modal-split .split-fixed #split-preview { max-height: 28vh; overflow-y: auto; }
+.split-add-row {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: 10px 4px; margin-top: 4px;
+}
+.split-add-row input { flex: 1; }
+.split-add-row .btn { white-space: nowrap; }
+
 .modal-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--sp-2); }
 .modal-head h2 { font-family: var(--display); font-size: var(--fs-display); color: var(--green-deep); }
 
@@ -844,6 +866,7 @@ button { font-family: var(--body); cursor: pointer; }
   .balance-strip { gap: var(--sp-4); }
   .modal-overlay { padding: var(--sp-4) var(--sp-2); }
   .modal { padding: var(--sp-4); }
+  .modal-split { max-height: calc(100vh - 2 * var(--sp-4)); }
   .form-row { row-gap: var(--sp-2); }
   input[type="date"] { width: auto; }
 }

@@ -90,3 +90,24 @@ test('addSplitExpense rejects an empty selection', () => {
   assert.throws(() => ctx.addSplitExpense({ personIds: [], amount: 50 }), /at least one person/);
   assert.throws(() => ctx.addSplitExpense({ personIds: ['ghost'], amount: 50 }), /at least one person/);
 });
+
+test('addSplitExpense with includeMe divides by an extra head but records no debt for you', () => {
+  setState(freshState());
+  // 90 split between A, B and you → 3 ways of 30 each; only A and B owe you
+  const { txns, myShare } = ctx.addSplitExpense({ personIds: ['a', 'b'], amount: 90, includeMe: true });
+  assert.strictEqual(txns.length, 2, 'no transaction is recorded for you');
+  assert.strictEqual(round2(myShare), 30, 'your own share is reported back');
+  assert.strictEqual(round2(ctx.principalOf('a')), 30);
+  assert.strictEqual(round2(ctx.principalOf('b')), 30);
+});
+
+test('addSplitExpense with includeMe lands the leftover cent on you, the payer', () => {
+  setState(freshState());
+  // 100 across A, B and you → your share 33.34, A and B owe a clean 33.33 each
+  const { txns, myShare } = ctx.addSplitExpense({ personIds: ['a', 'b'], amount: 100, includeMe: true });
+  assert.strictEqual(round2(myShare), 33.34, 'you absorb the extra cent');
+  assert.strictEqual(round2(ctx.principalOf('a')), 33.33);
+  assert.strictEqual(round2(ctx.principalOf('b')), 33.33);
+  // everything still reconciles to the total once your share is added back
+  assert.strictEqual(sum(txns.map(t => t.amount).concat(myShare)), 100);
+});
