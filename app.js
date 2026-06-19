@@ -10,6 +10,7 @@ const ui = {
   modalPersonId: null,
   indirectOpen: false,      // indirect-payment popup open
   splitOpen: false,         // split-expense popup open
+  splitDraft: null,         // in-progress split (survives re-render when adding a person)
   shareGroupId: null,       // group share-picker popup open (which group)
   search: '',
   historySearch: '',
@@ -992,73 +993,134 @@ function splitSelectedIds() {
     .map(cb => cb.dataset.splitMember);
 }
 
-function splitPreviewHTML(ids, amt) {
-  if (!ids.length || !Number.isFinite(amt) || amt <= 0) {
+function splitPreviewHTML(ids, amt, includeMe) {
+  const people = ids.map(getPerson).filter(Boolean);
+  if (!people.length || !Number.isFinite(amt) || amt <= 0) {
     return '<span class="muted">Tick who is splitting and enter an amount to see each share.</span>';
   }
-  const people = ids.map(getPerson).filter(Boolean);
-  const shares = splitShares(amt, people.length);
-  const multiCurrency = new Set(people.map(p => p.currency)).size > 1;
-  const head = `<div class="split-head">${people.length} ${people.length === 1 ? 'person' : 'people'}${
-    multiCurrency ? '' : ` · ${fmtMoney(amt, people[0].currency)} total`}</div>`;
+  const baseCur = state.settings.baseCurrency;
+  /* You're the first participant when included, so your share is shares[0]
+     (and any leftover cent lands on you, the payer). */
+  const n = people.length + (includeMe ? 1 : 0);
+  const offset = includeMe ? 1 : 0;
+  const shares = splitShares(amt, n);
+  const currencies = people.map(p => p.currency);
+  if (includeMe) currencies.push(baseCur);
+  const multiCurrency = new Set(currencies).size > 1;
+  const headCur = includeMe ? baseCur : people[0].currency;
+  const head = `<div class="split-head">${n} ${n === 1 ? 'person' : 'people'}${
+    multiCurrency ? '' : ` · ${fmtMoney(amt, headCur)} total`}</div>`;
+  const meLine = includeMe ? `
+    <div class="xfer-line">
+      <span><b>Me</b> · your share</span>
+      <span class="xfer-delta">${fmtMoney(shares[0], baseCur)}</span>
+    </div>` : '';
   const lines = people.map((p, i) => `
     <div class="xfer-line">
       <span><b>${esc(p.name)}</b> owes you</span>
-      <span class="xfer-delta pos">+${fmtMoney(shares[i], p.currency)}</span>
+      <span class="xfer-delta pos">+${fmtMoney(shares[i + offset], p.currency)}</span>
     </div>`).join('');
   const mismatch = multiCurrency
     ? `<div class="xfer-warn">Selected people use different currencies — each share is applied in that person's own currency, nothing is converted.</div>`
     : '';
-  return head + lines + mismatch;
+  return head + meLine + lines + mismatch;
+}
+
+/* whether "Me" is ticked in the split picker */
+function splitIncludesMe() {
+  const me = document.querySelector('[data-split-me]');
+  return !!(me && me.checked);
 }
 
 function updateSplitPreview() {
   const form = document.querySelector('[data-form="add-split"]');
   const node = document.getElementById('split-preview');
   if (!form || !node) return;
-  node.innerHTML = splitPreviewHTML(splitSelectedIds(), parseFloat(form.amount.value));
+  node.innerHTML = splitPreviewHTML(splitSelectedIds(), parseFloat(form.amount.value), splitIncludesMe());
+}
+
+/* The split picker is re-rendered when a person is added mid-flow, which would
+   otherwise wipe the typed amount/note and the current ticks. We snapshot the
+   live form into ui.splitDraft so renderSplitModal can restore it. */
+function freshSplitDraft() {
+  return {
+    selected: new Set(), me: false, amount: '',
+    date: new Date().toISOString().slice(0, 10), note: '', newName: '',
+  };
+}
+
+function syncSplitDraft() {
+  if (!ui.splitDraft) ui.splitDraft = freshSplitDraft();
+  const form = document.querySelector('[data-form="add-split"]');
+  if (form) {
+    ui.splitDraft.amount = form.amount.value;
+    ui.splitDraft.date = form.date.value;
+    ui.splitDraft.note = form.note.value;
+    ui.splitDraft.selected = new Set(splitSelectedIds());
+    ui.splitDraft.me = splitIncludesMe();
+  }
+  const ni = document.getElementById('split-new-name');
+  if (ni) ui.splitDraft.newName = ni.value;
 }
 
 function renderSplitModal() {
   const root = document.getElementById('split-root');
-  if (!ui.splitOpen) { root.innerHTML = ''; return; }
+  if (!ui.splitOpen) { root.innerHTML = ''; ui.splitDraft = null; return; }
+
+  const draft = ui.splitDraft || (ui.splitDraft = freshSplitDraft());
+  const sel = draft.selected;
+
+  /* "Me" — you can be one of the people sharing the cost. You pay your own
+     share, so it only shrinks everyone else's; no debt is recorded for you. */
+  const meRow =
+    `<label class="share-pick-row">
+      <input type="checkbox" data-split-me ${draft.me ? 'checked' : ''}>
+      <span class="share-pick-name">Me</span>
+      <span class="chip">${esc(state.settings.baseCurrency)}</span>
+    </label>`;
 
   const rows = state.people.map(p =>
     `<label class="share-pick-row">
-      <input type="checkbox" data-split-member="${p.id}">
+      <input type="checkbox" data-split-member="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>
       <span class="share-pick-name">${esc(p.name)}</span>
       <span class="chip">${p.currency}</span>
     </label>`).join('');
 
-  const groupOptions = ['<option value="">No group (personal)</option>']
-    .concat(state.groups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`)).join('');
+  /* Add a brand-new person without leaving the split: typing a name and
+     hitting + Add creates them, ticks them, and clears the field to repeat. */
+  const addRow =
+    `<div class="split-add-row">
+      <input type="text" id="split-new-name" placeholder="add a new person…" maxlength="40" value="${esc(draft.newName || '')}">
+      <button type="button" class="btn ghost" data-action="split-add-person">+ Add</button>
+    </div>`;
 
   root.innerHTML = `
   <div class="modal-overlay" id="split-overlay">
-    <div class="modal">
+    <div class="modal modal-split">
       <div class="modal-head">
         <h2>Split an expense</h2>
         <button class="modal-close" data-action="close-split">✕</button>
       </div>
-      <p class="section-sub" style="margin-bottom:18px">Pick who shares the cost and enter the total. Tally divides it equally and records each person's share as money they owe you.</p>
+      <p class="section-sub split-intro">Pick who shares the cost and enter the total. Tally divides it equally and records each person's share as money they owe you.</p>
 
       <form data-form="add-split">
         <h3 class="subhead">Split between</h3>
-        <div class="share-pick-list">${rows}</div>
+        <div class="share-pick-list split-scroll">${meRow}${rows}${addRow}</div>
 
-        <div class="form-row">
-          <input name="amount" type="number" step="any" min="0.01" placeholder="total amount" required>
-          <input name="date" type="date" value="${new Date().toISOString().slice(0, 10)}" required>
-          <select name="groupId">${groupOptions}</select>
+        <div class="split-fixed">
+          <div class="form-row">
+            <input name="amount" type="number" step="any" min="0.01" placeholder="total amount" value="${esc(draft.amount || '')}" required>
+            <input name="date" type="date" value="${esc(draft.date || new Date().toISOString().slice(0, 10))}" required>
+          </div>
+          <div class="form-row">
+            <input name="note" placeholder="reason (optional)" maxlength="80" value="${esc(draft.note || '')}" style="flex:1">
+          </div>
+
+          <h3 class="subhead" style="margin-top:6px">Each person's share</h3>
+          <div id="split-preview" class="xfer-preview"></div>
+
+          <div class="form-row tight"><button class="btn" type="submit">Record split</button></div>
         </div>
-        <div class="form-row">
-          <input name="note" placeholder="reason (optional)" maxlength="80" style="flex:1">
-        </div>
-
-        <h3 class="subhead" style="margin-top:6px">Each person's share</h3>
-        <div id="split-preview" class="xfer-preview"></div>
-
-        <div class="form-row tight"><button class="btn" type="submit">Record split</button></div>
       </form>
     </div>
   </div>`;
@@ -1288,6 +1350,10 @@ function render() {
   if (ui.indirectOpen) updateTransferPreview();
   if (ui.splitOpen) updateSplitPreview();
   if (ui.shareGroupId) updateSharePreview();
+
+  // freeze the page behind any popup so scrolling stays inside the overlay
+  const popupOpen = !!document.querySelector('.modal-overlay, .confirm-overlay');
+  document.body.classList.toggle('modal-open', popupOpen);
 }
 
 /* ---------- event wiring (delegated) ---------- */
@@ -1356,8 +1422,22 @@ document.addEventListener('click', e => {
 
     case 'open-indirect': ui.indirectOpen = true; pushNav(); render(); break;
     case 'close-indirect': goBack(); break;
-    case 'open-split': ui.splitOpen = true; pushNav(); render(); break;
+    case 'open-split': ui.splitOpen = true; ui.splitDraft = freshSplitDraft(); pushNav(); render(); break;
     case 'close-split': goBack(); break;
+    case 'split-add-person': {
+      const input = document.getElementById('split-new-name');
+      const name = ((input && input.value) || '').trim();
+      if (!name) { if (input) input.focus(); break; }
+      syncSplitDraft();                       // keep typed amount/note + ticks
+      const p = addPerson(name);              // base currency by default
+      ui.splitDraft.selected.add(p.id);       // newly added → ticked
+      ui.splitDraft.newName = '';
+      saveState();
+      render();
+      const next = document.getElementById('split-new-name');
+      if (next) next.focus();
+      break;
+    }
     case 'new-group': ui.creatingGroup = true; render(); document.querySelector('[data-form="add-group"] input')?.focus(); break;
     case 'cancel-create-group': ui.creatingGroup = false; render(); break;
     case 'open-group': ui.openGroupId = id; ui.tab = 'groups'; ui.renamingGroup = false; pushNav(); render(); break;
@@ -1596,11 +1676,12 @@ document.addEventListener('submit', e => {
         const { txns } = addSplitExpense({
           personIds: ids,
           amount: parseFloat(fd.get('amount')),
-          groupId: fd.get('groupId') || null,
+          includeMe: splitIncludesMe(),
           note: fd.get('note') || '',
           date: dateStr ? new Date(dateStr + 'T12:00:00').toISOString() : null,
         });
         ui.splitOpen = false;
+        ui.splitDraft = null;
         goBack();          // pop the nav entry the popup pushed, then commit re-renders
         commit();
         const n = txns.length;
@@ -1700,7 +1781,7 @@ document.addEventListener('change', e => {
     commit();
   }
   if (e.target.closest('[data-form="add-transfer"]')) updateTransferPreview();
-  if (e.target.closest('[data-form="add-split"]')) updateSplitPreview();
+  if (e.target.closest('[data-form="add-split"]')) { syncSplitDraft(); updateSplitPreview(); }
   if (e.target.matches('[data-share-member]')) updateSharePreview();
 });
 
@@ -1722,7 +1803,7 @@ document.addEventListener('input', e => {
     box.setSelectionRange(pos, pos);
   }
   if (e.target.closest('[data-form="add-transfer"]')) updateTransferPreview();
-  if (e.target.closest('[data-form="add-split"]')) updateSplitPreview();
+  if (e.target.closest('[data-form="add-split"]')) { syncSplitDraft(); updateSplitPreview(); }
 
   // ledger quick-entry: arm the +lent / −paid buttons once an amount is typed
   const qa = e.target.closest('.quick-add');
@@ -1736,6 +1817,16 @@ document.addEventListener('input', e => {
    spreadsheet-row feel. Shift+Enter records a repayment instead. */
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
+
+  // the add-person field lives inside the split form; Enter should add the
+  // person, not submit the whole split
+  if (e.target.id === 'split-new-name') {
+    e.preventDefault();
+    const addBtn = document.querySelector('[data-action="split-add-person"]');
+    if (addBtn) addBtn.click();
+    return;
+  }
+
   const input = e.target.closest('.quick-add input');
   if (!input) return;
   const row = input.closest('.quick-add');

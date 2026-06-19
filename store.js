@@ -203,7 +203,7 @@ function splitShares(amount, n) {
   return out;
 }
 
-function addSplitExpense({ personIds, amount, groupId = null, note = '', date = null }) {
+function addSplitExpense({ personIds, amount, groupId = null, note = '', date = null, includeMe = false }) {
   const amt = Number(amount);
   if (!Number.isFinite(amt) || amt <= 0) throw new Error('Enter an amount greater than zero.');
   const ids = [...new Set(personIds)].filter(id => getPerson(id));
@@ -211,14 +211,20 @@ function addSplitExpense({ personIds, amount, groupId = null, note = '', date = 
 
   const splitId = uid();
   const when = date || new Date().toISOString();
-  const shares = splitShares(amt, ids.length);
+  /* If you're also splitting, you count toward the divisor but pay your own
+     share — only the others' shares become debts. Your share is the first one,
+     so any leftover cent lands on you (the payer), keeping the others' shares
+     clean. */
+  const n = ids.length + (includeMe ? 1 : 0);
+  const offset = includeMe ? 1 : 0;
+  const shares = splitShares(amt, n);
   const txns = ids.map((id, i) => {
-    const t = addTransaction({ personId: id, groupId, amount: shares[i], note, date: when });
+    const t = addTransaction({ personId: id, groupId, amount: shares[i + offset], note, date: when });
     t.split = true;
     t.splitId = splitId;
     return t;
   });
-  return { splitId, txns, shares };
+  return { splitId, txns, shares, myShare: includeMe ? shares[0] : 0 };
 }
 
 function personTxns(personId) {
