@@ -688,11 +688,32 @@ function notificationsPanel() {
 function renderHistory() {
   const q = ui.historySearch.trim().toLowerCase();
 
-  const entries = state.transactions
+  const realEntries = state.transactions
     .map((t, i) => ({ t, i, p: getPerson(t.personId), g: t.groupId ? getGroup(t.groupId) : null }))
-    .filter(x => (x.p || x.t.self) && !x.t.archived)           // skip orphaned + hidden entries (keep your own split shares)
-    // newest first; date-picked entries all land at noon, so ties fall back to
-    // insertion order (later-added = more recent) instead of drifting to the bottom
+    .filter(x => (x.p || x.t.self) && !x.t.archived);          // skip orphaned + hidden entries (keep your own split shares)
+
+  /* Interest that has accrued day-by-day but hasn't been capitalized yet is
+     shown as virtual, dated rows — so "interest adding up per day" is visible in
+     History without writing anything to the ledger. These carry no real txn id,
+     so they can't be selected or deleted; capitalizing turns them into one real
+     entry. */
+  const virtualEntries = [];
+  state.people.forEach(p => {
+    accruedInterestDetail(p).schedule.forEach((s, k) => {
+      virtualEntries.push({
+        t: {
+          id: `virt-${p.id}-${k}`, personId: p.id, groupId: null,
+          amount: s.amount, note: 'Interest', date: s.date,
+          isInterest: true, virtual: true,
+        },
+        i: -1, p, g: null,
+      });
+    });
+  });
+
+  // newest first; date-picked entries all land at noon, so ties fall back to
+  // insertion order (later-added = more recent) instead of drifting to the bottom
+  const entries = realEntries.concat(virtualEntries)
     .sort((a, b) => (new Date(b.t.date) - new Date(a.t.date)) || (b.i - a.i));
 
   const matches = entries.filter(({ t, p, g }) => {
@@ -719,6 +740,21 @@ function renderHistory() {
   });
 
   const rows = matches.map(({ t, p, g }) => {
+    /* Virtual interest charge — display only, no selection/delete affordances. */
+    if (t.virtual) {
+      const cur = p ? p.currency : state.settings.baseCurrency;
+      return `<tr class="row virtual-interest">
+        <td class="col-person">
+          <button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>
+          <span class="money pos hist-amount">+${fmtMoney(t.amount, cur)}</span>
+        </td>
+        <td data-label="Date">${fmtDate(t.date)}</td>
+        <td data-label="Type"><span class="interest-tag">INTEREST</span></td>
+        <td data-label="Group"><span class="muted">accrued</span></td>
+        <td data-label="Reason"><span class="muted">accrued, not yet capitalized</span></td>
+        <td class="num" data-label="Amount"><span class="money pos">+${fmtMoney(t.amount, cur)}</span></td>
+      </tr>`;
+    }
     const via = t.indirect && t.counterpartyId
       ? `<span class="muted xfer-via">via ${esc(getPerson(t.counterpartyId)?.name || '—')}</span>` : '';
     const tag = t.isInterest
@@ -1317,18 +1353,36 @@ function renderModal() {
   const detail = accruedInterestDetail(p);
   const { principal, interest, total } = balanceDisplay(p);
   const ruleNames = Object.keys(detail.byRule)
-    .map(id => state.interestRules.find(r => r.id === id)?.name).filter(Boolean).join(', ');
+    .map(id => interestRuleName(id)).filter(Boolean).join(', ');
+  const ic = p.interestConfig || defaultPersonInterest();
 
-  const txRows = personTxns(p.id).slice().reverse().map(t => {
-    const g = t.groupId ? getGroup(t.groupId) : null;
-    return `<tr>
-      <td>${fmtDate(t.date)}</td>
-      <td>${g ? `<span class="chip">${esc(g.name)}</span>` : '<span class="muted">personal</span>'}</td>
-      <td>${esc(t.note) || '<span class="muted">—</span>'} ${t.isInterest ? '<span class="interest-tag">INTEREST</span>' : ''}${t.indirect ? `<span class="hist-tag indirect">indirect${t.counterpartyId ? ' · ' + esc(getPerson(t.counterpartyId)?.name || '') : ''}</span>` : ''}${t.split ? '<span class="hist-tag split">split</span>' : ''}</td>
-      <td class="num"><span class="money ${moneyClass(t.amount)}">${fmtMoney(t.amount, p.currency)}</span></td>
-      <td><button class="del-x" data-action="delete-txn" data-id="${t.id}" title="Delete entry">✕</button></td>
-    </tr>`;
-  }).join('');
+  /* Real entries plus the day-by-day accrued-interest charges (virtual, not yet
+     capitalized), newest first — so a person's interest is shown adding up. */
+  const realRows = personTxns(p.id).map(t => ({ ...t, virtual: false }));
+  const virtualRows = detail.schedule.map((s, k) => ({
+    id: `virt-${p.id}-${k}`, date: s.date, amount: s.amount, virtual: true,
+  }));
+  const txRows = realRows.concat(virtualRows)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .map(t => {
+      if (t.virtual) {
+        return `<tr class="virtual-interest">
+          <td>${fmtDate(t.date)}</td>
+          <td><span class="muted">—</span></td>
+          <td>Interest accrued <span class="interest-tag">INTEREST</span> <span class="muted">(not yet capitalized)</span></td>
+          <td class="num"><span class="money pos">+${fmtMoney(t.amount, p.currency)}</span></td>
+          <td></td>
+        </tr>`;
+      }
+      const g = t.groupId ? getGroup(t.groupId) : null;
+      return `<tr>
+        <td>${fmtDate(t.date)}</td>
+        <td>${g ? `<span class="chip">${esc(g.name)}</span>` : '<span class="muted">personal</span>'}</td>
+        <td>${esc(t.note) || '<span class="muted">—</span>'} ${t.isInterest ? '<span class="interest-tag">INTEREST</span>' : ''}${t.indirect ? `<span class="hist-tag indirect">indirect${t.counterpartyId ? ' · ' + esc(getPerson(t.counterpartyId)?.name || '') : ''}</span>` : ''}${t.split ? '<span class="hist-tag split">split</span>' : ''}</td>
+        <td class="num"><span class="money ${moneyClass(t.amount)}">${fmtMoney(t.amount, p.currency)}</span></td>
+        <td><button class="del-x" data-action="delete-txn" data-id="${t.id}" title="Delete entry">✕</button></td>
+      </tr>`;
+    }).join('');
 
   const groupOptions = ['<option value="">No group (personal)</option>']
     .concat(groupsOf(p.id).map(g => `<option value="${g.id}">${esc(g.name)}</option>`)).join('');
@@ -1356,6 +1410,34 @@ function renderModal() {
         <button class="btn ghost" data-action="capitalize" data-id="${p.id}" ${detail.total > 0.005 ? '' : 'disabled'}>Capitalize interest</button>
         <button class="btn" data-action="settle" data-id="${p.id}" ${Math.abs(total) > 0.005 ? '' : 'disabled'}>Settle up</button>
         <button class="btn quiet-danger" data-action="delete-person" data-id="${p.id}">Delete person</button>
+      </div>
+
+      <div class="panel" style="margin-top:16px">
+        <h3>Custom interest <span class="muted">(just for ${esc(p.name)})</span></h3>
+        <label><input type="checkbox" id="person-interest-on" ${ic.enabled ? 'checked' : ''}> Charge this person their own interest (overrides the global rules)</label>
+        ${ic.enabled ? `
+        <form data-form="person-interest" data-person="${p.id}">
+          <div class="form-row" style="margin-top:10px">
+            <label>if balance
+              <select name="op">${OPS.map(o => `<option ${o === ic.op ? 'selected' : ''}>${o}</option>`).join('')}</select>
+              <input name="value" type="number" step="any" value="${ic.value}" style="width:90px">
+            </label>
+          </div>
+          <div class="form-row">
+            <label>charge <input name="rate" type="number" step="any" min="0" value="${ic.rate}" style="width:70px">%</label>
+            <select name="type">
+              <option value="compound" ${ic.type === 'compound' ? 'selected' : ''}>compound</option>
+              <option value="simple" ${ic.type === 'simple' ? 'selected' : ''}>simple</option>
+            </select>
+            <label>per <select name="periodUnit">
+              ${['day', 'week', 'month', 'year'].map(u => `<option value="${u}" ${ic.periodUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+            </select></label>
+            <label>cap (optional) <input name="capPeriods" type="number" step="any" min="0" value="${ic.capPeriods ?? ''}" placeholder="∞" style="width:70px"> periods</label>
+          </div>
+          <div class="form-row tight"><button class="btn" type="submit">Save interest settings</button></div>
+        </form>
+        <p class="muted" style="margin-top:6px">Rate, period and type apply only to ${esc(p.name)}.${p.interestExempt ? ' Note: “interest exempt” is on, so nothing accrues until you turn it off.' : ''}</p>`
+        : '<p class="muted" style="margin-top:6px">Off — this person follows the shared interest rules.</p>'}
       </div>
 
       <div class="panel" style="margin-top:16px">
@@ -1750,6 +1832,25 @@ document.addEventListener('submit', e => {
       break;
     }
 
+    case 'person-interest': {
+      const p = getPerson(form.dataset.person);
+      if (p) {
+        const cap = parseFloat(fd.get('capPeriods'));
+        p.interestConfig = {
+          enabled: true,
+          op: fd.get('op'),
+          value: parseFloat(fd.get('value')) || 0,
+          type: fd.get('type'),
+          rate: parseFloat(fd.get('rate')) || 0,
+          periodUnit: fd.get('periodUnit'),
+          capPeriods: Number.isFinite(cap) && cap > 0 ? cap : null,
+        };
+        commit();
+        showToast('Interest settings saved');
+      }
+      break;
+    }
+
     case 'add-interest-rule': {
       const cap = parseFloat(fd.get('capPeriods'));
       state.interestRules.push({
@@ -1787,6 +1888,14 @@ document.addEventListener('change', e => {
   if (e.target.id === 'person-exempt' && ui.modalPersonId) {
     const p = getPerson(ui.modalPersonId);
     if (p) { p.interestExempt = e.target.checked; commit(); }
+  }
+  if (e.target.id === 'person-interest-on' && ui.modalPersonId) {
+    const p = getPerson(ui.modalPersonId);
+    if (p) {
+      p.interestConfig = p.interestConfig || defaultPersonInterest();
+      p.interestConfig.enabled = e.target.checked;
+      commit();
+    }
   }
   if (e.target.id === 'import-file') {
     const file = e.target.files[0];

@@ -627,6 +627,10 @@ button { font-family: var(--body); cursor: pointer; }
 .hist-tag.indirect { color: var(--blue); background: rgba(43,91,138,0.10); margin-left: var(--sp-1); }
 .hist-tag.split { color: var(--gold); background: rgba(163,130,58,0.12); margin-left: var(--sp-1); }
 .interest-tag { color: var(--gold); }
+/* virtual interest charges: accrued day-by-day, not yet capitalized — shown
+   tinted and italic so they read as projections, not committed ledger entries */
+.virtual-interest { background: rgba(163,130,58,0.06); }
+.virtual-interest td { font-style: italic; }
 .hist-amount { display: none; }   /* shown only on mobile cards */
 
 /* long-press to start selecting: row tints while held */
