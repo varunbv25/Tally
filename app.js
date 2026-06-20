@@ -1029,7 +1029,7 @@ function splitPreviewHTML(ids, amt, includeMe) {
      (and any leftover cent lands on you, the payer). */
   const n = people.length + (includeMe ? 1 : 0);
   const offset = includeMe ? 1 : 0;
-  const shares = splitShares(amt, n);
+  const shares = splitShares(amt, n, !!(state.settings && state.settings.roundSplits));
   const currencies = people.map(p => p.currency);
   if (includeMe) currencies.push(baseCur);
   const multiCurrency = new Set(currencies).size > 1;
@@ -1245,6 +1245,14 @@ function renderSettings() {
         <label>Currency for new people <select id="base-currency">${currencyOptions(state.settings.baseCurrency)}</select></label>
       </div>
       <p class="muted">Each person keeps their own currency (changeable in their profile). Totals in the header are shown per currency — nothing is converted.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Splitting</h3>
+      <div class="form-row">
+        <label><input type="checkbox" id="round-splits" ${state.settings.roundSplits ? 'checked' : ''}> Round splits to whole numbers</label>
+      </div>
+      <p class="muted">Split expenses into whole-number shares instead of exact cents — e.g. 100 across 3 becomes 34, 33 and 33. The shares still add up to the total.</p>
     </div>
 
     <div class="panel">
@@ -1796,6 +1804,10 @@ document.addEventListener('change', e => {
   }
   if (e.target.dataset.notifToggle) {
     notifSettings(state)[e.target.dataset.notifToggle].enabled = e.target.checked;
+    commit();
+  }
+  if (e.target.id === 'round-splits') {
+    state.settings.roundSplits = e.target.checked;
     commit();
   }
   if (e.target.dataset.notifValue) {

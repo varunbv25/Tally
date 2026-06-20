@@ -46,6 +46,7 @@ function defaultState() {
       baseCurrency: 'INR',        // default currency for new people
       tzHistory: [],              // device-timezone segments {since, offsetMin} for interest timing
       theme: 'device',            // 'light' | 'dark' | 'device' (follow OS preference)
+      roundSplits: false,         // split into whole numbers instead of exact cents
     },
   };
 }
@@ -193,13 +194,17 @@ function deleteIndirectPayment(linkId) {
 
 /* Equal shares of `amount` across `n` people, in whole cents, with the leftover
    cents handed out one at a time so the shares sum to the total exactly
-   (100 ÷ 3 → 33.34, 33.33, 33.33). The first `extra` people pay one cent more. */
-function splitShares(amount, n) {
-  const cents = Math.round(Number(amount) * 100);
-  const base = Math.floor(cents / n);
-  const extra = cents - base * n;
+   (100 ÷ 3 → 33.34, 33.33, 33.33). The first `extra` people pay one cent more.
+   With `roundWhole`, the same is done in whole units instead of cents: the total
+   is rounded to the nearest whole number first, then split into whole-number
+   shares that still sum to that total (100 ÷ 3 → 34, 33, 33). */
+function splitShares(amount, n, roundWhole = false) {
+  const unit = roundWhole ? 1 : 100;
+  const total = Math.round(Number(amount) * unit);
+  const base = Math.floor(total / n);
+  const extra = total - base * n;
   const out = [];
-  for (let i = 0; i < n; i++) out.push((base + (i < extra ? 1 : 0)) / 100);
+  for (let i = 0; i < n; i++) out.push((base + (i < extra ? 1 : 0)) / unit);
   return out;
 }
 
@@ -217,7 +222,7 @@ function addSplitExpense({ personIds, amount, groupId = null, note = '', date = 
      clean. */
   const n = ids.length + (includeMe ? 1 : 0);
   const offset = includeMe ? 1 : 0;
-  const shares = splitShares(amt, n);
+  const shares = splitShares(amt, n, !!(state.settings && state.settings.roundSplits));
   const txns = ids.map((id, i) => {
     const t = addTransaction({ personId: id, groupId, amount: shares[i + offset], note, date: when });
     t.split = true;
