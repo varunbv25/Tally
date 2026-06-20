@@ -37,7 +37,9 @@ let state = null;
 
 function defaultState() {
   return {
-    people: [],        // {id, name, currency, interestExempt, interestAnchor, createdAt}
+    people: [],        // {id, name, currency, interestExempt, interestAnchor, createdAt, interestConfig|null}
+                       // interestConfig {enabled, op, value, type:'simple'|'compound', rate, periodUnit, capPeriods|null}
+                       // when enabled it OVERRIDES the global interestRules for this one person
     groups: [],        // {id, name, memberIds: []}
     transactions: [],  // {id, personId, groupId|null, amount, note, date, isInterest}
     interestRules: [], // {id, name, enabled, op, value, type:'simple'|'compound', rate, periodUnit, capPeriods|null, groupId|null}
@@ -82,9 +84,16 @@ function addPerson(name, currency) {
   const p = {
     id: uid(), name: name.trim(), currency: currency || state.settings.baseCurrency,
     interestExempt: false, interestAnchor: null, createdAt: new Date().toISOString(),
+    interestConfig: null,
   };
   state.people.push(p);
   return p;
+}
+
+/* A fresh, disabled per-person interest config. Defaults mirror the most common
+   global rule so flipping it on is immediately sensible. */
+function defaultPersonInterest() {
+  return { enabled: false, op: '>', value: 0, type: 'compound', rate: 5, periodUnit: 'month', capPeriods: null };
 }
 
 function getPerson(id) { return state.people.find(p => p.id === id); }
@@ -282,10 +291,47 @@ function ruleAppliesTo(rule, personId) {
   return !!g && g.memberIds.includes(personId);      // deleted group -> never matches
 }
 
+/* A person's own interest config presented as a rule-shaped object, so the
+   engine can treat it exactly like a global rule. Returns null when the person
+   has no custom interest (or it's switched off). */
+function personInterestRule(person) {
+  const c = person && person.interestConfig;
+  if (!c || !c.enabled) return null;
+  return {
+    id: 'person:' + person.id,
+    name: 'Custom interest for ' + person.name,
+    personal: true,
+    enabled: true,
+    op: c.op || '>',
+    value: Number(c.value) || 0,
+    type: c.type === 'simple' ? 'simple' : 'compound',
+    rate: Number(c.rate) || 0,
+    periodUnit: PERIOD_MS[c.periodUnit] ? c.periodUnit : 'month',
+    capPeriods: Number.isFinite(c.capPeriods) && c.capPeriods > 0 ? c.capPeriods : null,
+    groupId: null,
+  };
+}
+
+/* The rule that decides a person's interest at this balance. A person with a
+   custom interest config is governed solely by it (the global rules are ignored
+   for them); everyone else falls through to the shared, top-down global rules. */
 function firstMatchingInterestRule(balance, personId) {
+  const person = getPerson(personId);
+  const own = personInterestRule(person);
+  if (own) return cmp(balance, own.op, Number(own.value)) ? own : null;
   return state.interestRules.find(r =>
     r.enabled && ruleAppliesTo(r, personId) && cmp(balance, r.op, Number(r.value))
   ) || null;
+}
+
+/* Look up a rule's display name by id, covering both global rules and the
+   synthetic per-person rule ("person:<id>"). */
+function interestRuleName(ruleId) {
+  if (typeof ruleId === 'string' && ruleId.startsWith('person:')) {
+    const p = getPerson(ruleId.slice('person:'.length));
+    return p ? personInterestRule(p)?.name || 'Custom interest' : 'Custom interest';
+  }
+  return state.interestRules.find(r => r.id === ruleId)?.name || null;
 }
 
 /*
@@ -356,12 +402,19 @@ function recordDeviceTimezone(now = Date.now()) {
   return true;
 }
 
+/* Returns { total, byRule, schedule } where schedule is the chronological list
+   of every individual interest charge that has landed since the anchor:
+   { date (ISO, the local-midnight it was charged), amount, ruleId }. The
+   schedule lets the UI show interest "adding up per day" as real, dated rows in
+   history without ever mutating the ledger — these stay virtual until the user
+   capitalizes, at which point the anchor moves and they roll into a real entry. */
 function accruedInterestDetail(person, now = Date.now()) {
-  const out = { total: 0, byRule: {} };
+  const out = { total: 0, byRule: {}, schedule: [] };
   if (!person || person.interestExempt) return out;
 
   const txns = personTxns(person.id);
-  if (!txns.length || !state.interestRules.some(r => r.enabled)) return out;
+  const hasRule = !!personInterestRule(person) || state.interestRules.some(r => r.enabled);
+  if (!txns.length || !hasRule) return out;
 
   const anchor = person.interestAnchor ? new Date(person.interestAnchor).getTime() : 0;
   const usedPeriods = {}; // ruleId -> periods charged so far (for caps)
@@ -398,6 +451,11 @@ function accruedInterestDetail(person, now = Date.now()) {
       stretch.accrued += charge;
       out.total += charge;
       out.byRule[stretch.rule.id] = (out.byRule[stretch.rule.id] || 0) + charge;
+      out.schedule.push({
+        date: new Date(stretch.nextTick).toISOString(),
+        amount: charge,
+        ruleId: stretch.rule.id,
+      });
       usedPeriods[stretch.rule.id] = used + 1;
       stretch.nextTick += periodMs;
       /* If the device moved timezones before this next charge, re-phase it to
