@@ -1019,6 +1019,31 @@ function splitSelectedIds() {
     .map(cb => cb.dataset.splitMember);
 }
 
+/* The order in which split participants receive the leftover minor units, so
+   the same person isn't always the one charged a little extra. Fisher–Yates
+   shuffle of the participant indices: when you're in the split you (index 0)
+   still absorb the first leftover unit to keep the others' shares clean, then
+   the rest go out at random. The order is cached on the draft and only
+   reshuffled when the head count (or whether you're included) changes, so the
+   live preview matches exactly what's recorded on submit. A new split (fresh
+   draft) reshuffles, rotating who gets the bigger share next time. */
+function splitOrder(n, includeMe) {
+  const draft = ui.splitDraft;
+  const sig = `${n}|${includeMe ? 1 : 0}`;
+  if (draft && draft.orderSig === sig && draft.order && draft.order.length === n) {
+    return draft.order;
+  }
+  const rest = [];
+  for (let i = includeMe ? 1 : 0; i < n; i++) rest.push(i);
+  for (let i = rest.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rest[i], rest[j]] = [rest[j], rest[i]];
+  }
+  const order = includeMe ? [0, ...rest] : rest;
+  if (draft) { draft.order = order; draft.orderSig = sig; }
+  return order;
+}
+
 function splitPreviewHTML(ids, amt, includeMe) {
   const people = ids.map(getPerson).filter(Boolean);
   if (!people.length || !Number.isFinite(amt) || amt <= 0) {
@@ -1029,7 +1054,7 @@ function splitPreviewHTML(ids, amt, includeMe) {
      (and any leftover cent lands on you, the payer). */
   const n = people.length + (includeMe ? 1 : 0);
   const offset = includeMe ? 1 : 0;
-  const shares = splitShares(amt, n, !!(state.settings && state.settings.roundSplits));
+  const shares = splitShares(amt, n, { whole: roundingOn(), order: splitOrder(n, includeMe) });
   const currencies = people.map(p => p.currency);
   if (includeMe) currencies.push(baseCur);
   const multiCurrency = new Set(currencies).size > 1;
@@ -1245,14 +1270,11 @@ function renderSettings() {
         <label>Currency for new people <select id="base-currency">${currencyOptions(state.settings.baseCurrency)}</select></label>
       </div>
       <p class="muted">Each person keeps their own currency (changeable in their profile). Totals in the header are shown per currency — nothing is converted.</p>
-    </div>
 
-    <div class="panel">
-      <h3>Splitting</h3>
-      <div class="form-row">
-        <label><input type="checkbox" id="round-splits" ${state.settings.roundSplits ? 'checked' : ''}> Round splits to whole numbers</label>
+      <div class="form-row tight" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
+        <label><input type="checkbox" id="round-whole" ${state.settings.roundWhole ? 'checked' : ''}> Round amounts to whole numbers</label>
       </div>
-      <p class="muted">Split expenses into whole-number shares instead of exact cents — e.g. 100 across 3 becomes 34, 33 and 33. The shares still add up to the total.</p>
+      <p class="muted">Hides paise/cents everywhere — balances, interest and existing entries all show as whole numbers. New splits divide into whole units too, with any remainder handed out at random so the same person isn't always charged the extra.</p>
     </div>
 
     <div class="panel">
@@ -1707,12 +1729,14 @@ document.addEventListener('submit', e => {
       const ids = splitSelectedIds();
       const dateStr = fd.get('date');
       try {
+        const includeMe = splitIncludesMe();
         const { txns } = addSplitExpense({
           personIds: ids,
           amount: parseFloat(fd.get('amount')),
-          includeMe: splitIncludesMe(),
+          includeMe,
           note: fd.get('note') || '',
           date: entryDate(dateStr).toISOString(),
+          order: splitOrder(ids.length + (includeMe ? 1 : 0), includeMe),
         });
         ui.splitOpen = false;
         ui.splitDraft = null;
@@ -1751,6 +1775,10 @@ document.addEventListener('change', e => {
   if (e.target.id === 'base-currency') {
     state.settings.baseCurrency = e.target.value;
     commit();
+  }
+  if (e.target.id === 'round-whole') {
+    state.settings.roundWhole = e.target.checked;
+    commit();   // re-renders every view so past amounts and interest round immediately
   }
   if (e.target.id === 'person-currency' && ui.modalPersonId) {
     const p = getPerson(ui.modalPersonId);
@@ -1804,10 +1832,6 @@ document.addEventListener('change', e => {
   }
   if (e.target.dataset.notifToggle) {
     notifSettings(state)[e.target.dataset.notifToggle].enabled = e.target.checked;
-    commit();
-  }
-  if (e.target.id === 'round-splits') {
-    state.settings.roundSplits = e.target.checked;
     commit();
   }
   if (e.target.dataset.notifValue) {
