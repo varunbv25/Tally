@@ -50,6 +50,48 @@ test('splitShares handles tiny amounts without losing or inventing cents', () =>
   assert.strictEqual(sum(s), 0.10);
 });
 
+test('splitShares with an explicit order steers the leftover onto chosen people', () => {
+  setState(freshState());
+  // 100 ÷ 3 → one extra cent; order [2,0,1] hands it to index 2, not the first.
+  const s = ctx.splitShares(100, 3, { order: [2, 0, 1] });
+  sameArr(s, [33.33, 33.33, 33.34]);
+  assert.strictEqual(sum(s), 100);
+});
+
+test('splitShares in whole-number mode divides into whole units, remainder shared', () => {
+  setState(freshState());
+  const s = ctx.splitShares(100, 3, { whole: true });
+  sameArr(s, [34, 33, 33]);
+  assert.strictEqual(sum(s), 100);
+  // and the whole-unit remainder can be steered like the cent one
+  sameArr(ctx.splitShares(100, 3, { whole: true, order: [1, 0, 2] }), [33, 34, 33]);
+});
+
+test('splitShares whole-number mode divides cleanly when it divides cleanly', () => {
+  setState(freshState());
+  sameArr(ctx.splitShares(99, 3, { whole: true }), [33, 33, 33]);
+});
+
+test('addSplitExpense rounds shares to whole numbers when roundWhole is on', () => {
+  const st = freshState();
+  st.settings.roundWhole = true;
+  setState(st);
+  const { txns } = ctx.addSplitExpense({ personIds: ['a', 'b', 'c'], amount: 100 });
+  // every share is a whole number and they still sum to the total
+  assert.ok(txns.every(t => Number.isInteger(t.amount)), 'shares are whole numbers');
+  assert.strictEqual(sum(txns.map(t => t.amount)), 100);
+});
+
+test('addSplitExpense honours a caller-supplied leftover order', () => {
+  setState(freshState());
+  // order [2,1,0] sends the extra cent to person c (index 2)
+  const { txns } = ctx.addSplitExpense({ personIds: ['a', 'b', 'c'], amount: 100, order: [2, 1, 0] });
+  const by = Object.fromEntries(txns.map(t => [t.personId, round2(t.amount)]));
+  assert.strictEqual(by.a, 33.33);
+  assert.strictEqual(by.b, 33.33);
+  assert.strictEqual(by.c, 33.34);
+});
+
 test('addSplitExpense records one positive entry per person, summing to the total', () => {
   setState(freshState());
   const { txns, splitId } = ctx.addSplitExpense({ personIds: ['a', 'b', 'c'], amount: 100, note: 'Dinner' });

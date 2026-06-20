@@ -46,6 +46,7 @@ function defaultState() {
       baseCurrency: 'INR',        // default currency for new people
       tzHistory: [],              // device-timezone segments {since, offsetMin} for interest timing
       theme: 'device',            // 'light' | 'dark' | 'device' (follow OS preference)
+      roundWhole: false,          // show every amount (incl. past entries & interest) as whole numbers
     },
   };
 }
@@ -191,19 +192,30 @@ function deleteIndirectPayment(linkId) {
    transaction so it can be settled or deleted independently. The legs share a
    splitId so the whole split can be recognised as one event in history. */
 
-/* Equal shares of `amount` across `n` people, in whole cents, with the leftover
-   cents handed out one at a time so the shares sum to the total exactly
-   (100 ÷ 3 → 33.34, 33.33, 33.33). The first `extra` people pay one cent more. */
-function splitShares(amount, n) {
-  const cents = Math.round(Number(amount) * 100);
-  const base = Math.floor(cents / n);
-  const extra = cents - base * n;
+/* Equal shares of `amount` across `n` people, with the leftover minor units
+   handed out one at a time so the shares sum to the total exactly
+   (100 ÷ 3 → 33.34, 33.33, 33.33). The minor unit is a cent by default, or a
+   whole unit when `opts.whole` is set (rounding mode): then 100 ÷ 3 → 34, 33, 33.
+
+   By default the first `extra` participants pay one unit more (stable, so the
+   live preview and old tests are deterministic). Callers can pass `opts.order`
+   — a permutation of [0..n) — to steer the leftover onto chosen or random
+   people instead, so the same person isn't always the one charged extra. */
+function splitShares(amount, n, opts = {}) {
+  const scale = opts.whole ? 1 : 100;
+  const units = Math.round(Number(amount) * scale);
+  const base = Math.floor(units / n);
+  const extra = units - base * n;
+  const order = (opts.order && opts.order.length === n)
+    ? opts.order
+    : Array.from({ length: n }, (_, i) => i);
+  const bonus = new Set(order.slice(0, extra));   // these participants pay one unit more
   const out = [];
-  for (let i = 0; i < n; i++) out.push((base + (i < extra ? 1 : 0)) / 100);
+  for (let i = 0; i < n; i++) out.push((base + (bonus.has(i) ? 1 : 0)) / scale);
   return out;
 }
 
-function addSplitExpense({ personIds, amount, groupId = null, note = '', date = null, includeMe = false }) {
+function addSplitExpense({ personIds, amount, groupId = null, note = '', date = null, includeMe = false, order = null }) {
   const amt = Number(amount);
   if (!Number.isFinite(amt) || amt <= 0) throw new Error('Enter an amount greater than zero.');
   const ids = [...new Set(personIds)].filter(id => getPerson(id));
@@ -217,7 +229,10 @@ function addSplitExpense({ personIds, amount, groupId = null, note = '', date = 
      clean. */
   const n = ids.length + (includeMe ? 1 : 0);
   const offset = includeMe ? 1 : 0;
-  const shares = splitShares(amt, n);
+  const shares = splitShares(amt, n, {
+    whole: roundingOn(),
+    order: order && order.length === n ? order : null,
+  });
   const txns = ids.map((id, i) => {
     const t = addTransaction({ personId: id, groupId, amount: shares[i + offset], note, date: when });
     t.split = true;
@@ -482,15 +497,31 @@ function settleUp(personId) {
 
 function round2(n) { return Math.round(n * 100) / 100; }
 
+/* ---------- rounding mode ----------
+   When settings.roundWhole is on, every amount is presented as a whole number
+   — balances, interest and splits alike, retroactively, since the toggle just
+   changes how stored values are rounded for display (it never rewrites the
+   ledger). roundAmt rounds to the active precision; fmtMoney drops the
+   fractional digits to match. */
+function roundingOn() {
+  return !!(state && state.settings && state.settings.roundWhole);
+}
+
+function roundAmt(n) {
+  const scale = roundingOn() ? 1 : 100;
+  return Math.round(Number(n) * scale) / scale;
+}
+
 /* ---------- currency ---------- */
 
 function fmtMoney(amount, code) {
+  const digits = roundingOn() ? 0 : 2;
   try {
     return new Intl.NumberFormat(code === 'INR' ? 'en-IN' : undefined, {
-      style: 'currency', currency: code, maximumFractionDigits: 2,
+      style: 'currency', currency: code, maximumFractionDigits: digits,
     }).format(amount);
   } catch {
-    return `${code} ${amount.toFixed(2)}`;
+    return `${code} ${roundingOn() ? Math.round(amount) : amount.toFixed(2)}`;
   }
 }
 
@@ -514,8 +545,8 @@ function groupDebtSummary(g, now = Date.now()) {
    Total (principal + accrued interest), formatted as a bare number. */
 
 function shareAmount(n) {
-  const v = round2(n) || 0;          // collapse -0 to 0
-  return String(v);                  // round2 keeps it to <=2 clean decimals
+  const v = roundAmt(n) || 0;        // collapse -0 to 0; whole numbers in rounding mode
+  return String(v);                  // roundAmt keeps it to <=2 clean decimals
 }
 
 /* "Name  amount" — a single line for one person. */

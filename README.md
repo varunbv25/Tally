@@ -66,11 +66,21 @@ isn't in your list yet? Type their name under the people and hit **+ Add**
 to create them, already ticked, without leaving the popup. Tally divides the
 total equally and records each other person's share as money they owe you —
 one entry per person, tagged **SPLIT** in History. Shares are rounded to
-whole cents with the remainder spread one cent at a time (you, the payer,
-absorb the leftover when you're in the split), so they always sum back to
-the exact total. A live preview shows precisely what each person will owe
-before you commit; mixed currencies are applied in each person's own
+whole cents — or whole numbers, if you've turned on rounding (see below) —
+and the leftover is handed out **at random** so the same person isn't always
+the one charged the extra. When you're in the split you absorb the first
+leftover unit, keeping the others' shares clean. Either way the shares always
+sum back to the exact total. A live preview shows precisely what each person
+will owe before you commit; mixed currencies are applied in each person's own
 currency, never converted.
+
+### Round amounts to whole numbers
+Prefer clean figures over paise and cents? In **Settings → Currency**, tick
+**Round amounts to whole numbers**. Every amount then shows as a whole number
+— balances, accrued interest and your existing entries alike, applied
+retroactively (your ledger is never rewritten; only how it's rounded for
+display changes, so untick it any time to bring the decimals back). New splits
+divide into whole units too, with the remainder shared out at random.
 
 ### Indirect payments
 When someone who owes you (the **lender**) is themselves owed by a third
