@@ -135,3 +135,47 @@ test('addSplitExpense with includeMe lands the leftover cent on you, the payer',
   // everything still reconciles to the total once your share is added back
   assert.strictEqual(sum(txns.map(t => t.amount).concat(myShare)), 100);
 });
+
+test('splitShares rounds to whole numbers when asked, still summing to the total', () => {
+  setState(freshState());
+  // 100 ÷ 3 → 34, 33, 33 (whole numbers, the leftover unit on the first person)
+  const s = ctx.splitShares(100, 3, true);
+  sameArr(s, [34, 33, 33]);
+  assert.ok(s.every(Number.isInteger), 'every share is a whole number');
+  assert.strictEqual(sum(s), 100);
+});
+
+test('splitShares whole-number mode divides cleanly when it can', () => {
+  setState(freshState());
+  sameArr(ctx.splitShares(90, 3, true), [30, 30, 30]);
+});
+
+test('splitShares whole-number mode rounds the total to the nearest whole first', () => {
+  setState(freshState());
+  // 100.50 → rounds to 101, then split into whole shares summing to 101
+  const s = ctx.splitShares(100.5, 2, true);
+  sameArr(s, [51, 50]);
+  assert.strictEqual(sum(s), 101);
+});
+
+test('addSplitExpense rounds shares to whole numbers when the setting is on', () => {
+  const st = freshState();
+  st.settings.roundSplits = true;
+  setState(st);
+  const { txns } = ctx.addSplitExpense({ personIds: ['a', 'b', 'c'], amount: 100 });
+  assert.ok(txns.every(t => Number.isInteger(t.amount)), 'each recorded share is whole');
+  assert.strictEqual(sum(txns.map(t => t.amount)), 100);
+  assert.strictEqual(round2(ctx.principalOf('a')), 34);
+  assert.strictEqual(round2(ctx.principalOf('b')), 33);
+  assert.strictEqual(round2(ctx.principalOf('c')), 33);
+});
+
+test('addSplitExpense leaves cents intact when the rounding setting is off', () => {
+  const st = freshState();
+  st.settings.roundSplits = false;
+  setState(st);
+  const { txns } = ctx.addSplitExpense({ personIds: ['a', 'b', 'c'], amount: 100 });
+  assert.strictEqual(round2(ctx.principalOf('a')), 33.34);
+  assert.strictEqual(round2(ctx.principalOf('b')), 33.33);
+  assert.strictEqual(round2(ctx.principalOf('c')), 33.33);
+});
