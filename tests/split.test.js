@@ -177,3 +177,33 @@ test('addSplitExpense with includeMe lands the leftover cent on you, the payer',
   // everything still reconciles to the total once your share is added back
   assert.strictEqual(sum(txns.map(t => t.amount).concat(myShare)), 100);
 });
+
+test('splitShares whole-number mode rounds the total to the nearest whole first', () => {
+  setState(freshState());
+  // 100.50 → rounds to 101, then split into whole shares summing to 101
+  const s = ctx.splitShares(100.5, 2, { whole: true });
+  sameArr(s, [51, 50]);
+  assert.strictEqual(sum(s), 101);
+});
+
+test('addSplitExpense records whole-number shares (34/33/33) when roundWhole is on', () => {
+  const st = freshState();
+  st.settings.roundWhole = true;
+  setState(st);
+  const { txns } = ctx.addSplitExpense({ personIds: ['a', 'b', 'c'], amount: 100 });
+  assert.ok(txns.every(t => Number.isInteger(t.amount)), 'each recorded share is whole');
+  assert.strictEqual(sum(txns.map(t => t.amount)), 100);
+  // shares sum to 100 with one person absorbing the leftover unit
+  const amounts = txns.map(t => round2(t.amount)).sort((x, y) => y - x);
+  sameArr(amounts, [34, 33, 33]);
+});
+
+test('addSplitExpense leaves cents intact when roundWhole is off', () => {
+  const st = freshState();
+  st.settings.roundWhole = false;
+  setState(st);
+  const { txns } = ctx.addSplitExpense({ personIds: ['a', 'b', 'c'], amount: 100 });
+  assert.strictEqual(round2(ctx.principalOf('a')), 33.34);
+  assert.strictEqual(round2(ctx.principalOf('b')), 33.33);
+  assert.strictEqual(round2(ctx.principalOf('c')), 33.33);
+});
