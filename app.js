@@ -1652,9 +1652,9 @@ document.addEventListener('click', e => {
 
     case 'clear-debt': {
       const person = getPerson(id);
-      if (person && confirm(`Clear ${person.name}'s debt? Any outstanding interest is added, then the balance is zeroed to mark it settled.`)) {
+      if (person && confirm(`Clear ${person.name}'s debt? Any outstanding interest is added, then the balance is zeroed and recorded in History as a repayment.`)) {
         const before = totalOf(person);
-        settleUp(id); commit();
+        settleUp(id, 'Debt cleared'); commit();
         maybeCelebrate(id, before);
       }
       break;

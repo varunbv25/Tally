@@ -543,14 +543,19 @@ function capitalizeOnDrop(personId, amount, asOf = Date.now()) {
   return 0;
 }
 
-/* Settle everything to zero (capitalizes outstanding interest first). */
-function settleUp(personId) {
+/* Settle everything to zero (capitalizes outstanding interest first). The
+   zeroing entry carries `note` so the caller can label it — the Clear button
+   records it as a cleared debt, while the modal uses the default. Returns the
+   signed amount recorded (0 if there was nothing to settle). */
+function settleUp(personId, note = 'Settled up') {
   const person = getPerson(personId);
   capitalizeInterest(personId);
   const bal = principalOf(personId);
-  if (Math.abs(bal) < 0.005) return;
-  addTransaction({ personId, amount: round2(-bal), note: 'Settled up' });
+  if (Math.abs(bal) < 0.005) return 0;
+  const amount = round2(-bal);
+  addTransaction({ personId, amount, note });
   person.interestAnchor = new Date().toISOString();
+  return amount;
 }
 
 function round2(n) { return Math.round(n * 100) / 100; }
