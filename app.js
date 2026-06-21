@@ -211,17 +211,16 @@ function shareIconBtn(action, id, label) {
   return `<button class="share-x" data-action="${action}" data-id="${id}" title="${esc(label)}" aria-label="${esc(label)}">${SHARE_SVG}</button>`;
 }
 
-/* The per-row actions beside a person's name: the share icon, plus a Clear
-   button when there's a balance to settle. They live in a fixed-position
-   group pinned to the right so the share icon never shifts — when Clear
-   appears it stacks above the share icon rather than pushing it to the
-   centre of the row. */
+/* The per-row actions beside a person's name: a Clear button (when there's
+   a balance to settle) followed by the share icon. The share icon is kept
+   last so it stays pinned to the right edge in a fixed position — Clear
+   appears to its left rather than shifting it. */
 function rowActions(name, id, total) {
   const share = shareIconBtn('share-person', id, `Share ${name}'s balance`);
   const clear = Math.abs(total) > 0.005
-    ? ` <button class="btn small clear-debt" data-action="clear-debt" data-id="${id}" title="Clear ${esc(name)}'s debt — settle the balance to zero">Clear</button>`
+    ? `<button class="btn small clear-debt" data-action="clear-debt" data-id="${id}" title="Clear ${esc(name)}'s debt — settle the balance to zero">Clear</button> `
     : '';
-  return `<span class="row-actions">${share}${clear}</span>`;
+  return `<span class="row-actions">${clear}${share}</span>`;
 }
 
 /* Open the native share sheet; fall back to the clipboard where the Web
