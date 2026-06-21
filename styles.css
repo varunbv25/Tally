@@ -767,7 +767,11 @@ button { font-family: var(--body); cursor: pointer; }
 .detail-head .section-title { margin-bottom: var(--sp-1); }
 .share-group-btn, .head-action { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .share-group-btn svg { display: block; }
-.head-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+/* Right-side header column: Share pinned at the top, secondary actions beneath
+   it — so Share always sits in the top-right corner and stays there. */
+.head-side { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); }
+.head-share { align-self: flex-end; }
+.head-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; justify-content: flex-end; }
 
 .empty-state {
   text-align: center; padding: 48px var(--sp-5); color: var(--ink-soft);
