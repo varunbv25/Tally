@@ -115,8 +115,36 @@ browser unless you export it.
 |---|---|
 | `store.js` | State, persistence, CRUD, the interest engine, currency math |
 | `app.js` | Rendering (vanilla JS, full re-render) and delegated event handling |
+| `components/` | Reusable UI components, one per file — see below |
 | `styles.css` | Banker's-ledger theme (Fraunces + IBM Plex, cream paper, green ink); type/spacing/radii driven by design tokens in `:root` |
 | `serve.js` | Optional zero-dependency dev server |
+
+### Reusable components
+
+The repeated building blocks of the UI each live in their own file under
+`components/`. There's no build step: every file is a classic script that
+defines one global builder returning an HTML string (the same way `store.js`
+shares globals with `app.js`). They're loaded via `<script>` in `index.html`
+before `app.js`, and `app.js` reuses them across the views — so a layout or
+markup change lives in one place and propagates everywhere it's used.
+
+| Component | File | Reused by |
+|---|---|---|
+| `Icons` | `components/icons.js` | every toolbar/button (share, trash, back, search, …) |
+| `Money` / `moneyClass` | `components/money.js` | every coloured amount |
+| `Chip` | `components/chip.js` | group tags, counts, currency codes, badges |
+| `PersonName` | `components/person-name.js` | ledger, group detail, history |
+| `currencyOptions` | `components/currency-select.js` | Settings + person profile |
+| `rowActions` | `components/row-actions.js` | ledger + group rows |
+| `showToast` | `components/toast.js` | one-off confirmations |
+| `SelectBar` | `components/select-bar.js` | History, group members, ledger people |
+| `ConfirmOverlay` | `components/confirm-overlay.js` | every destructive confirmation |
+| `QuickAdd` | `components/quick-add.js` | ledger, group rows, add-person shortcut |
+| `ShareButton` | `components/share-button.js` | ledger header + group detail |
+| `Modal` | `components/modal.js` | person, indirect, split, share popups |
+| `Panel` | `components/panel.js` | Settings, group detail, person modal sections |
+| `BackLink` | `components/back-link.js` | drill-in back navigation |
+| `EmptyState` | `components/empty-state.js` | empty lists and no-match searches |
 
 The data layer (`store.js`) has no DOM dependencies — it is deliberately
 portable so it can be reused verbatim in a mobile app. See

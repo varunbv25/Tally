@@ -37,18 +37,6 @@ function esc(s) {
   }[c]));
 }
 
-function moneyClass(n) {
-  if (n > 0.005) return 'pos';
-  if (n < -0.005) return 'neg';
-  return 'zero';
-}
-
-function currencyOptions(selected) {
-  return CURRENCIES.map(c =>
-    `<option value="${c.code}" ${c.code === selected ? 'selected' : ''}>${c.code} — ${c.name}</option>`
-  ).join('');
-}
-
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
@@ -189,33 +177,10 @@ function maybeCelebrate(personId, beforeTotal) {
   }
 }
 
-function showToast(msg) {
-  let stack = document.getElementById('toast-stack');
-  if (!stack) {
-    stack = document.createElement('div');
-    stack.id = 'toast-stack';
-    stack.className = 'toast-stack';
-    document.body.appendChild(stack);
-  }
-  const t = document.createElement('div');
-  t.className = 'toast';
-  t.textContent = msg;
-  stack.appendChild(t);
-  requestAnimationFrame(() => t.classList.add('show'));
-  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3500);
-}
+/* showToast, the SHARE_SVG icon (now Icons.share) and rowActions live in
+   components/toast.js, components/icons.js and components/row-actions.js. */
 
 /* ---------- sharing ---------- */
-
-const SHARE_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>`;
-
-/* The per-row action beside a person's name: a Clear button when there's a
-   balance to settle. (Sharing lives in the single Share button above the
-   list of names, not per row.) */
-function rowActions(name, id, total) {
-  if (Math.abs(total) <= 0.005) return '';
-  return `<span class="row-actions"><button class="btn small clear-debt" data-action="clear-debt" data-id="${id}" title="Clear ${esc(name)}'s debt — settle the balance to zero">Clear</button></span>`;
-}
 
 /* Open the native share sheet; fall back to the clipboard where the Web
    Share API is missing (most desktops) or fails for any reason other
@@ -291,66 +256,52 @@ function renderLedger() {
 
   const rows = people.map(p => {
     const { principal, interest, total } = balanceDisplay(p);
-    const groups = groupsOf(p.id).map(g => `<span class="chip">${esc(g.name)}</span>`).join('');
-    const exempt = p.interestExempt ? '<span class="chip exempt">no interest</span>' : '';
+    const groups = groupsOf(p.id).map(g => Chip(esc(g.name))).join('');
+    const exempt = p.interestExempt ? Chip('no interest', 'exempt') : '';
     const isSel = ui.selectedPeople.has(p.id);
     const selCls = ui.personSelect ? (isSel ? ' selected' : '') : '';
     const check = ui.personSelect ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
 
     return `<tr class="row${selCls}" data-person-id="${p.id}">
-      <td class="col-person">${check}<button class="person-name" data-action="open-person" data-id="${p.id}" title="Tap to open · long-press to select &amp; delete">${esc(p.name)}</button> ${exempt} ${rowActions(p.name, p.id, total)}</td>
+      <td class="col-person">${check}${PersonName(p.id, p.name, 'Tap to open · long-press to select &amp; delete')} ${exempt} ${rowActions(p.name, p.id, total)}</td>
       <td class="col-groups">${groups}</td>
-      <td class="num" data-label="Principal"><span class="money ${moneyClass(principal)}">${fmtMoney(principal, p.currency)}</span></td>
+      <td class="num" data-label="Principal">${Money(principal, p.currency)}</td>
       <td class="num" data-label="Interest"><span class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</span></td>
-      <td class="num" data-label="Total"><span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span></td>
+      <td class="num" data-label="Total">${Money(total, p.currency)}</td>
       <td class="col-quick">
-        <div class="quick-add">
-          <div class="quick-add-main">
-            <input type="number" step="any" min="0" placeholder="amount" id="qa-${p.id}">
-            <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" title="You paid for them / they borrowed">+ paid</button>
-            <button class="btn small minus" data-action="quick-add" data-id="${p.id}" data-sign="-1" title="They paid you back">− repaid</button>
-          </div>
-          <input class="qa-reason" placeholder="reason" id="qr-${p.id}" maxlength="80">
-        </div>
+        ${QuickAdd({ idSuffix: p.id, action: 'quick-add', dataId: p.id, titles: true })}
       </td>
     </tr>`;
   }).join('');
 
   const selCount = ui.selectedPeople.size;
-  const selectBar = ui.personSelect ? `
-    <div class="select-bar">
-      <button class="select-cancel" data-action="exit-person-select" aria-label="Cancel selection">✕</button>
-      <span class="select-count">${selCount} selected</span>
-      <button class="select-bin" data-action="open-delete-people-confirm" ${selCount ? '' : 'disabled'} aria-label="Delete selected people">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/>
-          <path d="M10 11v6M14 11v6"/>
-        </svg>
-      </button>
-    </div>` : '';
+  const selectBar = ui.personSelect ? SelectBar({
+    count: selCount,
+    cancelAction: 'exit-person-select',
+    deleteAction: 'open-delete-people-confirm',
+    deleteLabel: 'Delete selected people',
+  }) : '';
 
-  const confirmOverlay = ui.confirmDeletePeople ? `
-    <div class="confirm-overlay" id="person-confirm-overlay">
-      <div class="confirm-card">
-        <button class="modal-close confirm-close" data-action="cancel-delete-people" aria-label="Close">✕</button>
+  const confirmOverlay = ui.confirmDeletePeople ? ConfirmOverlay({
+    id: 'person-confirm-overlay',
+    closeAction: 'cancel-delete-people',
+    inner: `
         <h3>Delete ${selCount} ${selCount === 1 ? 'person' : 'people'}?</h3>
         <p class="muted">They'll be removed along with ALL of their transactions, and taken out of every group. This cannot be undone.</p>
         <button class="btn danger block" data-action="confirm-delete-people">Delete ${selCount === 1 ? 'person' : 'people'}</button>
-        <button class="btn ghost block" data-action="cancel-delete-people">Cancel</button>
-      </div>
-    </div>` : '';
+        <button class="btn ghost block" data-action="cancel-delete-people">Cancel</button>`,
+  }) : '';
 
   const clearTarget = ui.confirmClearDebt ? getPerson(ui.confirmClearDebt) : null;
-  const clearOverlay = clearTarget ? `
-    <div class="confirm-overlay" id="clear-debt-overlay">
-      <div class="confirm-card">
-        <button class="modal-close confirm-close" data-action="cancel-clear-debt" aria-label="Close">✕</button>
+  const clearOverlay = clearTarget ? ConfirmOverlay({
+    id: 'clear-debt-overlay',
+    closeAction: 'cancel-clear-debt',
+    inner: `
         <h3>Clear ${esc(clearTarget.name)}'s debt?</h3>
         <p class="muted">Any outstanding interest is added, then the balance is zeroed and recorded in History as a repayment.</p>
         <button class="btn block" data-action="confirm-clear-debt" data-id="${clearTarget.id}">Clear debt</button>
-        <button class="btn ghost block" data-action="cancel-clear-debt">Cancel</button>
-      </div>
-    </div>` : '';
+        <button class="btn ghost block" data-action="cancel-clear-debt">Cancel</button>`,
+  }) : '';
 
   return `
     ${selectBar}
@@ -368,9 +319,7 @@ function renderLedger() {
     <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ paid</em> or <em>− repaid</em>, just like a spreadsheet row. Tap <em>Clear</em> beside a name to settle their debt to zero. Long-press a name to select people, then tap the bin to delete.</p>
 
     <form id="person-search" data-form="person-search" class="people-search" role="search">
-      <span class="people-search-icon" aria-hidden="true">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-      </span>
+      <span class="people-search-icon" aria-hidden="true">${Icons.search()}</span>
       <input id="search-box" name="q" placeholder="Search people, or type a new name to add…" value="${esc(ui.search)}" autocomplete="off">
       ${query ? `<button type="button" class="people-search-clear" data-action="clear-search" aria-label="Clear search">×</button>` : ''}
     </form>
@@ -380,20 +329,13 @@ function renderLedger() {
           <span class="add-suggestion-plus" aria-hidden="true">+</span>
           <span>Add “<b>${esc(query)}</b>” as a new person</span>
         </div>
-        <div class="quick-add">
-          <div class="quick-add-main">
-            <input type="number" step="any" min="0" placeholder="amount" id="qa-new">
-            <button class="btn small plus" data-action="add-person-entry" data-sign="1" title="You paid for them / they borrowed">+ paid</button>
-            <button class="btn small minus" data-action="add-person-entry" data-sign="-1" title="They paid you back">− repaid</button>
-          </div>
-          <input class="qa-reason" placeholder="reason" id="qr-new" maxlength="80">
-        </div>
+        ${QuickAdd({ idSuffix: 'new', action: 'add-person-entry', titles: true })}
         <span class="add-person-quick-hint">Leave the amount blank to just add the name.</span>
       </div>` : ''}
 
     ${people.length ? `
     <div class="list-share">
-      <button class="btn ghost head-action head-share" data-action="open-share-people" ${state.people.length < 1 ? 'disabled title="Add someone first"' : ''}>${SHARE_SVG} Share</button>
+      ${ShareButton({ cls: 'btn ghost head-action head-share', action: 'open-share-people', extra: state.people.length < 1 ? 'disabled title="Add someone first"' : '' })}
     </div>
     <table class="ledger-table">
       <thead><tr>
@@ -403,15 +345,12 @@ function renderLedger() {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>` : (state.people.length === 0
-      ? `<div class="empty-state empty-onboard">
-          <div class="empty-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 12h16M4 19h10"/><circle cx="19" cy="19" r="3"/><path d="M19 17.6v2.8M17.6 19h2.8"/></svg>
-          </div>
+      ? EmptyState(`
+          <div class="empty-mark" aria-hidden="true">${Icons.ledgerMark()}</div>
           <h3 class="empty-title">Your ledger is empty</h3>
           <p class="empty-copy">Add the first person you’ve lent to or borrowed from. Everything stays in this browser — nothing is uploaded.</p>
-          <button class="btn" data-action="focus-search">+ Add your first person</button>
-        </div>`
-      : `<div class="empty-state">No one matches “${esc(query)}”.${showAdd ? ' Add them with the button above.' : ''}</div>`)}
+          <button class="btn" data-action="focus-search">+ Add your first person</button>`, 'empty-onboard')
+      : EmptyState(`No one matches “${esc(query)}”.${showAdd ? ' Add them with the button above.' : ''}`))}
   `;
 }
 
@@ -433,9 +372,9 @@ function groupDebtStrip(g) {
   if (!entries.length) return '';
   return entries.map(([code, s]) => `
     <div class="balance-strip">
-      <span>They owe you<b class="money pos">${fmtMoney(s.owedToYou, code)}</b></span>
-      <span>You owe them<b class="money neg">${fmtMoney(s.youOwe, code)}</b></span>
-      <span>Total debt<b class="money ${moneyClass(s.net)}">${fmtMoney(s.net, code)}</b></span>
+      <span>They owe you${Money(s.owedToYou, code, { tag: 'b', cls: 'pos' })}</span>
+      <span>You owe them${Money(s.youOwe, code, { tag: 'b', cls: 'neg' })}</span>
+      <span>Total debt${Money(s.net, code, { tag: 'b' })}</span>
     </div>`).join('');
 }
 
@@ -448,7 +387,7 @@ function renderGroups() {
     return `<button class="group-card" data-action="open-group" data-id="${g.id}">
       <div class="group-card-head">
         <h3>${esc(g.name)}</h3>
-        <span class="chip">${count} ${count === 1 ? 'person' : 'people'}</span>
+        ${Chip(`${count} ${count === 1 ? 'person' : 'people'}`)}
       </div>
       <div class="members">${esc(names) || 'No members yet'}</div>
       <span class="group-net">${groupNetLine(g)}</span>
@@ -462,18 +401,19 @@ function renderGroups() {
   // The create form takes the prime slot only when there's nothing else to show
   // or the user explicitly opens it; otherwise existing groups lead.
   const showCreate = ui.creatingGroup || state.groups.length === 0;
-  const createPanel = `
-    <div class="panel">
+  const createPanel = Panel({
+    head: `
       <div class="panel-head">
         <h3>Create a group</h3>
         ${state.groups.length ? '<button class="modal-close" data-action="cancel-create-group" aria-label="Close">×</button>' : ''}
-      </div>
+      </div>`,
+    body: `
       <form data-form="add-group">
         <div class="form-row"><input name="name" placeholder="Group name (e.g. Goa Trip)" required></div>
         <div class="form-row">${memberChecks || '<span class="muted">Add people on the Ledger tab first.</span>'}</div>
         <div class="form-row tight"><button class="btn" type="submit">Create group</button></div>
-      </form>
-    </div>`;
+      </form>`,
+  });
 
   return `
     <div class="detail-head">
@@ -486,7 +426,7 @@ function renderGroups() {
     ${showCreate ? createPanel : ''}
 
     ${state.groups.length ? `<div class="group-grid">${cards}</div>`
-      : (ui.creatingGroup ? '' : '<div class="empty-state">No groups yet. Trips, flatmates, that one fantasy league — they all start here.</div>')}
+      : (ui.creatingGroup ? '' : EmptyState('No groups yet. Trips, flatmates, that one fantasy league — they all start here.'))}
   `;
 }
 
@@ -502,18 +442,11 @@ function renderGroupDetail() {
     const selCls = ui.memberSelect ? (isSel ? ' selected' : '') : '';
     const check = ui.memberSelect ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
     return `<tr class="row${selCls}" data-member-id="${p.id}">
-      <td class="col-person">${check}<button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>
+      <td class="col-person">${check}${PersonName(p.id, p.name)}
         ${rowActions(p.name, p.id, total)}</td>
-      <td class="num" data-label="Total owed"><span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span></td>
+      <td class="num" data-label="Total owed">${Money(total, p.currency)}</td>
       <td class="col-quick">
-        <div class="quick-add">
-          <div class="quick-add-main">
-            <input type="number" step="any" min="0" placeholder="amount" id="qa-${p.id}">
-            <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" data-group="${g.id}">+ paid</button>
-            <button class="btn small minus" data-action="quick-add" data-id="${p.id}" data-sign="-1" data-group="${g.id}">− repaid</button>
-          </div>
-          <input class="qa-reason" placeholder="reason" id="qr-${p.id}" maxlength="80">
-        </div>
+        ${QuickAdd({ idSuffix: p.id, action: 'quick-add', dataId: p.id, group: g.id, titles: false })}
       </td>
     </tr>`;
   }).join('');
@@ -532,41 +465,32 @@ function renderGroupDetail() {
         <td>${fmtDate(t.date)}</td>
         <td>${esc(p.name)}</td>
         <td>${esc(t.note) || '<span class="muted">—</span>'}</td>
-        <td class="num"><span class="money ${moneyClass(t.amount)}">${fmtMoney(t.amount, p.currency)}</span></td>
+        <td class="num">${Money(t.amount, p.currency)}</td>
       </tr>`;
     }).join('');
 
   const selCount = ui.selectedMembers.size;
-  const selectBar = ui.memberSelect ? `
-    <div class="select-bar">
-      <button class="select-cancel" data-action="exit-member-select" aria-label="Cancel selection">✕</button>
-      <span class="select-count">${selCount} selected</span>
-      <button class="select-bin" data-action="open-remove-members-confirm" ${selCount ? '' : 'disabled'} aria-label="Remove selected from group">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/>
-          <path d="M10 11v6M14 11v6"/>
-        </svg>
-      </button>
-    </div>` : '';
+  const selectBar = ui.memberSelect ? SelectBar({
+    count: selCount,
+    cancelAction: 'exit-member-select',
+    deleteAction: 'open-remove-members-confirm',
+    deleteLabel: 'Remove selected from group',
+  }) : '';
 
-  const confirmOverlay = ui.confirmRemoveMembers ? `
-    <div class="confirm-overlay" id="member-confirm-overlay">
-      <div class="confirm-card">
-        <button class="modal-close confirm-close" data-action="cancel-remove-members" aria-label="Close">✕</button>
+  const confirmOverlay = ui.confirmRemoveMembers ? ConfirmOverlay({
+    id: 'member-confirm-overlay',
+    closeAction: 'cancel-remove-members',
+    inner: `
         <h3>Remove ${selCount} ${selCount === 1 ? 'person' : 'people'}?</h3>
         <p class="muted">They'll be taken out of ${esc(g.name)}. Balances and history stay exactly the same — only the grouping changes.</p>
         <button class="btn danger block" data-action="confirm-remove-members">Remove from group</button>
-        <button class="btn ghost block" data-action="cancel-remove-members">Cancel</button>
-      </div>
-    </div>` : '';
+        <button class="btn ghost block" data-action="cancel-remove-members">Cancel</button>`,
+  }) : '';
 
   return `
     ${selectBar}
     ${confirmOverlay}
-    <button class="back-link" data-action="close-group">
-      <svg class="back-arrow" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-      All groups
-    </button>
+    ${BackLink('close-group', 'All groups')}
     ${ui.renamingGroup ? `
     <form data-form="rename-group" data-group="${g.id}" class="form-row">
       <input name="name" value="${esc(g.name)}" required maxlength="60" autofocus>
@@ -583,7 +507,7 @@ function renderGroupDetail() {
     ${groupDebtStrip(g)}
 
     <div class="list-share">
-      <button class="btn small ghost share-group-btn" data-action="share-group" data-id="${g.id}">${SHARE_SVG} Share</button>
+      ${ShareButton({ cls: 'btn small ghost share-group-btn', action: 'share-group', dataId: g.id })}
     </div>
     <table class="ledger-table">
       <thead><tr><th>Member</th><th class="num">Total owed (global)</th><th>Quick entry (tagged to this group)</th></tr></thead>
@@ -591,19 +515,21 @@ function renderGroupDetail() {
     </table>
     ${members.length ? '<p class="muted" style="margin-top:8px">Long-press a member to start selecting, tap others to add, then tap the bin to remove them from the group.</p>' : ''}
 
-    <div class="panel" style="margin-top:24px">
-      <h3>Add member</h3>
+    ${Panel({
+      title: 'Add member',
+      style: 'margin-top:24px',
+      body: `
       <form data-form="add-member" class="form-row tight" data-group="${g.id}">
         <select name="personId">${addMemberOptions || '<option value="">Everyone is already here</option>'}</select>
         <button class="btn" type="submit" ${nonMembers.length ? '' : 'disabled'}>Add to group</button>
-      </form>
-    </div>
+      </form>`,
+    })}
 
-    <div class="panel">
-      <h3>Group activity</h3>
-      ${activity ? `<div class="table-wrap"><table class="txn-table"><thead><tr><th>Date</th><th>Person</th><th>Note</th><th class="num">Amount</th></tr></thead><tbody>${activity}</tbody></table></div>`
-        : '<span class="muted">No transactions tagged to this group yet.</span>'}
-    </div>
+    ${Panel({
+      title: 'Group activity',
+      body: activity ? `<div class="table-wrap"><table class="txn-table"><thead><tr><th>Date</th><th>Person</th><th>Note</th><th class="num">Amount</th></tr></thead><tbody>${activity}</tbody></table></div>`
+        : '<span class="muted">No transactions tagged to this group yet.</span>',
+    })}
 
     <button class="btn danger" data-action="delete-group" data-id="${g.id}">Delete group</button>
     <span class="muted" style="margin-left:10px">People and their balances are kept — only the grouping disappears.</span>
@@ -634,9 +560,9 @@ function interestRulesPanel() {
       </span>
     </div>`).join('');
 
-  return `
-    <div class="panel">
-      <h3>Interest rules <span class="muted">(evaluated top-down, first match wins)</span></h3>
+  return Panel({
+    head: '<h3>Interest rules <span class="muted">(evaluated top-down, first match wins)</span></h3>',
+    body: `
       <p class="muted" style="margin-bottom:12px">Interest is charged in full-period steps: the first charge lands one day after a rule's condition is met, then one charge per period after that.</p>
       ${interestCards || '<span class="muted">No interest rules. Debts sit politely at face value.</span>'}
       <form data-form="add-interest-rule" style="margin-top:16px">
@@ -663,10 +589,8 @@ function interestRulesPanel() {
         <div class="form-row tight"><button class="btn" type="submit">Add interest rule</button></div>
       </form>
       <p class="muted" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
-        When a repayment drops the balance below a rule's condition, the accrued interest is rolled into the principal and the interest column goes blank. It stays part of the principal — so the next time the balance crosses a condition, fresh interest accrues on that larger principal.</p>
-    </div>
-
-  `;
+        When a repayment drops the balance below a rule's condition, the accrued interest is rolled into the principal and the interest column goes blank. It stays part of the principal — so the next time the balance crosses a condition, fresh interest accrues on that larger principal.</p>`,
+  });
 }
 
 /* ---------- settings view ---------- */
@@ -685,9 +609,9 @@ function notificationsPanel() {
   const num = (key, field, suffix, attrs) => `
     <label class="notif-value"><input type="number" ${attrs} data-notif-value="${key}" data-field="${field}" value="${ns[key][field]}" ${dis}> ${suffix}</label>`;
 
-  return `
-    <div class="panel">
-      <h3>Notifications</h3>
+  return Panel({
+    title: 'Notifications',
+    body: `
       <div class="form-row">
         <label><input type="checkbox" id="notif-master" ${ns.enabled ? 'checked' : ''} ${supported ? '' : 'disabled'}> Enable notifications</label>
       </div>
@@ -707,8 +631,8 @@ function notificationsPanel() {
       ${row('settleUpNudge', 'You’ve owed someone for', num('settleUpNudge', 'days', 'days', 'min="1" step="1"'))}
       ${row('interestMilestone', 'Accrued interest reaches', num('interestMilestone', 'amount', '', 'min="0" step="any"'))}
       ${row('capitalizeSuggest', 'Interest exceeds', num('capitalizeSuggest', 'percent', '% of principal', 'min="1" step="1"'))}
-      <p class="muted">Computed on this device — amounts compare in each person’s own currency. Background alerts work where Tally is installed as an app (Android/Chrome); elsewhere you’re notified when you open Tally.</p>
-    </div>`;
+      <p class="muted">Computed on this device — amounts compare in each person’s own currency. Background alerts work where Tally is installed as an app (Android/Chrome); elsewhere you’re notified when you open Tally.</p>`,
+  });
 }
 
 /* ---------- history view ---------- */
@@ -773,14 +697,14 @@ function renderHistory() {
       const cur = p ? p.currency : state.settings.baseCurrency;
       return `<tr class="row virtual-interest">
         <td class="col-person">
-          <button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>
-          <span class="money pos hist-amount">+${fmtMoney(t.amount, cur)}</span>
+          ${PersonName(p.id, p.name)}
+          ${Money(t.amount, cur, { cls: 'pos hist-amount', sign: true })}
         </td>
         <td data-label="Date">${fmtDate(t.date)}</td>
         <td data-label="Type"><span class="interest-tag">INTEREST</span></td>
         <td data-label="Group"><span class="muted">accrued</span></td>
         <td data-label="Reason"><span class="muted">accrued, not yet capitalized</span></td>
-        <td class="num" data-label="Amount"><span class="money pos">+${fmtMoney(t.amount, cur)}</span></td>
+        <td class="num" data-label="Amount">${Money(t.amount, cur, { cls: 'pos', sign: true })}</td>
       </tr>`;
     }
     const via = t.indirect && t.counterpartyId
@@ -801,7 +725,7 @@ function renderHistory() {
     const cur = p ? p.currency : state.settings.baseCurrency;
     const amtClass = t.self ? 'zero' : moneyClass(t.amount);
     const personBtn = p
-      ? `<button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>`
+      ? PersonName(p.id, p.name)
       : `<span class="person-name">Me</span>`;
     const reason = t.self
       ? `${esc(t.note) ? esc(t.note) + ' ' : ''}<span class="muted">your share</span>`
@@ -810,33 +734,28 @@ function renderHistory() {
       <td class="col-person">
         ${check}
         ${personBtn}
-        <span class="money ${amtClass} hist-amount">${fmtMoney(t.amount, cur)}</span>
+        ${Money(t.amount, cur, { cls: `${amtClass} hist-amount` })}
       </td>
       <td data-label="Date">${fmtDate(t.date)}</td>
       <td data-label="Type">${tag}</td>
-      <td data-label="Group">${g ? `<span class="chip">${esc(g.name)}</span>` : '<span class="muted">personal</span>'}</td>
+      <td data-label="Group">${g ? Chip(esc(g.name)) : '<span class="muted">personal</span>'}</td>
       <td data-label="Reason">${reason}</td>
-      <td class="num" data-label="Amount"><span class="money ${amtClass}">${fmtMoney(t.amount, cur)}</span></td>
+      <td class="num" data-label="Amount">${Money(t.amount, cur, { cls: amtClass })}</td>
     </tr>`;
   }).join('');
 
   const selCount = ui.selected.size;
-  const selectBar = ui.selectMode ? `
-    <div class="select-bar">
-      <button class="select-cancel" data-action="exit-select" aria-label="Cancel selection">✕</button>
-      <span class="select-count">${selCount} selected</span>
-      <button class="select-bin" data-action="open-delete-confirm" ${selCount ? '' : 'disabled'} aria-label="Delete selected">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/>
-          <path d="M10 11v6M14 11v6"/>
-        </svg>
-      </button>
-    </div>` : '';
+  const selectBar = ui.selectMode ? SelectBar({
+    count: selCount,
+    cancelAction: 'exit-select',
+    deleteAction: 'open-delete-confirm',
+    deleteLabel: 'Delete selected',
+  }) : '';
 
-  const confirmOverlay = ui.confirmDelete ? `
-    <div class="confirm-overlay" id="confirm-overlay">
-      <div class="confirm-card">
-        <button class="modal-close confirm-close" data-action="cancel-confirm" aria-label="Close">✕</button>
+  const confirmOverlay = ui.confirmDelete ? ConfirmOverlay({
+    id: 'confirm-overlay',
+    closeAction: 'cancel-confirm',
+    inner: `
         <h3>Delete ${selCount} ${selCount === 1 ? 'entry' : 'entries'}?</h3>
         <p class="muted">Choose how these should be removed:</p>
         <button class="btn danger block" data-action="confirm-delete" data-mode="adjust">
@@ -847,9 +766,8 @@ function renderHistory() {
           Remove from history only
         </button>
         <p class="confirm-hint">Hides them from history. Everyone's balance stays exactly the same.</p>
-        <button class="btn ghost block" data-action="cancel-confirm">Cancel</button>
-      </div>
-    </div>` : '';
+        <button class="btn ghost block" data-action="cancel-confirm">Cancel</button>`,
+  }) : '';
 
   return `
     ${selectBar}
@@ -869,8 +787,8 @@ function renderHistory() {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`
-      : `<div class="empty-state">No entries match “${esc(ui.historySearch)}”.</div>`)
-      : `<div class="empty-state">No transactions yet. Record some lending or repayments on the Ledger.</div>`}
+      : EmptyState(`No entries match “${esc(ui.historySearch)}”.`))
+      : EmptyState('No transactions yet. Record some lending or repayments on the Ledger.')}
   `;
 }
 
@@ -1041,13 +959,11 @@ function renderIndirectModal() {
     `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.name)}</option>`
   ).join('');
 
-  root.innerHTML = `
-  <div class="modal-overlay" id="indirect-overlay">
-    <div class="modal">
-      <div class="modal-head">
-        <h2>Indirect payment</h2>
-        <button class="modal-close" data-action="close-indirect">✕</button>
-      </div>
+  root.innerHTML = Modal({
+    overlayId: 'indirect-overlay',
+    title: 'Indirect payment',
+    closeAction: 'close-indirect',
+    body: `
       <p class="section-sub" style="margin-bottom:18px">Route a debt across people: the lender's balance with you drops, and the person who owed them now owes you instead. Your total is unchanged — it just moves to whoever can actually pay.</p>
 
       <form data-form="add-transfer">
@@ -1066,9 +982,8 @@ function renderIndirectModal() {
         </div>
         <div id="xfer-preview" class="xfer-preview"></div>
         <div class="form-row tight"><button class="btn" type="submit">Record indirect payment</button></div>
-      </form>
-    </div>
-  </div>`;
+      </form>`,
+  });
 }
 
 /* ---------- split expense ----------
@@ -1192,14 +1107,14 @@ function renderSplitModal() {
     `<label class="share-pick-row">
       <input type="checkbox" data-split-me ${draft.me ? 'checked' : ''}>
       <span class="share-pick-name">Me</span>
-      <span class="chip">${esc(state.settings.baseCurrency)}</span>
+      ${Chip(esc(state.settings.baseCurrency))}
     </label>`;
 
   const rows = state.people.map(p =>
     `<label class="share-pick-row">
       <input type="checkbox" data-split-member="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>
       <span class="share-pick-name">${esc(p.name)}</span>
-      <span class="chip">${p.currency}</span>
+      ${Chip(p.currency)}
     </label>`).join('');
 
   /* Add a brand-new person without leaving the split: typing a name and
@@ -1210,13 +1125,12 @@ function renderSplitModal() {
       <button type="button" class="btn ghost" data-action="split-add-person">+ Add</button>
     </div>`;
 
-  root.innerHTML = `
-  <div class="modal-overlay" id="split-overlay">
-    <div class="modal modal-split">
-      <div class="modal-head">
-        <h2>Split an expense</h2>
-        <button class="modal-close" data-action="close-split">✕</button>
-      </div>
+  root.innerHTML = Modal({
+    overlayId: 'split-overlay',
+    modalCls: 'modal-split',
+    title: 'Split an expense',
+    closeAction: 'close-split',
+    body: `
       <p class="section-sub split-intro">Pick who shares the cost and enter the total. Tally divides it equally and records each person's share as money they owe you.</p>
 
       <form data-form="add-split">
@@ -1237,9 +1151,8 @@ function renderSplitModal() {
 
           <div class="form-row tight"><button class="btn" type="submit">Record split</button></div>
         </div>
-      </form>
-    </div>
-  </div>`;
+      </form>`,
+  });
 }
 
 /* ---------- share pickers ----------
@@ -1262,26 +1175,24 @@ function renderSharePeopleModal(root) {
       <span class="share-pick-name">${esc(p.name)}</span>
       ${settled
         ? '<span class="muted">settled</span>'
-        : `<span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span>`}
+        : Money(total, p.currency)}
     </label>`;
   }).join('');
 
-  root.innerHTML = `
-  <div class="modal-overlay share-overlay" id="share-overlay">
-    <div class="modal">
-      <div class="modal-head">
-        <h2>Share balances</h2>
-        <button class="modal-close" data-action="close-share">✕</button>
-      </div>
+  root.innerHTML = Modal({
+    overlayId: 'share-overlay',
+    overlayCls: 'share-overlay',
+    title: 'Share balances',
+    closeAction: 'close-share',
+    body: `
       <p class="section-sub" style="margin-bottom:14px">Tick who to include — only ticked people are shared.</p>
       ${people.length
         ? `<div class="share-pick-list">${rows}</div>`
         : '<p class="muted">No people yet.</p>'}
       <h3 class="subhead">Preview</h3>
       <pre class="share-preview" id="share-preview"></pre>
-      <div class="form-row tight"><button class="btn" data-action="do-share-people">Share</button></div>
-    </div>
-  </div>`;
+      <div class="form-row tight"><button class="btn" data-action="do-share-people">Share</button></div>`,
+  });
 }
 
 function renderShareModal() {
@@ -1300,26 +1211,24 @@ function renderShareModal() {
       <span class="share-pick-name">${esc(p.name)}</span>
       ${settled
         ? '<span class="muted">settled</span>'
-        : `<span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span>`}
+        : Money(total, p.currency)}
     </label>`;
   }).join('');
 
-  root.innerHTML = `
-  <div class="modal-overlay share-overlay" id="share-overlay">
-    <div class="modal">
-      <div class="modal-head">
-        <h2>Share ${esc(g.name)}</h2>
-        <button class="modal-close" data-action="close-share">✕</button>
-      </div>
+  root.innerHTML = Modal({
+    overlayId: 'share-overlay',
+    overlayCls: 'share-overlay',
+    title: `Share ${esc(g.name)}`,
+    closeAction: 'close-share',
+    body: `
       <p class="section-sub" style="margin-bottom:14px">Tick who to include — unticked people are left out of the shared list.</p>
       ${members.length
         ? `<div class="share-pick-list">${rows}</div>`
         : '<p class="muted">This group has no members yet.</p>'}
       <h3 class="subhead">Preview</h3>
       <pre class="share-preview" id="share-preview"></pre>
-      <div class="form-row tight"><button class="btn" data-action="do-share-group" data-id="${g.id}">Share</button></div>
-    </div>
-  </div>`;
+      <div class="form-row tight"><button class="btn" data-action="do-share-group" data-id="${g.id}">Share</button></div>`,
+  });
 }
 
 /* ids of members whose checkbox is currently unticked */
@@ -1360,12 +1269,12 @@ function appearancePanel() {
   const current = (state.settings && state.settings.theme) || 'device';
   const seg = ([value, label]) =>
     `<button type="button" class="seg${value === current ? ' active' : ''}" data-action="set-theme" data-theme="${value}" aria-pressed="${value === current}">${label}</button>`;
-  return `
-    <div class="panel">
-      <h3>Appearance</h3>
+  return Panel({
+    title: 'Appearance',
+    body: `
       <div class="seg-control" role="group" aria-label="Theme">${THEME_OPTIONS.map(seg).join('')}</div>
-      <p class="muted">Pick a fixed look, or follow your device’s light/dark setting.</p>
-    </div>`;
+      <p class="muted">Pick a fixed look, or follow your device’s light/dark setting.</p>`,
+  });
 }
 
 function renderSettings() {
@@ -1379,8 +1288,9 @@ function renderSettings() {
 
     ${notificationsPanel()}
 
-    <div class="panel">
-      <h3>Currency</h3>
+    ${Panel({
+      title: 'Currency',
+      body: `
       <div class="form-row">
         <label>Currency for new people <select id="base-currency">${currencyOptions(state.settings.baseCurrency)}</select></label>
       </div>
@@ -1389,11 +1299,12 @@ function renderSettings() {
       <div class="form-row tight" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
         <label><input type="checkbox" id="round-whole" ${state.settings.roundWhole ? 'checked' : ''}> Round amounts to whole numbers</label>
       </div>
-      <p class="muted">Hides paise/cents everywhere — balances, interest and existing entries all show as whole numbers. New splits divide into whole units too, with any remainder handed out at random so the same person isn't always charged the extra.</p>
-    </div>
+      <p class="muted">Hides paise/cents everywhere — balances, interest and existing entries all show as whole numbers. New splits divide into whole units too, with any remainder handed out at random so the same person isn't always charged the extra.</p>`,
+    })}
 
-    <div class="panel">
-      <h3>Data</h3>
+    ${Panel({
+      title: 'Data',
+      body: `
       <p class="muted" style="margin-bottom:12px">Your ledger lives only in this browser. Clearing site data or switching devices wipes it — so keep a backup.</p>
 
       <h4 class="data-subhead">Full backup</h4>
@@ -1416,8 +1327,8 @@ function renderSettings() {
 
       <div class="form-row tight" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
         <button class="btn danger" data-action="reset-data">Erase everything</button>
-      </div>
-    </div>
+      </div>`,
+    })}
   `;
 }
 
@@ -1449,16 +1360,16 @@ function renderModal() {
           <td>${fmtDate(t.date)}</td>
           <td><span class="muted">—</span></td>
           <td>Interest accrued <span class="interest-tag">INTEREST</span> <span class="muted">(not yet capitalized)</span></td>
-          <td class="num"><span class="money pos">+${fmtMoney(t.amount, p.currency)}</span></td>
+          <td class="num">${Money(t.amount, p.currency, { cls: 'pos', sign: true })}</td>
           <td></td>
         </tr>`;
       }
       const g = t.groupId ? getGroup(t.groupId) : null;
       return `<tr>
         <td>${fmtDate(t.date)}</td>
-        <td>${g ? `<span class="chip">${esc(g.name)}</span>` : '<span class="muted">personal</span>'}</td>
+        <td>${g ? Chip(esc(g.name)) : '<span class="muted">personal</span>'}</td>
         <td>${esc(t.note) || '<span class="muted">—</span>'} ${t.isInterest ? '<span class="interest-tag">INTEREST</span>' : ''}${t.indirect ? `<span class="hist-tag indirect">indirect${t.counterpartyId ? ' · ' + esc(getPerson(t.counterpartyId)?.name || '') : ''}</span>` : ''}${t.split ? '<span class="hist-tag split">split</span>' : ''}</td>
-        <td class="num"><span class="money ${moneyClass(t.amount)}">${fmtMoney(t.amount, p.currency)}</span></td>
+        <td class="num">${Money(t.amount, p.currency)}</td>
         <td><button class="del-x" data-action="delete-txn" data-id="${t.id}" title="Delete entry">✕</button></td>
       </tr>`;
     }).join('');
@@ -1466,33 +1377,10 @@ function renderModal() {
   const groupOptions = ['<option value="">No group (personal)</option>']
     .concat(groupsOf(p.id).map(g => `<option value="${g.id}">${esc(g.name)}</option>`)).join('');
 
-  root.innerHTML = `
-  <div class="modal-overlay" id="modal-overlay">
-    <div class="modal">
-      <div class="modal-head">
-        <h2>${esc(p.name)}</h2>
-        <button class="modal-close" data-action="close-modal">✕</button>
-      </div>
-      <div class="form-row">
-        <label>Currency <select id="person-currency">${currencyOptions(p.currency)}</select></label>
-        <label><input type="checkbox" id="person-exempt" ${p.interestExempt ? 'checked' : ''}> interest exempt</label>
-      </div>
-
-      <div class="balance-strip">
-        <span>Principal<b class="money ${moneyClass(principal)}">${fmtMoney(principal, p.currency)}</b></span>
-        <span>Accrued interest<b class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</b></span>
-        <span>Total<b class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</b></span>
-      </div>
-      ${ruleNames ? `<p class="muted" style="margin:-8px 0 14px">Interest from rule: <em>${esc(ruleNames)}</em></p>` : ''}
-
-      <div class="form-row">
-        <button class="btn ghost" data-action="capitalize" data-id="${p.id}" ${detail.total > 0.005 ? '' : 'disabled'}>Capitalize interest</button>
-        <button class="btn" data-action="settle" data-id="${p.id}" ${Math.abs(total) > 0.005 ? '' : 'disabled'}>Settle up</button>
-        <button class="btn quiet-danger" data-action="delete-person" data-id="${p.id}">Delete person</button>
-      </div>
-
-      <div class="panel" style="margin-top:16px">
-        <h3>Custom interest <span class="muted">(just for ${esc(p.name)})</span></h3>
+  const customInterestPanel = Panel({
+    style: 'margin-top:16px',
+    head: `<h3>Custom interest <span class="muted">(just for ${esc(p.name)})</span></h3>`,
+    body: `
         <label><input type="checkbox" id="person-interest-on" ${ic.enabled ? 'checked' : ''}> Charge this person their own interest (overrides the global rules)</label>
         ${ic.enabled ? `
         <form data-form="person-interest" data-person="${p.id}">
@@ -1516,11 +1404,13 @@ function renderModal() {
           <div class="form-row tight"><button class="btn" type="submit">Save interest settings</button></div>
         </form>
         <p class="muted" style="margin-top:6px">Rate, period and type apply only to ${esc(p.name)}.${p.interestExempt ? ' Note: “interest exempt” is on, so nothing accrues until you turn it off.' : ''}</p>`
-        : '<p class="muted" style="margin-top:6px">Off — this person follows the shared interest rules.</p>'}
-      </div>
+        : '<p class="muted" style="margin-top:6px">Off — this person follows the shared interest rules.</p>'}`,
+  });
 
-      <div class="panel" style="margin-top:16px">
-        <h3>New entry</h3>
+  const newEntryPanel = Panel({
+    title: 'New entry',
+    style: 'margin-top:16px',
+    body: `
         <form data-form="add-txn" data-person="${p.id}">
           <div class="form-row">
             <select name="sign">
@@ -1535,14 +1425,40 @@ function renderModal() {
             <input name="note" placeholder="note (optional)" style="flex:1">
             <button class="btn" type="submit">Record</button>
           </div>
-        </form>
+        </form>`,
+  });
+
+  root.innerHTML = Modal({
+    overlayId: 'modal-overlay',
+    title: esc(p.name),
+    closeAction: 'close-modal',
+    body: `
+      <div class="form-row">
+        <label>Currency <select id="person-currency">${currencyOptions(p.currency)}</select></label>
+        <label><input type="checkbox" id="person-exempt" ${p.interestExempt ? 'checked' : ''}> interest exempt</label>
       </div>
+
+      <div class="balance-strip">
+        <span>Principal${Money(principal, p.currency, { tag: 'b' })}</span>
+        <span>Accrued interest<b class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</b></span>
+        <span>Total${Money(total, p.currency, { tag: 'b' })}</span>
+      </div>
+      ${ruleNames ? `<p class="muted" style="margin:-8px 0 14px">Interest from rule: <em>${esc(ruleNames)}</em></p>` : ''}
+
+      <div class="form-row">
+        <button class="btn ghost" data-action="capitalize" data-id="${p.id}" ${detail.total > 0.005 ? '' : 'disabled'}>Capitalize interest</button>
+        <button class="btn" data-action="settle" data-id="${p.id}" ${Math.abs(total) > 0.005 ? '' : 'disabled'}>Settle up</button>
+        <button class="btn quiet-danger" data-action="delete-person" data-id="${p.id}">Delete person</button>
+      </div>
+
+      ${customInterestPanel}
+
+      ${newEntryPanel}
 
       <h3 class="subhead">History</h3>
       ${txRows ? `<div class="table-wrap"><table class="txn-table"><thead><tr><th>Date</th><th>Group</th><th>Note</th><th class="num">Amount</th><th></th></tr></thead><tbody>${txRows}</tbody></table></div>`
-        : '<span class="muted">No entries yet.</span>'}
-    </div>
-  </div>`;
+        : '<span class="muted">No entries yet.</span>'}`,
+  });
 }
 
 /* ---------- render root ---------- */
