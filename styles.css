@@ -704,6 +704,10 @@ button { font-family: var(--body); cursor: pointer; }
 }
 .del-x:hover { color: var(--red); }
 
+/* Per-row actions (share icon + optional Clear) grouped so the share icon
+   keeps a fixed position. On desktop they read inline after the name. */
+.row-actions { display: inline-flex; align-items: center; gap: var(--sp-1); }
+
 /* compact share icon sitting next to a person's name */
 .share-x {
   background: none; border: none; color: var(--ink-soft); cursor: pointer;
@@ -838,6 +842,16 @@ button { font-family: var(--body); cursor: pointer; }
   /* roomier touch target for the compact share icon (WCAG 2.5.5);
      negative vert margin keeps row height unchanged, left gap preserved */
   .share-x { padding: 9px; margin: -7px 0 -7px var(--sp-1); }
+
+  /* Pin the row actions to the right edge of the card row. When Clear is
+     present it stacks ABOVE the share icon (column-reverse, since the share
+     icon comes first in the DOM) so the share icon stays put on the right
+     instead of being pushed to the centre by space-between. */
+  .row-actions {
+    flex-direction: column-reverse; align-items: flex-end; gap: var(--sp-1);
+  }
+  /* inside the stack the icon needs no negative margins or row-collapsing */
+  .row-actions .share-x { margin: 0; }
 
   /* tables become stacked cards */
   .ledger-table thead { display: none; }

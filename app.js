@@ -211,6 +211,19 @@ function shareIconBtn(action, id, label) {
   return `<button class="share-x" data-action="${action}" data-id="${id}" title="${esc(label)}" aria-label="${esc(label)}">${SHARE_SVG}</button>`;
 }
 
+/* The per-row actions beside a person's name: the share icon, plus a Clear
+   button when there's a balance to settle. They live in a fixed-position
+   group pinned to the right so the share icon never shifts — when Clear
+   appears it stacks above the share icon rather than pushing it to the
+   centre of the row. */
+function rowActions(name, id, total) {
+  const share = shareIconBtn('share-person', id, `Share ${name}'s balance`);
+  const clear = Math.abs(total) > 0.005
+    ? ` <button class="btn small clear-debt" data-action="clear-debt" data-id="${id}" title="Clear ${esc(name)}'s debt — settle the balance to zero">Clear</button>`
+    : '';
+  return `<span class="row-actions">${share}${clear}</span>`;
+}
+
 /* Open the native share sheet; fall back to the clipboard where the Web
    Share API is missing (most desktops) or fails for any reason other
    than the user dismissing the sheet. */
@@ -292,7 +305,7 @@ function renderLedger() {
     const check = ui.personSelect ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
 
     return `<tr class="row${selCls}" data-person-id="${p.id}">
-      <td class="col-person">${check}<button class="person-name" data-action="open-person" data-id="${p.id}" title="Tap to open · long-press to select &amp; delete">${esc(p.name)}</button> ${exempt} ${shareIconBtn('share-person', p.id, `Share ${p.name}'s balance`)}${Math.abs(total) > 0.005 ? ` <button class="btn small clear-debt" data-action="clear-debt" data-id="${p.id}" title="Clear ${esc(p.name)}'s debt — settle the balance to zero">Clear</button>` : ''}</td>
+      <td class="col-person">${check}<button class="person-name" data-action="open-person" data-id="${p.id}" title="Tap to open · long-press to select &amp; delete">${esc(p.name)}</button> ${exempt} ${rowActions(p.name, p.id, total)}</td>
       <td class="col-groups">${groups}</td>
       <td class="num" data-label="Principal"><span class="money ${moneyClass(principal)}">${fmtMoney(principal, p.currency)}</span></td>
       <td class="num" data-label="Interest"><span class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</span></td>
@@ -478,7 +491,7 @@ function renderGroupDetail() {
     const check = ui.memberSelect ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
     return `<tr class="row${selCls}" data-member-id="${p.id}">
       <td class="col-person">${check}<button class="person-name" data-action="open-person" data-id="${p.id}">${esc(p.name)}</button>
-        ${shareIconBtn('share-person', p.id, `Share ${p.name}'s balance`)}${Math.abs(total) > 0.005 ? ` <button class="btn small clear-debt" data-action="clear-debt" data-id="${p.id}" title="Clear ${esc(p.name)}'s debt — settle the balance to zero">Clear</button>` : ''}</td>
+        ${rowActions(p.name, p.id, total)}</td>
       <td class="num" data-label="Total owed"><span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span></td>
       <td class="col-quick">
         <div class="quick-add">
