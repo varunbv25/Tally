@@ -75,6 +75,24 @@
 <script src="store.js"></script>
 <script src="notif.js"></script>
 <script src="push.js"></script>
+<!-- Reusable UI components: each file defines one component (a global
+     builder that returns an HTML string), reused across the views in
+     app.js. Loaded before app.js so they're defined by first render. -->
+<script src="components/icons.js"></script>
+<script src="components/money.js"></script>
+<script src="components/chip.js"></script>
+<script src="components/person-name.js"></script>
+<script src="components/currency-select.js"></script>
+<script src="components/row-actions.js"></script>
+<script src="components/toast.js"></script>
+<script src="components/select-bar.js"></script>
+<script src="components/confirm-overlay.js"></script>
+<script src="components/quick-add.js"></script>
+<script src="components/share-button.js"></script>
+<script src="components/modal.js"></script>
+<script src="components/panel.js"></script>
+<script src="components/back-link.js"></script>
+<script src="components/empty-state.js"></script>
 <script src="app.js"></script>
 <script>
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {

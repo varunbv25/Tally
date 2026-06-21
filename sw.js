@@ -3,7 +3,7 @@
 
 importScripts('./store.js', './notif.js');
 
-const CACHE = 'tally-v26';
+const CACHE = 'tally-v27';
 const SHELL = [
   './',
   './index.html',
@@ -12,6 +12,21 @@ const SHELL = [
   './store.js',
   './notif.js',
   './push.js',
+  './components/icons.js',
+  './components/money.js',
+  './components/chip.js',
+  './components/person-name.js',
+  './components/currency-select.js',
+  './components/row-actions.js',
+  './components/toast.js',
+  './components/select-bar.js',
+  './components/confirm-overlay.js',
+  './components/quick-add.js',
+  './components/share-button.js',
+  './components/modal.js',
+  './components/panel.js',
+  './components/back-link.js',
+  './components/empty-state.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
