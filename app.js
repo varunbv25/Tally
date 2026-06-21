@@ -12,6 +12,7 @@ const ui = {
   splitOpen: false,         // split-expense popup open
   splitDraft: null,         // in-progress split (survives re-render when adding a person)
   shareGroupId: null,       // group share-picker popup open (which group)
+  sharePeopleOpen: false,   // ledger share-picker popup open (pick who to share)
   search: '',
   historySearch: '',
   renamingGroup: false,
@@ -107,7 +108,7 @@ if (window.matchMedia) {
 let navDepth = 0;
 
 function navState() {
-  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, splitOpen: ui.splitOpen, shareGroupId: ui.shareGroupId, selectMode: ui.selectMode, memberSelect: ui.memberSelect, personSelect: ui.personSelect };
+  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, splitOpen: ui.splitOpen, shareGroupId: ui.shareGroupId, sharePeopleOpen: ui.sharePeopleOpen, selectMode: ui.selectMode, memberSelect: ui.memberSelect, personSelect: ui.personSelect };
 }
 
 function pushNav() {
@@ -122,6 +123,7 @@ function applyNav(s) {
   ui.indirectOpen = !!(s && s.indirectOpen);
   ui.splitOpen = !!(s && s.splitOpen);
   ui.shareGroupId = (s && s.shareGroupId) || null;
+  ui.sharePeopleOpen = !!(s && s.sharePeopleOpen);
   ui.renamingGroup = false;
   ui.selectMode = !!(s && s.selectMode);
   if (!ui.selectMode) { ui.selected = new Set(); ui.confirmDelete = false; }
@@ -206,21 +208,12 @@ function showToast(msg) {
 
 const SHARE_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>`;
 
-/* A compact share icon button used next to a person's name. */
-function shareIconBtn(action, id, label) {
-  return `<button class="share-x" data-action="${action}" data-id="${id}" title="${esc(label)}" aria-label="${esc(label)}">${SHARE_SVG}</button>`;
-}
-
-/* The per-row actions beside a person's name: a Clear button (when there's
-   a balance to settle) followed by the share icon. The share icon is kept
-   last so it stays pinned to the right edge in a fixed position — Clear
-   appears to its left rather than shifting it. */
+/* The per-row action beside a person's name: a Clear button when there's a
+   balance to settle. (Sharing lives in the single Share button at the top of
+   the view, not per row.) */
 function rowActions(name, id, total) {
-  const share = shareIconBtn('share-person', id, `Share ${name}'s balance`);
-  const clear = Math.abs(total) > 0.005
-    ? `<button class="btn small clear-debt" data-action="clear-debt" data-id="${id}" title="Clear ${esc(name)}'s debt — settle the balance to zero">Clear</button> `
-    : '';
-  return `<span class="row-actions">${clear}${share}</span>`;
+  if (Math.abs(total) <= 0.005) return '';
+  return `<span class="row-actions"><button class="btn small clear-debt" data-action="clear-debt" data-id="${id}" title="Clear ${esc(name)}'s debt — settle the balance to zero">Clear</button></span>`;
 }
 
 /* Open the native share sheet; fall back to the clipboard where the Web
@@ -351,6 +344,7 @@ function renderLedger() {
     <div class="detail-head">
       <h2 class="section-title">The Ledger</h2>
       <div class="head-actions">
+        <button class="btn ghost head-action" data-action="open-share-people" ${state.people.length < 1 ? 'disabled title="Add someone first"' : ''}>${SHARE_SVG} Share</button>
         <button class="btn ghost head-action" data-action="open-split" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>÷ Split expense</button>
         <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
       </div>
@@ -1225,14 +1219,51 @@ function renderSplitModal() {
   </div>`;
 }
 
-/* ---------- group share picker ----------
-   A popup over a blurred page: every member with a checkbox (ticked by
-   default) and a live preview of exactly what will be shared. Unticked
-   people are excluded from the list. Nothing is persisted — the choice
-   is made fresh each time. */
+/* ---------- share pickers ----------
+   A popup over a blurred page: a checklist of people with a live preview of
+   exactly what will be shared. Nothing is persisted — the choice is made
+   fresh each time. The group picker (below) starts with every member ticked
+   and excludes unticked ones; the Ledger picker starts with nobody ticked
+   and shares exactly who you choose. */
+
+/* The Ledger share picker: every person, nobody ticked. Tick who to include
+   and the preview/share covers exactly that selection. */
+function renderSharePeopleModal(root) {
+  const people = state.people.slice()
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  const rows = people.map(p => {
+    const total = totalOf(p);
+    const settled = Math.abs(total) <= 0.005;
+    return `<label class="share-pick-row">
+      <input type="checkbox" data-share-member="${p.id}">
+      <span class="share-pick-name">${esc(p.name)}</span>
+      ${settled
+        ? '<span class="muted">settled</span>'
+        : `<span class="money ${moneyClass(total)}">${fmtMoney(total, p.currency)}</span>`}
+    </label>`;
+  }).join('');
+
+  root.innerHTML = `
+  <div class="modal-overlay share-overlay" id="share-overlay">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Share balances</h2>
+        <button class="modal-close" data-action="close-share">✕</button>
+      </div>
+      <p class="section-sub" style="margin-bottom:14px">Tick who to include — only ticked people are shared.</p>
+      ${people.length
+        ? `<div class="share-pick-list">${rows}</div>`
+        : '<p class="muted">No people yet.</p>'}
+      <h3 class="subhead">Preview</h3>
+      <pre class="share-preview" id="share-preview"></pre>
+      <div class="form-row tight"><button class="btn" data-action="do-share-people">Share</button></div>
+    </div>
+  </div>`;
+}
 
 function renderShareModal() {
   const root = document.getElementById('share-root');
+  if (ui.sharePeopleOpen) { renderSharePeopleModal(root); return; }
   if (!ui.shareGroupId) { root.innerHTML = ''; return; }
   const g = getGroup(ui.shareGroupId);
   if (!g) { ui.shareGroupId = null; root.innerHTML = ''; return; }
@@ -1275,10 +1306,23 @@ function shareExcludedIds() {
     .map(cb => cb.dataset.shareMember);
 }
 
+/* people whose checkbox is currently ticked (Ledger picker — opt-in) */
+function shareIncludedPeople() {
+  return [...document.querySelectorAll('[data-share-member]')]
+    .filter(cb => cb.checked)
+    .map(cb => getPerson(cb.dataset.shareMember))
+    .filter(Boolean);
+}
+
 function updateSharePreview() {
   const node = document.getElementById('share-preview');
+  if (!node) return;
+  if (ui.sharePeopleOpen) {
+    node.textContent = peopleShareText(shareIncludedPeople());
+    return;
+  }
   const g = ui.shareGroupId ? getGroup(ui.shareGroupId) : null;
-  if (!node || !g) return;
+  if (!g) return;
   node.textContent = groupShareText(g, Date.now(), shareExcludedIds());
 }
 
@@ -1499,7 +1543,7 @@ function render() {
   renderShareModal();
   if (ui.indirectOpen) updateTransferPreview();
   if (ui.splitOpen) updateSplitPreview();
-  if (ui.shareGroupId) updateSharePreview();
+  if (ui.shareGroupId || ui.sharePeopleOpen) updateSharePreview();
 
   // freeze the page behind any popup so scrolling stays inside the overlay
   const popupOpen = !!document.querySelector('.modal-overlay, .confirm-overlay');
@@ -1546,9 +1590,15 @@ document.addEventListener('click', e => {
     case 'open-person': ui.modalPersonId = id; pushNav(); render(); break;
     case 'close-modal': goBack(); break;
 
-    case 'share-person': {
-      const p = getPerson(id);
-      if (p) shareText(p.name, personShareText(p));
+    case 'open-share-people':
+      if (state.people.length) { ui.sharePeopleOpen = true; pushNav(); render(); }
+      break;
+    case 'do-share-people': {
+      const chosen = shareIncludedPeople();
+      if (!chosen.length) { showToast('Pick at least one person to share'); break; }
+      const text = peopleShareText(chosen);
+      goBack();                   // pop the nav entry the popup pushed, clearing sharePeopleOpen
+      shareText('Balances', text);
       break;
     }
     case 'share-group': {
@@ -2033,7 +2083,7 @@ document.getElementById('tabs').addEventListener('click', e => {
   if (!tab) return;
   const newTab = tab.dataset.tab;
   // already here with nothing drilled in → no-op
-  if (newTab === ui.tab && !ui.openGroupId && !ui.modalPersonId && !ui.indirectOpen && !ui.splitOpen && !ui.shareGroupId && !ui.selectMode && !ui.memberSelect && !ui.personSelect) return;
+  if (newTab === ui.tab && !ui.openGroupId && !ui.modalPersonId && !ui.indirectOpen && !ui.splitOpen && !ui.shareGroupId && !ui.sharePeopleOpen && !ui.selectMode && !ui.memberSelect && !ui.personSelect) return;
 
   // Ledger is home/floor: returning to it unwinds the back stack so the next
   // OS-back exits the app instead of replaying earlier tabs. popstate then
@@ -2044,6 +2094,7 @@ document.getElementById('tabs').addEventListener('click', e => {
   ui.openGroupId = null;
   ui.modalPersonId = null;
   ui.shareGroupId = null;
+  ui.sharePeopleOpen = false;
   ui.indirectOpen = false;
   ui.splitOpen = false;
   ui.renamingGroup = false;

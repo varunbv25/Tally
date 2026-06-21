@@ -634,6 +634,21 @@ function groupShareText(group, now = Date.now(), excludeIds = []) {
   return lines.length ? lines.join('\n') : 'All square.';
 }
 
+/* Same shape as groupShareText, but over an explicit list of people rather
+   than a group's members — the Ledger's share picker starts with nobody
+   ticked, so the caller passes exactly who was chosen. Settled people are
+   still omitted; everyone square reads "All square." */
+function peopleShareText(people, now = Date.now()) {
+  const chosen = people.filter(Boolean);
+  const multiCurrency = new Set(chosen.map(p => p.currency)).size > 1;
+  const lines = chosen
+    .map(p => ({ p, total: totalOf(p, now) }))
+    .filter(({ total }) => Math.abs(total) > 0.005)
+    .map(({ p, total }) =>
+      `${p.name}  ${shareAmount(total)}${multiCurrency ? ' ' + p.currency : ''}`);
+  return lines.length ? lines.join('\n') : 'All square.';
+}
+
 /* Net position per currency (no conversion — each currency stands alone). */
 function netSummary(now = Date.now()) {
   const perCurrency = {};

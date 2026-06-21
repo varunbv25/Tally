@@ -743,15 +743,6 @@ button { font-family: var(--body); cursor: pointer; }
    keeps a fixed position. On desktop they read inline after the name. */
 .row-actions { display: inline-flex; align-items: center; gap: var(--sp-1); }
 
-/* compact share icon sitting next to a person's name */
-.share-x {
-  background: none; border: none; color: var(--ink-soft); cursor: pointer;
-  margin-left: var(--sp-2); padding: 2px; line-height: 0; vertical-align: middle;
-  transition: color var(--duration-fast);
-}
-.share-x:hover, .share-x:focus-visible { color: var(--green); }
-.share-x svg { display: block; }
-
 /* "Clear" — settle a person's balance to zero straight from their ledger row.
    Sits quietly beside the name and warms green on hover, signalling a done deal. */
 .btn.small.clear-debt {
@@ -873,10 +864,6 @@ button { font-family: var(--body); cursor: pointer; }
   .tab { flex: 0 0 auto; white-space: nowrap; }
   .view { padding: 18px 14px 60px; }
   .panel { padding: 14px; }
-
-  /* roomier touch target for the compact share icon (WCAG 2.5.5);
-     negative vert margin keeps row height unchanged, left gap preserved */
-  .share-x { padding: 9px; margin: -7px 0 -7px var(--sp-1); }
 
   /* tables become stacked cards */
   .ledger-table thead { display: none; }
