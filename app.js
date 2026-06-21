@@ -26,6 +26,7 @@ const ui = {
   personSelect: false,      // ledger person multi-select for deletion
   selectedPeople: new Set(), // selected person ids
   confirmDeletePeople: false, // delete-people confirmation overlay open
+  confirmClearDebt: null,   // person id whose clear-debt confirmation overlay is open
 };
 
 /* ---------- helpers ---------- */
@@ -338,9 +339,21 @@ function renderLedger() {
       </div>
     </div>` : '';
 
+  const clearTarget = ui.confirmClearDebt ? getPerson(ui.confirmClearDebt) : null;
+  const clearOverlay = clearTarget ? `
+    <div class="confirm-overlay" id="clear-debt-overlay">
+      <div class="confirm-card">
+        <h3>Clear ${esc(clearTarget.name)}'s debt?</h3>
+        <p class="muted">Any outstanding interest is added, then the balance is zeroed and recorded in History as a repayment.</p>
+        <button class="btn block" data-action="confirm-clear-debt" data-id="${clearTarget.id}">Clear debt</button>
+        <button class="btn ghost block" data-action="cancel-clear-debt">Cancel</button>
+      </div>
+    </div>` : '';
+
   return `
     ${selectBar}
     ${confirmOverlay}
+    ${clearOverlay}
     <div class="detail-head">
       <h2 class="section-title">The Ledger</h2>
       <div class="head-side">
@@ -1588,6 +1601,7 @@ document.addEventListener('click', e => {
   if (e.target.id === 'confirm-overlay') { ui.confirmDelete = false; render(); return; }
   if (e.target.id === 'member-confirm-overlay') { ui.confirmRemoveMembers = false; render(); return; }
   if (e.target.id === 'person-confirm-overlay') { ui.confirmDeletePeople = false; render(); return; }
+  if (e.target.id === 'clear-debt-overlay') { ui.confirmClearDebt = null; render(); return; }
   if (!btn) return;
 
   const { action, id, sign, group } = btn.dataset;
@@ -1718,12 +1732,19 @@ document.addEventListener('click', e => {
       }
       break;
 
-    case 'clear-debt': {
+    case 'clear-debt':
+      if (getPerson(id)) { ui.confirmClearDebt = id; render(); }
+      break;
+    case 'cancel-clear-debt': ui.confirmClearDebt = null; render(); break;
+    case 'confirm-clear-debt': {
       const person = getPerson(id);
-      if (person && confirm(`Clear ${person.name}'s debt? Any outstanding interest is added, then the balance is zeroed and recorded in History as a repayment.`)) {
+      ui.confirmClearDebt = null;
+      if (person) {
         const before = totalOf(person);
         settleUp(id, 'Debt cleared'); commit();
         maybeCelebrate(id, before);
+      } else {
+        render();
       }
       break;
     }
@@ -1984,6 +2005,7 @@ document.addEventListener('change', e => {
         ui.selectMode = false; ui.selected = new Set(); ui.confirmDelete = false;
         ui.memberSelect = false; ui.selectedMembers = new Set(); ui.confirmRemoveMembers = false;
         ui.personSelect = false; ui.selectedPeople = new Set(); ui.confirmDeletePeople = false;
+        ui.confirmClearDebt = null;
         history.replaceState(navState(), '');
         render();
         showToast('Spreadsheet imported');
@@ -2003,6 +2025,7 @@ document.addEventListener('change', e => {
         ui.selectMode = false; ui.selected = new Set(); ui.confirmDelete = false;
         ui.memberSelect = false; ui.selectedMembers = new Set(); ui.confirmRemoveMembers = false;
         ui.personSelect = false; ui.selectedPeople = new Set(); ui.confirmDeletePeople = false;
+        ui.confirmClearDebt = null;
         history.replaceState(navState(), '');
         render();
         runNotificationCheck();
@@ -2113,6 +2136,7 @@ document.getElementById('tabs').addEventListener('click', e => {
   ui.personSelect = false;
   ui.selectedPeople = new Set();
   ui.confirmDeletePeople = false;
+  ui.confirmClearDebt = null;
   pushNav();
   render();
 });
