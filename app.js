@@ -279,7 +279,7 @@ function renderLedger() {
   const query = ui.search.trim();
   const people = state.people
     .filter(p => !q || p.name.toLowerCase().includes(q))
-    .sort((a, b) => totalOf(b) - totalOf(a));
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   const exactMatch = state.people.some(p => p.name.toLowerCase() === q);
   const showAdd = query.length > 0 && !exactMatch;
 
