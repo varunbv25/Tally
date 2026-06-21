@@ -209,8 +209,8 @@ function showToast(msg) {
 const SHARE_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>`;
 
 /* The per-row action beside a person's name: a Clear button when there's a
-   balance to settle. (Sharing lives in the single Share button at the top of
-   the view, not per row.) */
+   balance to settle. (Sharing lives in the single Share button above the
+   list of names, not per row.) */
 function rowActions(name, id, total) {
   if (Math.abs(total) <= 0.005) return '';
   return `<span class="row-actions"><button class="btn small clear-debt" data-action="clear-debt" data-id="${id}" title="Clear ${esc(name)}'s debt — settle the balance to zero">Clear</button></span>`;
@@ -344,7 +344,6 @@ function renderLedger() {
     <div class="detail-head">
       <h2 class="section-title">The Ledger</h2>
       <div class="head-side">
-        <button class="btn ghost head-action head-share" data-action="open-share-people" ${state.people.length < 1 ? 'disabled title="Add someone first"' : ''}>${SHARE_SVG} Share</button>
         <div class="head-actions">
           <button class="btn ghost head-action" data-action="open-split" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>÷ Split expense</button>
           <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
@@ -378,6 +377,9 @@ function renderLedger() {
       </div>` : ''}
 
     ${people.length ? `
+    <div class="list-share">
+      <button class="btn ghost head-action head-share" data-action="open-share-people" ${state.people.length < 1 ? 'disabled title="Add someone first"' : ''}>${SHARE_SVG} Share</button>
+    </div>
     <table class="ledger-table">
       <thead><tr>
         <th>Person</th><th class="col-groups">Groups</th>
@@ -559,12 +561,14 @@ function renderGroupDetail() {
       <h2 class="section-title">${esc(g.name)}
         <button class="btn small ghost" data-action="rename-group" data-id="${g.id}">Rename</button>
       </h2>
-      <button class="btn small ghost share-group-btn" data-action="share-group" data-id="${g.id}">${SHARE_SVG} Share</button>
     </div>`}
     <div class="banner">Balances here are <strong>global</strong>. A payment recorded in ${esc(g.name)} updates this person everywhere — every other group sees it too.</div>
 
     ${groupDebtStrip(g)}
 
+    <div class="list-share">
+      <button class="btn small ghost share-group-btn" data-action="share-group" data-id="${g.id}">${SHARE_SVG} Share</button>
+    </div>
     <table class="ledger-table">
       <thead><tr><th>Member</th><th class="num">Total owed (global)</th><th>Quick entry (tagged to this group)</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="3" class="muted">No members yet.</td></tr>'}</tbody>
