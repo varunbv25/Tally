@@ -301,7 +301,7 @@ function renderLedger() {
         <div class="quick-add">
           <div class="quick-add-main">
             <input type="number" step="any" min="0" placeholder="amount" id="qa-${p.id}">
-            <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" title="You gave them money / they borrowed">+ gave</button>
+            <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" title="You paid for them / they borrowed">+ paid</button>
             <button class="btn small minus" data-action="quick-add" data-id="${p.id}" data-sign="-1" title="They paid you back">− repaid</button>
           </div>
           <input class="qa-reason" placeholder="reason" id="qr-${p.id}" maxlength="80">
@@ -343,7 +343,7 @@ function renderLedger() {
         <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
       </div>
     </div>
-    <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ gave</em> or <em>− repaid</em>, just like a spreadsheet row. Tap <em>Clear</em> beside a name to settle their debt to zero. Long-press a name to select people, then tap the bin to delete.</p>
+    <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ paid</em> or <em>− repaid</em>, just like a spreadsheet row. Tap <em>Clear</em> beside a name to settle their debt to zero. Long-press a name to select people, then tap the bin to delete.</p>
 
     <form id="person-search" data-form="person-search" class="people-search" role="search">
       <span class="people-search-icon" aria-hidden="true">
@@ -361,7 +361,7 @@ function renderLedger() {
         <div class="quick-add">
           <div class="quick-add-main">
             <input type="number" step="any" min="0" placeholder="amount" id="qa-new">
-            <button class="btn small plus" data-action="add-person-entry" data-sign="1" title="You gave them money / they borrowed">+ gave</button>
+            <button class="btn small plus" data-action="add-person-entry" data-sign="1" title="You paid for them / they borrowed">+ paid</button>
             <button class="btn small minus" data-action="add-person-entry" data-sign="-1" title="They paid you back">− repaid</button>
           </div>
           <input class="qa-reason" placeholder="reason" id="qr-new" maxlength="80">
@@ -484,7 +484,7 @@ function renderGroupDetail() {
         <div class="quick-add">
           <div class="quick-add-main">
             <input type="number" step="any" min="0" placeholder="amount" id="qa-${p.id}">
-            <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" data-group="${g.id}">+ gave</button>
+            <button class="btn small plus" data-action="quick-add" data-id="${p.id}" data-sign="1" data-group="${g.id}">+ paid</button>
             <button class="btn small minus" data-action="quick-add" data-id="${p.id}" data-sign="-1" data-group="${g.id}">− repaid</button>
           </div>
           <input class="qa-reason" placeholder="reason" id="qr-${p.id}" maxlength="80">
@@ -720,8 +720,8 @@ function renderHistory() {
     if (!q) return true;
     const kind = t.isInterest ? 'interest'
       : t.indirect ? 'indirect transfer'
-      : t.split ? (t.self ? 'split expense your share' : 'split expense gave lent')
-      : (t.amount >= 0 ? 'gave lent borrowed' : 'repaid paid back');
+      : t.split ? (t.self ? 'split expense your share' : 'split expense paid gave lent')
+      : (t.amount >= 0 ? 'paid gave lent borrowed' : 'repaid paid back');
     const counterparty = t.indirect && t.counterpartyId ? (getPerson(t.counterpartyId)?.name || '') : '';
     const name = p ? p.name : 'Me';
     const cur = p ? p.currency : state.settings.baseCurrency;
@@ -763,7 +763,7 @@ function renderHistory() {
         ? '<span class="hist-tag indirect">indirect</span>'
         : t.split
           ? '<span class="hist-tag split">split</span>'
-          : (t.amount >= 0 ? '<span class="hist-tag lent">gave</span>' : '<span class="hist-tag paid">repaid</span>');
+          : (t.amount >= 0 ? '<span class="hist-tag lent">paid</span>' : '<span class="hist-tag paid">repaid</span>');
     const isSel = ui.selected.has(t.id);
     const selCls = ui.selectMode ? (isSel ? ' selected' : '') : '';
     const check = ui.selectMode ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
@@ -1986,15 +1986,15 @@ document.addEventListener('input', e => {
   if (e.target.closest('[data-form="add-transfer"]')) updateTransferPreview();
   if (e.target.closest('[data-form="add-split"]')) { syncSplitDraft(); updateSplitPreview(); }
 
-  // ledger quick-entry: arm the +gave / −repaid buttons once an amount is typed
+  // ledger quick-entry: arm the +paid / −repaid buttons once an amount is typed
   const qa = e.target.closest('.quick-add');
   if (qa && e.target.type === 'number') {
     qa.classList.toggle('active', e.target.value.trim() !== '');
   }
 });
 
-/* Quick-entry rows aren't a <form> (two submit verbs, +gave / −repaid), so
-   Enter is wired by hand: it fires the default "+ gave" action, matching the
+/* Quick-entry rows aren't a <form> (two submit verbs, +paid / −repaid), so
+   Enter is wired by hand: it fires the default "+ paid" action, matching the
    spreadsheet-row feel. Shift+Enter records a repayment instead. */
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;

@@ -664,7 +664,7 @@ function exportCSV() {
     const g = t.groupId ? getGroup(t.groupId) : null;
     rows.push([
       t.date, p.name, p.currency,
-      t.isInterest ? 'Interest' : (t.indirect ? 'Indirect' : (t.split ? 'Split' : (t.amount >= 0 ? 'Gave' : 'Repaid'))),
+      t.isInterest ? 'Interest' : (t.indirect ? 'Indirect' : (t.split ? 'Split' : (t.amount >= 0 ? 'Paid' : 'Repaid'))),
       t.amount, g ? g.name : '', t.note || '',
       memberOf(p), p.interestExempt ? 'yes' : '', t.archived ? 'yes' : '',
     ]);

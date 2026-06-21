@@ -16,7 +16,7 @@ Either:
 ## Features
 
 ### The Ledger (Excel-like)
-- One row per person; type an amount and hit **+ gave** / **− repaid** to
+- One row per person; type an amount and hit **+ paid** / **− repaid** to
   append entries, exactly like adding to a running spreadsheet column.
 - Positive balance = they owe you. Negative = you owe them.
 - Tap **Clear** beside any name to settle their balance to zero once
@@ -95,7 +95,7 @@ linked entries (tagged **INDIRECT**, with a *via* label) so it shows in
 History and can be undone in one step, reverting both balances.
 
 ### History
-A dedicated tab listing every entry across everyone — gave, repaid, and
+A dedicated tab listing every entry across everyone — paid, repaid, and
 interest — newest first. Search filters by person, reason, amount, or
 date in one box. Tap a name to open that person's full record.
 
