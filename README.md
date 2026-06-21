@@ -16,9 +16,11 @@ Either:
 ## Features
 
 ### The Ledger (Excel-like)
-- One row per person; type an amount and hit **+ lent** / **− paid** to
+- One row per person; type an amount and hit **+ gave** / **− repaid** to
   append entries, exactly like adding to a running spreadsheet column.
 - Positive balance = they owe you. Negative = you owe them.
+- Tap **Clear** beside any name to settle their balance to zero once
+  they've cleared their debt.
 - Click a name for full history: backdated entries, per-group tagging,
   notes, deletes, settle up, capitalize interest.
 
@@ -93,7 +95,7 @@ linked entries (tagged **INDIRECT**, with a *via* label) so it shows in
 History and can be undone in one step, reverting both balances.
 
 ### History
-A dedicated tab listing every entry across everyone — lent, paid, and
+A dedicated tab listing every entry across everyone — gave, repaid, and
 interest — newest first. Search filters by person, reason, amount, or
 date in one box. Tap a name to open that person's full record.
 

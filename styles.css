@@ -391,7 +391,7 @@ button { font-family: var(--body); cursor: pointer; }
 .quick-add input[type="number"] { width: 90px; }
 .quick-add .qa-reason { width: 100%; }
 
-/* the amount is a defined box so it reads as a real field; the +lent/−paid
+/* the amount is a defined box so it reads as a real field; the +gave/−repaid
    buttons sit in a muted ghost state and only light up once an amount is typed
    (.active toggled in JS). */
 .quick-add input[type="number"] {
@@ -712,6 +712,21 @@ button { font-family: var(--body); cursor: pointer; }
 }
 .share-x:hover, .share-x:focus-visible { color: var(--green); }
 .share-x svg { display: block; }
+
+/* "Clear" — settle a person's balance to zero straight from their ledger row.
+   Sits quietly beside the name and warms green on hover, signalling a done deal. */
+.btn.small.clear-debt {
+  margin-left: var(--sp-2);
+  color: var(--ink-soft);
+  background: var(--tag-neutral);
+  border-color: transparent;
+  vertical-align: middle;
+}
+.btn.small.clear-debt:hover, .btn.small.clear-debt:focus-visible {
+  color: var(--green-deep);
+  background: var(--green-tint);
+  border-color: var(--green);
+}
 
 /* group-detail header: title left, Share action pinned top-right */
 .detail-head {
