@@ -724,11 +724,14 @@ button { font-family: var(--body); cursor: pointer; }
 }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .confirm-card {
+  position: relative;
   background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
   padding: 22px; max-width: 360px; width: 100%;
   box-shadow: 0 18px 50px var(--shadow-modal);
   animation: rise 0.2s ease both;
 }
+.confirm-close { position: absolute; top: 14px; right: 14px; }
+.confirm-card h3 { padding-right: 38px; }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .confirm-card h3 { font-family: var(--display); font-size: var(--fs-h2); color: var(--green-deep); margin-bottom: var(--sp-1); }
 .btn.block { display: block; width: 100%; margin-top: var(--sp-3); text-align: center; }

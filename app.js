@@ -332,6 +332,7 @@ function renderLedger() {
   const confirmOverlay = ui.confirmDeletePeople ? `
     <div class="confirm-overlay" id="person-confirm-overlay">
       <div class="confirm-card">
+        <button class="modal-close confirm-close" data-action="cancel-delete-people" aria-label="Close">✕</button>
         <h3>Delete ${selCount} ${selCount === 1 ? 'person' : 'people'}?</h3>
         <p class="muted">They'll be removed along with ALL of their transactions, and taken out of every group. This cannot be undone.</p>
         <button class="btn danger block" data-action="confirm-delete-people">Delete ${selCount === 1 ? 'person' : 'people'}</button>
@@ -343,6 +344,7 @@ function renderLedger() {
   const clearOverlay = clearTarget ? `
     <div class="confirm-overlay" id="clear-debt-overlay">
       <div class="confirm-card">
+        <button class="modal-close confirm-close" data-action="cancel-clear-debt" aria-label="Close">✕</button>
         <h3>Clear ${esc(clearTarget.name)}'s debt?</h3>
         <p class="muted">Any outstanding interest is added, then the balance is zeroed and recorded in History as a repayment.</p>
         <button class="btn block" data-action="confirm-clear-debt" data-id="${clearTarget.id}">Clear debt</button>
@@ -550,6 +552,7 @@ function renderGroupDetail() {
   const confirmOverlay = ui.confirmRemoveMembers ? `
     <div class="confirm-overlay" id="member-confirm-overlay">
       <div class="confirm-card">
+        <button class="modal-close confirm-close" data-action="cancel-remove-members" aria-label="Close">✕</button>
         <h3>Remove ${selCount} ${selCount === 1 ? 'person' : 'people'}?</h3>
         <p class="muted">They'll be taken out of ${esc(g.name)}. Balances and history stay exactly the same — only the grouping changes.</p>
         <button class="btn danger block" data-action="confirm-remove-members">Remove from group</button>
@@ -833,6 +836,7 @@ function renderHistory() {
   const confirmOverlay = ui.confirmDelete ? `
     <div class="confirm-overlay" id="confirm-overlay">
       <div class="confirm-card">
+        <button class="modal-close confirm-close" data-action="cancel-confirm" aria-label="Close">✕</button>
         <h3>Delete ${selCount} ${selCount === 1 ? 'entry' : 'entries'}?</h3>
         <p class="muted">Choose how these should be removed:</p>
         <button class="btn danger block" data-action="confirm-delete" data-mode="adjust">
