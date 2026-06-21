@@ -96,3 +96,25 @@ test('groupShareText skips deleted members gracefully', () => {
   setState(baseState({ people: [a], groups: [g], transactions: [txn('a', 500)] }));
   assert.strictEqual(ctx.groupShareText(g), 'Alice  500');
 });
+
+test('peopleShareText covers exactly the people passed in, one per line', () => {
+  const a = person('a', 'Alice'), b = person('b', 'Bob'), c = person('c', 'Carol');
+  setState(baseState({ people: [a, b, c], transactions: [txn('a', 1200), txn('b', -50), txn('c', 300)] }));
+  assert.strictEqual(ctx.peopleShareText([a, c]), 'Alice  1200\nCarol  300');
+  assert.strictEqual(ctx.peopleShareText([b]), 'Bob  -50');
+});
+
+test('peopleShareText omits settled people and reads "All square." when none remain', () => {
+  const a = person('a', 'Alice'), b = person('b', 'Bob');
+  setState(baseState({ people: [a, b], transactions: [txn('a', 1200), txn('b', 100), txn('b', -100)] }));
+  assert.strictEqual(ctx.peopleShareText([a, b]), 'Alice  1200'); // Bob is square
+  assert.strictEqual(ctx.peopleShareText([b]), 'All square.');
+  assert.strictEqual(ctx.peopleShareText([]), 'All square.');
+});
+
+test('peopleShareText tags currency codes only when the selection mixes currencies', () => {
+  const a = person('a', 'Alice', 'INR'), b = person('b', 'Bob', 'USD');
+  setState(baseState({ people: [a, b], transactions: [txn('a', 1200), txn('b', -50)] }));
+  assert.strictEqual(ctx.peopleShareText([a, b]), 'Alice  1200 INR\nBob  -50 USD');
+  assert.strictEqual(ctx.peopleShareText([a]), 'Alice  1200'); // single currency → no suffix
+});

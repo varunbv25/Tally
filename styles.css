@@ -363,6 +363,41 @@ button { font-family: var(--body); cursor: pointer; }
 }
 .ledger-table tr:last-child td { border-bottom: none; }
 
+/* Ledger people/members read as their own rounded boxes rather than rows
+   divided by a single line. (History keeps the classic table look — it also
+   carries .ledger-table, hence the :not() guard.) The table is detached from
+   its outer card and given vertical breathing room between rows. On wide
+   screens the row's cells share a top/bottom border and the first/last cells
+   round the ends so a row looks like one continuous rectangle; on narrow
+   screens (where the table collapses to stacked blocks) the whole row is the
+   box instead — see the mobile breakpoint below. */
+.ledger-table:not(.history-table) {
+  border-collapse: separate; border-spacing: 0 var(--sp-2);
+  background: none; border: none; border-radius: 0; overflow: visible;
+}
+@media (min-width: 681px) {
+  .ledger-table:not(.history-table) th { background: none; border-bottom: none; }
+  .ledger-table:not(.history-table) tbody td {
+    background: var(--card);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .ledger-table:not(.history-table) tbody td:first-child {
+    border-left: 1px solid var(--line);
+    border-top-left-radius: var(--radius); border-bottom-left-radius: var(--radius);
+  }
+  .ledger-table:not(.history-table) tbody td:last-child {
+    border-right: 1px solid var(--line);
+    border-top-right-radius: var(--radius); border-bottom-right-radius: var(--radius);
+  }
+  /* the box border must persist on the final row too (base rule strips it) */
+  .ledger-table:not(.history-table) tr:last-child td { border-bottom: 1px solid var(--line); }
+  /* row states paint the cells, not the (hidden-behind-cells) tr background */
+  .ledger-table:not(.history-table) tr.lp-pressing td,
+  .ledger-table:not(.history-table) tr.selected td { background: var(--row-tint); }
+  .ledger-table:not(.history-table) tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+}
+
 .money { font-family: var(--mono); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .money.pos { color: var(--green); }
 .money.neg { color: var(--red); }
@@ -704,14 +739,9 @@ button { font-family: var(--body); cursor: pointer; }
 }
 .del-x:hover { color: var(--red); }
 
-/* compact share icon sitting next to a person's name */
-.share-x {
-  background: none; border: none; color: var(--ink-soft); cursor: pointer;
-  margin-left: var(--sp-2); padding: 2px; line-height: 0; vertical-align: middle;
-  transition: color var(--duration-fast);
-}
-.share-x:hover, .share-x:focus-visible { color: var(--green); }
-.share-x svg { display: block; }
+/* Per-row actions (share icon + optional Clear) grouped so the share icon
+   keeps a fixed position. On desktop they read inline after the name. */
+.row-actions { display: inline-flex; align-items: center; gap: var(--sp-1); }
 
 /* "Clear" — settle a person's balance to zero straight from their ledger row.
    Sits quietly beside the name and warms green on hover, signalling a done deal. */
@@ -835,16 +865,21 @@ button { font-family: var(--body); cursor: pointer; }
   .view { padding: 18px 14px 60px; }
   .panel { padding: 14px; }
 
-  /* roomier touch target for the compact share icon (WCAG 2.5.5);
-     negative vert margin keeps row height unchanged, left gap preserved */
-  .share-x { padding: 9px; margin: -7px 0 -7px var(--sp-1); }
-
   /* tables become stacked cards */
   .ledger-table thead { display: none; }
   .ledger-table, .ledger-table tbody, .ledger-table tr, .ledger-table td { display: block; width: 100%; }
   .ledger-table tr.row { padding: var(--sp-3) 14px; border-bottom: 1px solid var(--line); }
   .ledger-table tr:last-child { border-bottom: none; }
   .ledger-table td { padding: 2px 0; border-bottom: none; }
+
+  /* ledger people/members: the whole collapsed row is its own rounded box */
+  .ledger-table:not(.history-table) tr.row {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin-bottom: var(--sp-2);
+  }
+  .ledger-table:not(.history-table) tr:last-child { margin-bottom: 0; }
   .ledger-table td.num { text-align: left; }
   .ledger-table td.col-person { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
   .ledger-table td[data-label] { display: flex; justify-content: space-between; align-items: baseline; }
