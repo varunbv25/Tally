@@ -343,10 +343,12 @@ function renderLedger() {
     ${confirmOverlay}
     <div class="detail-head">
       <h2 class="section-title">The Ledger</h2>
-      <div class="head-actions">
-        <button class="btn ghost head-action" data-action="open-share-people" ${state.people.length < 1 ? 'disabled title="Add someone first"' : ''}>${SHARE_SVG} Share</button>
-        <button class="btn ghost head-action" data-action="open-split" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>÷ Split expense</button>
-        <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
+      <div class="head-side">
+        <button class="btn ghost head-action head-share" data-action="open-share-people" ${state.people.length < 1 ? 'disabled title="Add someone first"' : ''}>${SHARE_SVG} Share</button>
+        <div class="head-actions">
+          <button class="btn ghost head-action" data-action="open-split" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>÷ Split expense</button>
+          <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
+        </div>
       </div>
     </div>
     <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ paid</em> or <em>− repaid</em>, just like a spreadsheet row. Tap <em>Clear</em> beside a name to settle their debt to zero. Long-press a name to select people, then tap the bin to delete.</p>
