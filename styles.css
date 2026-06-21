@@ -773,6 +773,10 @@ button { font-family: var(--body); cursor: pointer; }
 .head-share { align-self: flex-end; }
 .head-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; justify-content: flex-end; }
 
+/* Share action sitting just above the list of names (ledger people / group
+   members) rather than pinned in the header's top-right corner. */
+.list-share { display: flex; justify-content: flex-end; margin-bottom: var(--sp-2); }
+
 .empty-state {
   text-align: center; padding: 48px var(--sp-5); color: var(--ink-soft);
   font-size: var(--fs-lead);
