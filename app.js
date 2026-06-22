@@ -254,6 +254,19 @@ function renderLedger() {
   const exactMatch = state.people.some(p => p.name.toLowerCase() === q);
   const showAdd = query.length > 0 && !exactMatch;
 
+  /* The "add a new person" prompt. When the search matches existing people it
+     sits *below* the matches (the existing names come first); only when nothing
+     matches does it become the first/only option. */
+  const addPersonBlock = showAdd ? `
+      <div class="add-person-quick">
+        <div class="add-person-quick-head">
+          <span class="add-suggestion-plus" aria-hidden="true">+</span>
+          <span>Add “<b>${esc(query)}</b>” as a new person</span>
+        </div>
+        ${QuickAdd({ idSuffix: 'new', action: 'add-person-entry', titles: true })}
+        <span class="add-person-quick-hint">Leave the amount blank to just add the name.</span>
+      </div>` : '';
+
   const rows = people.map(p => {
     const { principal, interest, total } = balanceDisplay(p);
     const groups = groupsOf(p.id).map(g => Chip(esc(g.name))).join('');
@@ -323,15 +336,7 @@ function renderLedger() {
       <input id="search-box" name="q" placeholder="Search people, or type a new name to add…" value="${esc(ui.search)}" autocomplete="off">
       ${query ? `<button type="button" class="people-search-clear" data-action="clear-search" aria-label="Clear search">×</button>` : ''}
     </form>
-    ${showAdd ? `
-      <div class="add-person-quick">
-        <div class="add-person-quick-head">
-          <span class="add-suggestion-plus" aria-hidden="true">+</span>
-          <span>Add “<b>${esc(query)}</b>” as a new person</span>
-        </div>
-        ${QuickAdd({ idSuffix: 'new', action: 'add-person-entry', titles: true })}
-        <span class="add-person-quick-hint">Leave the amount blank to just add the name.</span>
-      </div>` : ''}
+    ${people.length ? '' : addPersonBlock}
 
     ${people.length ? `
     <div class="list-share">
@@ -344,7 +349,8 @@ function renderLedger() {
         <th>Quick entry</th>
       </tr></thead>
       <tbody>${rows}</tbody>
-    </table>` : (state.people.length === 0
+    </table>
+    ${addPersonBlock}` : (state.people.length === 0
       ? EmptyState(`
           <div class="empty-mark" aria-hidden="true">${Icons.ledgerMark()}</div>
           <h3 class="empty-title">Your ledger is empty</h3>
@@ -1182,16 +1188,19 @@ function renderSharePeopleModal(root) {
   root.innerHTML = Modal({
     overlayId: 'share-overlay',
     overlayCls: 'share-overlay',
+    modalCls: 'modal-share',
     title: 'Share balances',
     closeAction: 'close-share',
     body: `
       <p class="section-sub" style="margin-bottom:14px">Tick who to include — only ticked people are shared.</p>
       ${people.length
-        ? `<div class="share-pick-list">${rows}</div>`
+        ? `<div class="share-pick-list share-scroll">${rows}</div>`
         : '<p class="muted">No people yet.</p>'}
-      <h3 class="subhead">Preview</h3>
-      <pre class="share-preview" id="share-preview"></pre>
-      <div class="form-row tight"><button class="btn" data-action="do-share-people">Share</button></div>`,
+      <div class="share-fixed">
+        <h3 class="subhead">Preview</h3>
+        <pre class="share-preview" id="share-preview"></pre>
+        <div class="form-row tight"><button class="btn" data-action="do-share-people">Share</button></div>
+      </div>`,
   });
 }
 
@@ -1218,16 +1227,19 @@ function renderShareModal() {
   root.innerHTML = Modal({
     overlayId: 'share-overlay',
     overlayCls: 'share-overlay',
+    modalCls: 'modal-share',
     title: `Share ${esc(g.name)}`,
     closeAction: 'close-share',
     body: `
       <p class="section-sub" style="margin-bottom:14px">Tick who to include — unticked people are left out of the shared list.</p>
       ${members.length
-        ? `<div class="share-pick-list">${rows}</div>`
+        ? `<div class="share-pick-list share-scroll">${rows}</div>`
         : '<p class="muted">This group has no members yet.</p>'}
-      <h3 class="subhead">Preview</h3>
-      <pre class="share-preview" id="share-preview"></pre>
-      <div class="form-row tight"><button class="btn" data-action="do-share-group" data-id="${g.id}">Share</button></div>`,
+      <div class="share-fixed">
+        <h3 class="subhead">Preview</h3>
+        <pre class="share-preview" id="share-preview"></pre>
+        <div class="form-row tight"><button class="btn" data-action="do-share-group" data-id="${g.id}">Share</button></div>
+      </div>`,
   });
 }
 
