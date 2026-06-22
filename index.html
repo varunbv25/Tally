@@ -51,6 +51,9 @@
 <header class="masthead">
   <div class="masthead-inner">
     <h1 class="wordmark">Tally<span class="wordmark-dot">.</span></h1>
+    <span class="offline-flag" id="offline-flag" role="status" hidden>
+      <span class="offline-dot" aria-hidden="true"></span>Offline · showing saved data
+    </span>
     <div class="net-stamps" id="net-stamps"></div>
   </div>
   <nav class="tabs" id="tabs">
@@ -75,6 +78,7 @@
 <script src="store.js"></script>
 <script src="notif.js"></script>
 <script src="push.js"></script>
+<script src="cloud.js"></script>
 <!-- Reusable UI components: each file defines one component (a global
      builder that returns an HTML string), reused across the views in
      app.js. Loaded before app.js so they're defined by first render. -->

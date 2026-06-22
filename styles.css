@@ -183,6 +183,20 @@ input, textarea, select, [contenteditable="true"] {
 
 .net-stamps { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; }
 
+/* Offline indicator — subtle pill in the masthead; the app stays fully usable
+   on the locally-stored data, so this reassures rather than alarms. */
+.offline-flag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: var(--fs-cap); font-weight: 500;
+  color: var(--ink-soft); padding: 5px 11px; border-radius: var(--pill);
+  border: 1px solid var(--line-strong); background: var(--bg);
+}
+.offline-flag[hidden] { display: none; }
+.offline-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto;
+  background: #c08a2d; box-shadow: 0 0 0 2px color-mix(in srgb, #c08a2d 22%, transparent);
+}
+
 .stamp {
   font-family: var(--mono); font-size: var(--fs-cap); font-weight: 500;
   padding: 6px 12px; border-radius: var(--pill);

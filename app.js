@@ -230,6 +230,21 @@ async function registerPeriodicSync() {
 
 /* ---------- masthead stamps ---------- */
 
+/* Connectivity indicator. Tally is local-first — every view always renders from
+   localStorage and never blocks on the network — so "offline" never hides data;
+   this badge just tells the user the figures they're seeing are the locally
+   saved copy (and, when signed into cloud sync, that mirroring is paused). */
+function connectionDown() {
+  const navOff = typeof navigator !== 'undefined' && navigator.onLine === false;
+  const syncOff = typeof cloudAuth === 'object' && cloudAuth && cloudAuth.offline;
+  return !!(navOff || syncOff);
+}
+
+function updateConnectivity() {
+  const el = document.getElementById('offline-flag');
+  if (el) el.hidden = !connectionDown();
+}
+
 function renderStamps() {
   const { perCurrency } = netSummary();
   const el = document.getElementById('net-stamps');
@@ -639,6 +654,72 @@ function notificationsPanel() {
       ${row('capitalizeSuggest', 'Interest exceeds', num('capitalizeSuggest', 'percent', '% of principal', 'min="1" step="1"'))}
       <p class="muted">Computed on this device — amounts compare in each person’s own currency. Background alerts work where Tally is installed as an app (Android/Chrome); elsewhere you’re notified when you open Tally.</p>`,
   });
+}
+
+/* Opt-in email cloud sync. Mirrors notificationsPanel()'s shape: a single
+   Panel whose body switches on cloudAuth.status (idle → code-sent → signed-in).
+   All the heavy lifting lives in cloud.js; this is purely presentation. */
+function cloudSyncPanel() {
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const err = cloudAuth.error ? `<div class="banner">${esc(cloudAuth.error)}</div>` : '';
+  const busy = cloudAuth.busy;
+
+  let body;
+  if (!cloudConfigured()) {
+    body = `<p class="muted">Cloud sync isn’t set up for this deployment. It’s an
+      optional self-hosted service — see the Worker setup in the project README.</p>`;
+  } else if (cloudAuth.status === 'signed-in') {
+    const last = cloudAuth.lastSync
+      ? `Last synced ${fmtDate(new Date(cloudAuth.lastSync).toISOString())} at ${new Date(cloudAuth.lastSync).toLocaleTimeString()}`
+      : 'Not synced yet this session';
+    const offline = connectionDown()
+      ? `<div class="banner">Offline — you're seeing the copy saved on this device. Changes will mirror to the cloud automatically once you're back online.</div>`
+      : '';
+    body = `
+      ${err}
+      ${offline}
+      <p class="muted">Signed in as <strong>${esc(cloudAuth.email)}</strong>. Your ledger
+        is mirrored to the cloud after every change, so signing in with the same email on
+        another device pulls it down.</p>
+      <p class="muted">${last}</p>
+      <div class="form-row tight" style="margin-top:12px">
+        <button class="btn" data-action="cloud-sync-now" ${busy ? 'disabled' : ''}>${busy ? 'Syncing…' : 'Sync now'}</button>
+        <button class="btn ghost" data-action="cloud-signout" ${busy ? 'disabled' : ''}>Sign out</button>
+      </div>
+      <p class="muted">Signing out leaves this device’s ledger untouched — it just stops mirroring.</p>`;
+  } else if (cloudAuth.status === 'code-sent') {
+    body = `
+      ${err}
+      <p class="muted">We emailed a 6-digit code to <strong>${esc(cloudAuth.email)}</strong>. Enter it below — it expires in 10 minutes.</p>
+      <div class="form-row">
+        <label>Sign-in code
+          <input type="text" id="cloud-code" inputmode="numeric" autocomplete="one-time-code"
+                 maxlength="6" placeholder="123456" ${busy ? 'disabled' : ''}>
+        </label>
+      </div>
+      <div class="form-row tight">
+        <button class="btn" data-action="cloud-verify" ${busy ? 'disabled' : ''}>${busy ? 'Verifying…' : 'Verify & sign in'}</button>
+        <button class="btn ghost" data-action="cloud-reset-email" ${busy ? 'disabled' : ''}>Use a different email</button>
+      </div>`;
+  } else {
+    body = `
+      ${err}
+      <p class="muted">Mirror your ledger to the cloud so you can pick it up on another
+        device. Sign in with just your email — we’ll send a one-time code. No password,
+        no phone number.</p>
+      <div class="form-row">
+        <label>Email
+          <input type="email" id="cloud-email" inputmode="email" autocomplete="email"
+                 placeholder="you@example.com" ${busy ? 'disabled' : ''}>
+        </label>
+      </div>
+      <div class="form-row tight">
+        <button class="btn" data-action="cloud-send-code" ${busy ? 'disabled' : ''}>${busy ? 'Sending…' : 'Send sign-in code'}</button>
+      </div>
+      <p class="muted">Opt-in and off by default — until you sign in, nothing leaves this browser.</p>`;
+  }
+
+  return Panel({ title: 'Cloud sync', body });
 }
 
 /* ---------- history view ---------- */
@@ -1300,6 +1381,8 @@ function renderSettings() {
 
     ${notificationsPanel()}
 
+    ${cloudSyncPanel()}
+
     ${Panel({
       title: 'Currency',
       body: `
@@ -1477,6 +1560,7 @@ function renderModal() {
 
 function render() {
   renderStamps();
+  updateConnectivity();
 
   document.querySelectorAll('.tab').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === ui.tab));
@@ -1747,6 +1831,23 @@ document.addEventListener('click', e => {
         commit();
       }
       break;
+
+    /* ---- cloud sync (cloud.js owns the async + re-render) ---- */
+    case 'cloud-send-code': {
+      const email = (document.getElementById('cloud-email')?.value || '').trim();
+      if (!email) { showToast('Enter your email first'); break; }
+      cloudRequestCode(email);
+      break;
+    }
+    case 'cloud-verify': {
+      const code = (document.getElementById('cloud-code')?.value || '').trim();
+      if (!code) { showToast('Enter the 6-digit code'); break; }
+      cloudVerifyCode(code);
+      break;
+    }
+    case 'cloud-reset-email': cloudResetToEmail(); break;
+    case 'cloud-sync-now': cloudSyncNow(); break;
+    case 'cloud-signout': doCloudSignOut(); break;
   }
 });
 
@@ -2129,3 +2230,14 @@ history.replaceState(navState(), '');   // anchor root so back-navigation has a 
 render();
 runNotificationCheck();
 registerPeriodicSync();
+if (typeof cloudInit === 'function') cloudInit();   // opt-in cloud sync (no-op unless configured + signed in)
+
+/* Reflect connectivity changes immediately. The local ledger keeps rendering
+   either way; going offline just shows the badge, and coming back online clears
+   it and lets cloud sync (if on) catch up on anything edited meanwhile. */
+window.addEventListener('offline', updateConnectivity);
+window.addEventListener('online', () => {
+  if (typeof cloudOnReconnect === 'function') cloudOnReconnect();
+  updateConnectivity();
+});
+updateConnectivity();   // in case we loaded while already offline
