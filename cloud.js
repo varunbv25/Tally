@@ -19,6 +19,7 @@ const SYNC_SERVER = (typeof PUSH_SERVER === 'string' && PUSH_SERVER) || '';
 
 const CLOUD_AUTH_KEY = 'tally-cloud';          // { token, email }
 const CLOUD_UPDATED_KEY = 'tally-cloud-updated'; // local ledger version (ms)
+const CLOUD_TIMEOUT_MS = 8000;                 // give up on a slow request and fall back to local data
 
 /* UI-facing state machine, read by cloudSyncPanel() in app.js. */
 let cloudAuth = {
@@ -28,6 +29,7 @@ let cloudAuth = {
   busy: false,
   error: '',
   lastSync: 0,
+  offline: false,
 };
 
 let cloudApplying = false;   // true while we write a pulled blob (suppresses re-upload)
@@ -35,6 +37,15 @@ let cloudPushTimer = null;
 
 function cloudConfigured() { return !!SYNC_SERVER; }
 function cloudSignedIn() { return cloudAuth.status === 'signed-in' && !!cloudAuth.token; }
+
+/* The connection is considered down when the browser reports offline OR a sync
+   request just failed/timed out (weak signal). The app always keeps rendering
+   the locally-stored ledger; this only drives the status indicator + retries. */
+function setCloudOffline(off) {
+  if (cloudAuth.offline === off) return;
+  cloudAuth.offline = off;
+  if (typeof updateConnectivity === 'function') updateConnectivity();
+}
 
 function cloudLocalUpdated() { return Number(localStorage.getItem(CLOUD_UPDATED_KEY) || 0); }
 function setCloudLocalUpdated(ms) { localStorage.setItem(CLOUD_UPDATED_KEY, String(ms)); }
@@ -68,7 +79,22 @@ function clearCloudSession() {
 async function cloudFetch(path, opts = {}) {
   const headers = { 'content-type': 'application/json', ...(opts.headers || {}) };
   if (cloudAuth.token) headers.authorization = `Bearer ${cloudAuth.token}`;
-  const res = await fetch(SYNC_SERVER + path, { ...opts, headers });
+
+  /* Time-box every call: a weak connection should fail fast and fall back to
+     the local copy, never hang the UI on a spinner. */
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CLOUD_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(SYNC_SERVER + path, { ...opts, headers, signal: ctrl.signal });
+  } catch {
+    setCloudOffline(true);   // timeout, abort, or no network
+    throw new Error('No connection — showing the copy saved on this device');
+  } finally {
+    clearTimeout(timer);
+  }
+  setCloudOffline(false);     // we reached the server
+
   if (res.status === 401 && cloudSignedIn()) {
     // token rejected / expired — drop back to signed-out so the user re-auths
     doCloudSignOut(true);
@@ -120,7 +146,7 @@ async function cloudVerifyCode(code) {
 }
 
 function doCloudSignOut(silent) {
-  cloudAuth = { status: 'idle', email: '', token: '', busy: false, error: '', lastSync: 0 };
+  cloudAuth = { status: 'idle', email: '', token: '', busy: false, error: '', lastSync: 0, offline: false };
   clearCloudSession();
   if (!silent && typeof showToast === 'function') showToast('Signed out — your ledger stays on this device');
   if (typeof render === 'function') render();
@@ -167,6 +193,9 @@ async function cloudReconcile() {
 
 async function cloudPush() {
   if (!cloudSignedIn()) return;
+  // Don't bother attempting a doomed upload while offline — the edit is safe in
+  // localStorage and cloudOnReconnect() will push it once we're back online.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) { setCloudOffline(true); return; }
   const json = localStorage.getItem(LS_KEY);
   if (!json) return;
   const updatedAt = cloudLocalUpdated() || Date.now();
@@ -216,4 +245,11 @@ function cloudInit() {
     // pull anything newer that another device may have pushed while we were away
     cloudReconcile().catch(() => {});
   }
+}
+
+/* Called by app.js when the browser fires 'online'. Clears the offline flag and,
+   if signed in, reconciles (which pushes any edits made while we were offline). */
+function cloudOnReconnect() {
+  setCloudOffline(false);
+  if (cloudSignedIn()) cloudReconcile().catch(() => {});
 }

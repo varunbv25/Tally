@@ -230,6 +230,21 @@ async function registerPeriodicSync() {
 
 /* ---------- masthead stamps ---------- */
 
+/* Connectivity indicator. Tally is local-first — every view always renders from
+   localStorage and never blocks on the network — so "offline" never hides data;
+   this badge just tells the user the figures they're seeing are the locally
+   saved copy (and, when signed into cloud sync, that mirroring is paused). */
+function connectionDown() {
+  const navOff = typeof navigator !== 'undefined' && navigator.onLine === false;
+  const syncOff = typeof cloudAuth === 'object' && cloudAuth && cloudAuth.offline;
+  return !!(navOff || syncOff);
+}
+
+function updateConnectivity() {
+  const el = document.getElementById('offline-flag');
+  if (el) el.hidden = !connectionDown();
+}
+
 function renderStamps() {
   const { perCurrency } = netSummary();
   const el = document.getElementById('net-stamps');
@@ -657,8 +672,12 @@ function cloudSyncPanel() {
     const last = cloudAuth.lastSync
       ? `Last synced ${fmtDate(new Date(cloudAuth.lastSync).toISOString())} at ${new Date(cloudAuth.lastSync).toLocaleTimeString()}`
       : 'Not synced yet this session';
+    const offline = connectionDown()
+      ? `<div class="banner">Offline — you're seeing the copy saved on this device. Changes will mirror to the cloud automatically once you're back online.</div>`
+      : '';
     body = `
       ${err}
+      ${offline}
       <p class="muted">Signed in as <strong>${esc(cloudAuth.email)}</strong>. Your ledger
         is mirrored to the cloud after every change, so signing in with the same email on
         another device pulls it down.</p>
@@ -1541,6 +1560,7 @@ function renderModal() {
 
 function render() {
   renderStamps();
+  updateConnectivity();
 
   document.querySelectorAll('.tab').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === ui.tab));
@@ -2211,3 +2231,13 @@ render();
 runNotificationCheck();
 registerPeriodicSync();
 if (typeof cloudInit === 'function') cloudInit();   // opt-in cloud sync (no-op unless configured + signed in)
+
+/* Reflect connectivity changes immediately. The local ledger keeps rendering
+   either way; going offline just shows the badge, and coming back online clears
+   it and lets cloud sync (if on) catch up on anything edited meanwhile. */
+window.addEventListener('offline', updateConnectivity);
+window.addEventListener('online', () => {
+  if (typeof cloudOnReconnect === 'function') cloudOnReconnect();
+  updateConnectivity();
+});
+updateConnectivity();   // in case we loaded while already offline

@@ -122,6 +122,13 @@ whole-blob last-write-wins by timestamp (Tally is single-user, so the only
 saved one wins). Signing out leaves the device's ledger untouched; it just
 stops mirroring.
 
+Because the app reads from `localStorage`, a weak or dropped connection never
+blocks anything: every view keeps rendering the locally-saved data, an
+**“Offline · showing saved data”** badge appears in the header, and any edits
+made while offline mirror to the cloud automatically once you're back online
+(sync requests are time-boxed so they fail fast to local rather than hanging on
+a spinner).
+
 **Cost:** the email path is effectively free. The whole feature runs on the
 same Cloudflare Worker that powers push (free tier: 100k requests/day) with a
 Cloudflare KV namespace for storage (free tier: 1k writes/day, ample for a

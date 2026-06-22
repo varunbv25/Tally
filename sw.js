@@ -3,7 +3,7 @@
 
 importScripts('./store.js', './notif.js');
 
-const CACHE = 'tally-v28';
+const CACHE = 'tally-v29';
 const SHELL = [
   './',
   './index.html',
