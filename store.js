@@ -76,6 +76,8 @@ function saveState() {
   if (typeof idbSet === 'function' && typeof indexedDB !== 'undefined') {
     idbSet('state', json).catch(() => {});
   }
+  /* opt-in cloud mirror; defined in cloud.js, no-op unless signed in */
+  if (typeof cloudOnSave === 'function') cloudOnSave();
 }
 
 /* ---------- CRUD ---------- */

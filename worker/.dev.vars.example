@@ -1,0 +1,18 @@
+# Tally Worker secrets. Copy to `.dev.vars` for local `wrangler dev`, and set
+# the same values in production with `npx wrangler secret put <NAME>`.
+
+# --- Push (existing) ---
+VAPID_SUBJECT="mailto:you@example.com"
+VAPID_PUBLIC_KEY=""
+VAPID_PRIVATE_KEY=""
+
+# --- Cloud sync (opt-in email accounts) ---
+# Long random string used to sign bearer tokens. Generate one with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+AUTH_SECRET=""
+
+# Resend (https://resend.com) delivers the 6-digit sign-in codes. The free
+# tier (3,000 emails/month) is plenty for personal use. MAIL_FROM must be a
+# verified sender on a domain you've added to Resend.
+RESEND_API_KEY=""
+MAIL_FROM="Tally <login@yourdomain.com>"

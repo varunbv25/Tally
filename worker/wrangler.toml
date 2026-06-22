@@ -3,7 +3,12 @@ main = "src/index.js"
 compatibility_date = "2026-06-01"
 
 kv_namespaces = [
-  { binding = "TALLY_PUSH", id = "843aea42ba0248139aade8b5e276734a" }
+  { binding = "TALLY_PUSH", id = "843aea42ba0248139aade8b5e276734a" },
+  # Opt-in cloud sync — dormant until enabled. To turn it on:
+  #   npx wrangler kv namespace create TALLY_SYNC
+  # then uncomment the line below with the printed id, and set the AUTH_SECRET /
+  # RESEND_API_KEY / MAIL_FROM secrets (see .dev.vars.example).
+  # { binding = "TALLY_SYNC", id = "PASTE_TALLY_SYNC_KV_ID" }
 ]
 
 [triggers]

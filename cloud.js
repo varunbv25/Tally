@@ -1,0 +1,219 @@
+/* =========================================================
+   TALLY — opt-in cloud sync (email accounts)
+   Local-first: localStorage stays the source of truth. When the user
+   signs in (a 6-digit code emailed by the Worker), the whole ledger blob
+   is mirrored to the cloud so it can be pulled onto another device.
+
+   Reconciliation is deliberately simple — whole-blob last-write-wins by
+   timestamp. Tally's data is single-user, so the only "conflict" is the
+   same person editing two devices while offline; the most recently saved
+   device wins. That's predictable and good enough for a personal ledger.
+
+   SYNC_SERVER === '' (or no account) keeps every path below dormant, so
+   the app behaves exactly as it always has: nothing leaves the browser.
+   Phone sign-in is intentionally not offered — it needs a paid SMS gateway.
+   ========================================================= */
+
+/* Reuse the same Worker that serves push. Empty string disables sync. */
+const SYNC_SERVER = (typeof PUSH_SERVER === 'string' && PUSH_SERVER) || '';
+
+const CLOUD_AUTH_KEY = 'tally-cloud';          // { token, email }
+const CLOUD_UPDATED_KEY = 'tally-cloud-updated'; // local ledger version (ms)
+
+/* UI-facing state machine, read by cloudSyncPanel() in app.js. */
+let cloudAuth = {
+  status: 'idle',   // 'idle' | 'code-sent' | 'signed-in'
+  email: '',
+  token: '',
+  busy: false,
+  error: '',
+  lastSync: 0,
+};
+
+let cloudApplying = false;   // true while we write a pulled blob (suppresses re-upload)
+let cloudPushTimer = null;
+
+function cloudConfigured() { return !!SYNC_SERVER; }
+function cloudSignedIn() { return cloudAuth.status === 'signed-in' && !!cloudAuth.token; }
+
+function cloudLocalUpdated() { return Number(localStorage.getItem(CLOUD_UPDATED_KEY) || 0); }
+function setCloudLocalUpdated(ms) { localStorage.setItem(CLOUD_UPDATED_KEY, String(ms)); }
+
+/* ---------- persistence of the session ---------- */
+
+function loadCloudSession() {
+  try {
+    const raw = localStorage.getItem(CLOUD_AUTH_KEY);
+    if (!raw) return;
+    const { token, email } = JSON.parse(raw);
+    if (token && email) {
+      cloudAuth.token = token;
+      cloudAuth.email = email;
+      cloudAuth.status = 'signed-in';
+    }
+  } catch { /* corrupt session — stay signed out */ }
+}
+
+function saveCloudSession() {
+  localStorage.setItem(CLOUD_AUTH_KEY, JSON.stringify({ token: cloudAuth.token, email: cloudAuth.email }));
+}
+
+function clearCloudSession() {
+  localStorage.removeItem(CLOUD_AUTH_KEY);
+  localStorage.removeItem(CLOUD_UPDATED_KEY);
+}
+
+/* ---------- network ---------- */
+
+async function cloudFetch(path, opts = {}) {
+  const headers = { 'content-type': 'application/json', ...(opts.headers || {}) };
+  if (cloudAuth.token) headers.authorization = `Bearer ${cloudAuth.token}`;
+  const res = await fetch(SYNC_SERVER + path, { ...opts, headers });
+  if (res.status === 401 && cloudSignedIn()) {
+    // token rejected / expired — drop back to signed-out so the user re-auths
+    doCloudSignOut(true);
+    throw new Error('Session expired — sign in again');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Something went wrong');
+  return data;
+}
+
+/* ---------- auth flow ---------- */
+
+async function cloudRequestCode(email) {
+  if (!cloudConfigured() || cloudAuth.busy) return;
+  cloudAuth.busy = true; cloudAuth.error = '';
+  if (typeof render === 'function') render();
+  try {
+    await cloudFetch('/auth/start', { method: 'POST', body: JSON.stringify({ email }) });
+    cloudAuth.email = email;
+    cloudAuth.status = 'code-sent';
+  } catch (err) {
+    cloudAuth.error = err.message;
+  } finally {
+    cloudAuth.busy = false;
+    if (typeof render === 'function') render();
+  }
+}
+
+async function cloudVerifyCode(code) {
+  if (!cloudConfigured() || cloudAuth.busy) return;
+  cloudAuth.busy = true; cloudAuth.error = '';
+  if (typeof render === 'function') render();
+  try {
+    const { token, email } = await cloudFetch('/auth/verify', {
+      method: 'POST', body: JSON.stringify({ email: cloudAuth.email, code }),
+    });
+    cloudAuth.token = token;
+    cloudAuth.email = email;
+    cloudAuth.status = 'signed-in';
+    saveCloudSession();
+    if (typeof showToast === 'function') showToast('Signed in — syncing…');
+    await cloudReconcile();
+  } catch (err) {
+    cloudAuth.error = err.message;
+  } finally {
+    cloudAuth.busy = false;
+    if (typeof render === 'function') render();
+  }
+}
+
+function doCloudSignOut(silent) {
+  cloudAuth = { status: 'idle', email: '', token: '', busy: false, error: '', lastSync: 0 };
+  clearCloudSession();
+  if (!silent && typeof showToast === 'function') showToast('Signed out — your ledger stays on this device');
+  if (typeof render === 'function') render();
+}
+
+function cloudResetToEmail() {
+  cloudAuth.status = 'idle';
+  cloudAuth.error = '';
+  if (typeof render === 'function') render();
+}
+
+/* ---------- sync ---------- */
+
+/* Replace the whole local ledger with a blob pulled from the cloud,
+   without bouncing it straight back up. */
+function applyCloudState(newState, updatedAt) {
+  cloudApplying = true;
+  try {
+    state = newState;          // store.js' module-global, shared across scripts
+    saveState();               // writes localStorage + the SW's IDB mirror
+    setCloudLocalUpdated(updatedAt);
+  } finally {
+    cloudApplying = false;
+  }
+}
+
+async function cloudReconcile() {
+  if (!cloudSignedIn()) return 'idle';
+  const remote = await cloudFetch('/ledger', { method: 'GET' });
+  const localUpdated = cloudLocalUpdated();
+  if (remote && remote.state != null && remote.updatedAt > localUpdated) {
+    applyCloudState(remote.state, remote.updatedAt);
+    cloudAuth.lastSync = Date.now();
+    if (typeof render === 'function') render();
+    return 'pulled';
+  }
+  if (remote && remote.state != null && remote.updatedAt === localUpdated) {
+    cloudAuth.lastSync = Date.now();
+    return 'in-sync';
+  }
+  await cloudPush();            // local is newer, or the cloud is empty
+  return 'pushed';
+}
+
+async function cloudPush() {
+  if (!cloudSignedIn()) return;
+  const json = localStorage.getItem(LS_KEY);
+  if (!json) return;
+  const updatedAt = cloudLocalUpdated() || Date.now();
+  await cloudFetch('/ledger', {
+    method: 'PUT',
+    body: JSON.stringify({ state: JSON.parse(json), updatedAt }),
+  });
+  setCloudLocalUpdated(updatedAt);
+  cloudAuth.lastSync = Date.now();
+}
+
+/* Manual "Sync now" button. */
+async function cloudSyncNow() {
+  if (!cloudSignedIn() || cloudAuth.busy) return;
+  cloudAuth.busy = true; cloudAuth.error = '';
+  if (typeof render === 'function') render();
+  try {
+    const result = await cloudReconcile();
+    if (typeof showToast === 'function') {
+      showToast(result === 'pulled' ? 'Pulled the latest from the cloud'
+              : result === 'pushed' ? 'Uploaded this device’s ledger'
+              : 'Already up to date');
+    }
+  } catch (err) {
+    cloudAuth.error = err.message;
+  } finally {
+    cloudAuth.busy = false;
+    if (typeof render === 'function') render();
+  }
+}
+
+/* Called from store.js saveState() on every local change. Bumps the local
+   version and debounces an upload. No-ops unless signed in. */
+function cloudOnSave() {
+  if (cloudApplying || !cloudSignedIn()) return;
+  setCloudLocalUpdated(Date.now());
+  clearTimeout(cloudPushTimer);
+  cloudPushTimer = setTimeout(() => { cloudPush().catch(() => {}); }, 3000);
+}
+
+/* ---------- boot ---------- */
+
+function cloudInit() {
+  if (!cloudConfigured()) return;
+  loadCloudSession();
+  if (cloudSignedIn()) {
+    // pull anything newer that another device may have pushed while we were away
+    cloudReconcile().catch(() => {});
+  }
+}

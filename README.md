@@ -3,8 +3,10 @@
 A Splitwise-style debt tracker with the parts Splitwise won't give you: an
 Excel-like quick-entry ledger, configurable **simple & compound interest**,
 **conditional formatting**, shared people across **multiple groups**, and
-**multi-currency** support. No build step, no account, no server — your data
-lives in your browser's `localStorage`.
+**multi-currency** support. No build step and no account required — by
+default your data lives entirely in your browser's `localStorage`. An
+**optional, opt-in email cloud sync** can mirror your ledger across devices
+(see below); until you sign in, nothing ever leaves the browser.
 
 ## Run it
 
@@ -107,7 +109,35 @@ per currency — amounts are never converted between currencies.
 Export/import a CSV spreadsheet from Settings (one row per entry, opens in
 Excel/Sheets/Numbers). Importing rebuilds people, groups and entries;
 interest rules and settings stay on the device. Nothing ever leaves the
-browser unless you export it.
+browser unless you export it — **or** unless you opt in to cloud sync.
+
+### Cloud sync (optional, email-only)
+Under **Settings → Cloud sync** you can sign in with just an email address —
+the server emails a 6-digit one-time code, no password and no phone number.
+Once signed in, your whole ledger is mirrored to the cloud after every change,
+so signing in with the same email on another device pulls it down. It's
+**local-first**: `localStorage` stays the source of truth and reconciliation is
+whole-blob last-write-wins by timestamp (Tally is single-user, so the only
+"conflict" is the same person editing two devices offline — the most recently
+saved one wins). Signing out leaves the device's ledger untouched; it just
+stops mirroring.
+
+**Cost:** the email path is effectively free. The whole feature runs on the
+same Cloudflare Worker that powers push (free tier: 100k requests/day) with a
+Cloudflare KV namespace for storage (free tier: 1k writes/day, ample for a
+personal ledger), and sign-in emails go through [Resend](https://resend.com)
+whose free tier covers 3,000 emails/month. Phone/SMS sign-in is deliberately
+**not** offered because it would require a paid SMS gateway.
+
+**Self-host setup** (the feature is dormant until configured):
+1. Create the sync KV namespace and paste its id into `worker/wrangler.toml`:
+   `npx wrangler kv namespace create TALLY_SYNC`.
+2. Set the Worker secrets (see `worker/.dev.vars.example`):
+   `AUTH_SECRET` (a long random string used to sign tokens), plus `RESEND_API_KEY`
+   and `MAIL_FROM` from a verified Resend sender —
+   `npx wrangler secret put AUTH_SECRET` (and likewise for the others).
+3. Deploy the Worker and point `SYNC_SERVER` in `cloud.js` at it (it defaults
+   to the same `PUSH_SERVER` URL from `push.js`).
 
 ## Architecture
 
@@ -115,6 +145,7 @@ browser unless you export it.
 |---|---|
 | `store.js` | State, persistence, CRUD, the interest engine, currency math |
 | `app.js` | Rendering (vanilla JS, full re-render) and delegated event handling |
+| `cloud.js` | Opt-in email cloud sync — auth state machine, push/pull, hooks `saveState` |
 | `components/` | Reusable UI components, one per file — see below |
 | `styles.css` | Banker's-ledger theme (Fraunces + IBM Plex, cream paper, green ink); type/spacing/radii driven by design tokens in `:root` |
 | `serve.js` | Optional zero-dependency dev server |
