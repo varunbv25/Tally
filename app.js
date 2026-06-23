@@ -703,11 +703,17 @@ function cloudSyncPanel() {
         <button class="btn ghost" data-action="cloud-reset-email" ${busy ? 'disabled' : ''}>Use a different email</button>
       </div>`;
   } else {
+    const google = typeof googleConfigured === 'function' && googleConfigured();
+    const googleBlock = google ? `
+      <div id="google-signin-btn" class="google-signin"></div>
+      <div class="auth-divider"><span>or use email</span></div>` : '';
     body = `
       ${err}
       <p class="muted">Mirror your ledger to the cloud so you can pick it up on another
-        device. Sign in with just your email — we’ll send a one-time code. No password,
-        no phone number.</p>
+        device. ${google
+          ? 'Sign in with Google, or get a one-time code by email.'
+          : 'Sign in with just your email — we’ll send a one-time code. No password, no phone number.'}</p>
+      ${googleBlock}
       <div class="form-row">
         <label>Email
           <input type="email" id="cloud-email" inputmode="email" autocomplete="email"
@@ -726,7 +732,7 @@ function cloudSyncPanel() {
 /* First-run onboarding popup: offered once (see cloudShouldPrompt in cloud.js),
    it asks whether to set up cloud sync. Either choice marks the prompt seen, so
    returning users never see it again — for them sync just sits in Settings.
-   "Set up cloud sync" drops the user onto the Settings → Cloud sync panel. */
+   "Set up cloud sync" drops the user onto the Account → Cloud sync panel. */
 function renderCloudPrompt() {
   const root = document.getElementById('cloud-prompt-root');
   if (!root) return;
@@ -745,7 +751,7 @@ function renderCloudPrompt() {
         <button class="btn" data-action="cloud-prompt-signin">Set up cloud sync</button>
         <button class="btn ghost" data-action="cloud-prompt-dismiss">Not now</button>
       </div>
-      <p class="muted" style="margin-top:12px">You can always turn this on later from Settings → Cloud sync.</p>`,
+      <p class="muted" style="margin-top:12px">You can always turn this on later from Account → Cloud sync.</p>`,
   });
 }
 
@@ -759,7 +765,7 @@ function dismissCloudPrompt() {
 /* Jump to Settings and bring the Cloud sync panel into view + briefly highlight
    it, so "Set up cloud sync" lands the user exactly where they can sign in. */
 function openCloudSyncSettings() {
-  ui.tab = 'settings';
+  ui.tab = 'account';
   pushNav();
   render();
   requestAnimationFrame(() => {
@@ -1477,12 +1483,24 @@ function renderSettings() {
 
   return `
     <h2 class="section-title">Settings</h2>
-    <p class="section-sub">Your ledger lives in this browser — nothing leaves it unless you turn on cloud sync or export it.</p>
+    <p class="section-sub">Your ledger lives in this browser — nothing leaves it unless you turn on cloud sync (under Account) or export it.</p>
 
     ${group('Preferences', appearancePanel() + currencyPanel())}
-    ${group('Sync &amp; alerts', cloudSyncPanel() + notificationsPanel())}
+    ${group('Alerts', notificationsPanel())}
     ${group('Interest', interestRulesPanel())}
     ${group('Your data', dataPanel())}
+  `;
+}
+
+/* Account: sign-in and cloud sync, split out of Settings so it has its own
+   place in the drawer. The heavy lifting still lives in cloud.js; this is
+   just the page wrapper around cloudSyncPanel(). */
+function renderAccount() {
+  return `
+    <h2 class="section-title">Account</h2>
+    <p class="section-sub">Sign in to mirror your ledger to the cloud and pick it up on another device. Until you do, everything stays in this browser.</p>
+
+    ${cloudSyncPanel()}
   `;
 }
 
@@ -1621,7 +1639,7 @@ function render() {
   renderStamps();
   updateConnectivity();
 
-  document.querySelectorAll('.tab').forEach(t =>
+  document.querySelectorAll('.drawer-item').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === ui.tab));
 
   const view = document.getElementById('view');
@@ -1630,7 +1648,11 @@ function render() {
     case 'groups':   view.innerHTML = renderGroups(); break;
     case 'history':  view.innerHTML = renderHistory(); break;
     case 'settings': view.innerHTML = renderSettings(); break;
+    case 'account':  view.innerHTML = renderAccount(); break;
   }
+  // The Google sign-in button is drawn by the Google Identity script into a
+  // placeholder that only exists after the Account view is rendered.
+  if (typeof cloudMountGoogleButton === 'function') cloudMountGoogleButton();
   renderModal();
   renderIndirectModal();
   renderSplitModal();
@@ -2208,16 +2230,44 @@ document.addEventListener('keydown', e => {
   if (btn) { e.preventDefault(); btn.click(); }
 });
 
-document.getElementById('tabs').addEventListener('click', e => {
-  const tab = e.target.closest('.tab');
-  if (!tab) return;
-  const newTab = tab.dataset.tab;
-  // already here with nothing drilled in → no-op
-  if (newTab === ui.tab && !ui.openGroupId && !ui.modalPersonId && !ui.indirectOpen && !ui.splitOpen && !ui.shareGroupId && !ui.sharePeopleOpen && !ui.selectMode && !ui.memberSelect && !ui.personSelect) return;
+/* ---------- navigation drawer (hamburger menu) ---------- */
 
-  // Ledger is home/floor: returning to it unwinds the back stack so the next
-  // OS-back exits the app instead of replaying earlier tabs. popstate then
-  // restores the floor state and re-renders.
+function openDrawer() {
+  const d = document.getElementById('drawer');
+  const s = document.getElementById('drawer-scrim');
+  s.hidden = false;
+  // Two frames so the off-screen start position is painted before we
+  // transition in — otherwise the slide/fade is skipped.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    d.classList.add('open'); s.classList.add('open');
+  }));
+  d.setAttribute('aria-hidden', 'false');
+  document.getElementById('menu-toggle').setAttribute('aria-expanded', 'true');
+  document.body.classList.add('menu-open');
+}
+
+function closeDrawer() {
+  const d = document.getElementById('drawer');
+  const s = document.getElementById('drawer-scrim');
+  if (!d.classList.contains('open')) return;
+  d.classList.remove('open'); s.classList.remove('open');
+  d.setAttribute('aria-hidden', 'true');
+  document.getElementById('menu-toggle').setAttribute('aria-expanded', 'false');
+  document.body.classList.remove('menu-open');
+  // hide the scrim only after the fade-out so it can't swallow taps mid-close
+  setTimeout(() => { if (!d.classList.contains('open')) s.hidden = true; }, 260);
+}
+
+/* Switch top-level views. Shared by the drawer items and the wordmark
+   (which acts as "home"). Mirrors the old tab-bar behaviour: returning to
+   the Ledger floor unwinds the back stack so the next OS-back exits. */
+function navigateTab(newTab) {
+  const drilledIn = ui.openGroupId || ui.modalPersonId || ui.indirectOpen ||
+    ui.splitOpen || ui.shareGroupId || ui.sharePeopleOpen || ui.selectMode ||
+    ui.memberSelect || ui.personSelect;
+  // already here with nothing drilled in → no-op
+  if (newTab === ui.tab && !drilledIn) return;
+
   if (newTab === 'ledger' && navDepth > 0) { history.go(-navDepth); return; }
 
   ui.tab = newTab;
@@ -2240,6 +2290,28 @@ document.getElementById('tabs').addEventListener('click', e => {
   ui.confirmClearDebt = null;
   pushNav();
   render();
+}
+
+document.getElementById('menu-toggle').addEventListener('click', openDrawer);
+document.getElementById('menu-close').addEventListener('click', closeDrawer);
+document.getElementById('drawer-scrim').addEventListener('click', closeDrawer);
+
+document.getElementById('drawer-nav').addEventListener('click', e => {
+  const item = e.target.closest('.drawer-item');
+  if (!item) return;
+  closeDrawer();
+  navigateTab(item.dataset.tab);
+});
+
+// Tapping the wordmark returns home to the ledger.
+const homeLink = document.getElementById('home-link');
+homeLink.addEventListener('click', () => navigateTab('ledger'));
+homeLink.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigateTab('ledger'); }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeDrawer();
 });
 
 /* ---------- long-press a history entry to delete it (touch + mouse) ---------- */

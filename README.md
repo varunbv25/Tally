@@ -5,8 +5,9 @@ Excel-like quick-entry ledger, configurable **simple & compound interest**,
 **conditional formatting**, shared people across **multiple groups**, and
 **multi-currency** support. No build step and no account required — by
 default your data lives entirely in your browser's `localStorage`. An
-**optional, opt-in email cloud sync** can mirror your ledger across devices
-(see below); until you sign in, nothing ever leaves the browser.
+**optional, opt-in cloud sync** (sign in with Google or a one-time email code)
+can mirror your ledger across devices (see below); until you sign in, nothing
+ever leaves the browser.
 
 ## Run it
 
@@ -111,11 +112,18 @@ Excel/Sheets/Numbers). Importing rebuilds people, groups and entries;
 interest rules and settings stay on the device. Nothing ever leaves the
 browser unless you export it — **or** unless you opt in to cloud sync.
 
-### Cloud sync (optional, email-only)
-Under **Settings → Cloud sync** you can sign in with just an email address —
-the server emails a 6-digit one-time code, no password and no phone number.
+### Cloud sync (optional)
+Under **Account** (in the hamburger menu) you can sign in to mirror your
+ledger to the cloud. Two ways in, both keyed to your email address so they
+resolve to the same ledger:
+
+- **Sign in with Google** — the primary option when a Google OAuth client ID is
+  configured (see setup below). One tap, no code to type.
+- **Email one-time code** — always available as a fallback: enter an email and
+  the server sends a 6-digit code, no password and no phone number.
+
 Once signed in, your whole ledger is mirrored to the cloud after every change,
-so signing in with the same email on another device pulls it down. It's
+so signing in with the same account on another device pulls it down. It's
 **local-first**: `localStorage` stays the source of truth and reconciliation is
 whole-blob last-write-wins by timestamp (Tally is single-user, so the only
 "conflict" is the same person editing two devices offline — the most recently
@@ -145,6 +153,12 @@ whose free tier covers 3,000 emails/month. Phone/SMS sign-in is deliberately
    `npx wrangler secret put AUTH_SECRET` (and likewise for the others).
 3. Deploy the Worker and point `SYNC_SERVER` in `cloud.js` at it (it defaults
    to the same `PUSH_SERVER` URL from `push.js`).
+4. *(Optional)* To enable **Sign in with Google**: create an OAuth 2.0 Web
+   client ID in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
+   add your app's origin to its **Authorized JavaScript origins**, then paste
+   the id into `GOOGLE_CLIENT_ID` in `cloud.js` *and* set the matching Worker
+   var (`npx wrangler secret put GOOGLE_CLIENT_ID`). Leave it blank to keep
+   email-code sign-in as the only method.
 
 ## Architecture
 
@@ -152,7 +166,7 @@ whose free tier covers 3,000 emails/month. Phone/SMS sign-in is deliberately
 |---|---|
 | `store.js` | State, persistence, CRUD, the interest engine, currency math |
 | `app.js` | Rendering (vanilla JS, full re-render) and delegated event handling |
-| `cloud.js` | Opt-in email cloud sync — auth state machine, push/pull, hooks `saveState` |
+| `cloud.js` | Opt-in cloud sync — Google + email auth state machine, push/pull, hooks `saveState` |
 | `components/` | Reusable UI components, one per file — see below |
 | `styles.css` | Banker's-ledger theme (Fraunces + IBM Plex, cream paper, green ink); type/spacing/radii driven by design tokens in `:root` |
 | `serve.js` | Optional zero-dependency dev server |
