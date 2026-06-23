@@ -19,6 +19,7 @@ const SYNC_SERVER = (typeof PUSH_SERVER === 'string' && PUSH_SERVER) || '';
 
 const CLOUD_AUTH_KEY = 'tally-cloud';          // { token, email }
 const CLOUD_UPDATED_KEY = 'tally-cloud-updated'; // local ledger version (ms)
+const CLOUD_PROMPT_KEY = 'tally-cloud-prompt';   // '1' once we've offered sync to a first-time user
 const CLOUD_TIMEOUT_MS = 8000;                 // give up on a slow request and fall back to local data
 
 /* UI-facing state machine, read by cloudSyncPanel() in app.js. */
@@ -49,6 +50,18 @@ function setCloudOffline(off) {
 
 function cloudLocalUpdated() { return Number(localStorage.getItem(CLOUD_UPDATED_KEY) || 0); }
 function setCloudLocalUpdated(ms) { localStorage.setItem(CLOUD_UPDATED_KEY, String(ms)); }
+
+/* First-run onboarding: offer cloud sync once, then never nag again. The flag is
+   set whether the user accepts or declines — returning visitors just find the
+   panel waiting in Settings. */
+function cloudPromptSeen() { return localStorage.getItem(CLOUD_PROMPT_KEY) === '1'; }
+function markCloudPromptSeen() { localStorage.setItem(CLOUD_PROMPT_KEY, '1'); }
+
+/* Show the one-time "sync across devices?" popup only when sync is actually
+   available, the user isn't already signed in, and we've never offered before. */
+function cloudShouldPrompt() {
+  return cloudConfigured() && !cloudSignedIn() && !cloudPromptSeen();
+}
 
 /* ---------- persistence of the session ---------- */
 

@@ -244,6 +244,28 @@ input, textarea, select, [contenteditable="true"] {
   padding: 18px; margin-bottom: var(--sp-5);
 }
 
+/* Settings is split into labelled groups (Preferences, Sync & alerts, …) so the
+   stack of panels reads as an organised page. The eyebrow heading sits above its
+   cards; the divider gives each group a clear start. */
+.settings-group { margin-bottom: var(--sp-6); }
+.settings-group:last-child { margin-bottom: 0; }
+.settings-group .panel:last-child { margin-bottom: 0; }
+.settings-group-title {
+  font-family: var(--body); font-size: var(--fs-tag); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Brief highlight when "Set up cloud sync" drops the user onto the panel. */
+.panel-flash { animation: panel-flash 1.6s ease-out; }
+@keyframes panel-flash {
+  0%, 25% { border-color: var(--green); box-shadow: 0 0 0 3px var(--focus-ring); }
+  100% { border-color: var(--line); box-shadow: none; }
+}
+
 .panel h3, .subhead {
   font-size: var(--fs-lead); font-weight: 600; color: var(--green-deep);
   margin-bottom: var(--sp-3);
@@ -608,6 +630,10 @@ button { font-family: var(--body); cursor: pointer; }
   border-radius: var(--radius-lg); max-width: 700px; width: 100%;
   padding: var(--sp-6);
 }
+
+/* first-run cloud-sync prompt: a compact decision card, narrower than the
+   data-entry modals. */
+.modal-cloud-prompt { max-width: 460px; }
 
 /* split picker: header, amount/note fields and the Record button stay put;
    only the list of people scrolls. */

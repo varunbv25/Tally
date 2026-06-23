@@ -27,6 +27,7 @@ const ui = {
   selectedPeople: new Set(), // selected person ids
   confirmDeletePeople: false, // delete-people confirmation overlay open
   confirmClearDebt: null,   // person id whose clear-debt confirmation overlay is open
+  cloudPromptOpen: false,   // first-run "sync across devices?" popup open
 };
 
 /* ---------- helpers ---------- */
@@ -719,7 +720,56 @@ function cloudSyncPanel() {
       <p class="muted">Opt-in and off by default — until you sign in, nothing leaves this browser.</p>`;
   }
 
-  return Panel({ title: 'Cloud sync', body });
+  return Panel({ id: 'cloud-sync-panel', title: 'Cloud sync', body });
+}
+
+/* First-run onboarding popup: offered once (see cloudShouldPrompt in cloud.js),
+   it asks whether to set up cloud sync. Either choice marks the prompt seen, so
+   returning users never see it again — for them sync just sits in Settings.
+   "Set up cloud sync" drops the user onto the Settings → Cloud sync panel. */
+function renderCloudPrompt() {
+  const root = document.getElementById('cloud-prompt-root');
+  if (!root) return;
+  if (!ui.cloudPromptOpen) { root.innerHTML = ''; return; }
+
+  root.innerHTML = Modal({
+    overlayId: 'cloud-prompt-overlay',
+    modalCls: 'modal-cloud-prompt',
+    title: 'Sync across devices?',
+    closeAction: 'cloud-prompt-dismiss',
+    body: `
+      <p class="muted">Tally keeps your ledger in this browser. Sign in with just your
+        email and we’ll mirror it to the cloud, so you can pick it up on another device.
+        No password, no phone number — and it stays opt-in.</p>
+      <div class="form-row tight" style="margin-top:18px">
+        <button class="btn" data-action="cloud-prompt-signin">Set up cloud sync</button>
+        <button class="btn ghost" data-action="cloud-prompt-dismiss">Not now</button>
+      </div>
+      <p class="muted" style="margin-top:12px">You can always turn this on later from Settings → Cloud sync.</p>`,
+  });
+}
+
+/* Close the first-run popup and remember it was offered, so it never reappears. */
+function dismissCloudPrompt() {
+  ui.cloudPromptOpen = false;
+  if (typeof markCloudPromptSeen === 'function') markCloudPromptSeen();
+  render();
+}
+
+/* Jump to Settings and bring the Cloud sync panel into view + briefly highlight
+   it, so "Set up cloud sync" lands the user exactly where they can sign in. */
+function openCloudSyncSettings() {
+  ui.tab = 'settings';
+  pushNav();
+  render();
+  requestAnimationFrame(() => {
+    const panel = document.getElementById('cloud-sync-panel');
+    if (!panel) return;
+    panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    panel.classList.add('panel-flash');
+    setTimeout(() => panel.classList.remove('panel-flash'), 1600);
+    document.getElementById('cloud-email')?.focus({ preventScroll: true });
+  });
 }
 
 /* ---------- history view ---------- */
@@ -1370,22 +1420,10 @@ function appearancePanel() {
   });
 }
 
-function renderSettings() {
-  return `
-    <h2 class="section-title">Settings</h2>
-    <p class="section-sub">Appearance, interest rules, currency, and your data — which never leaves this browser unless you export it.</p>
-
-    ${appearancePanel()}
-
-    ${interestRulesPanel()}
-
-    ${notificationsPanel()}
-
-    ${cloudSyncPanel()}
-
-    ${Panel({
-      title: 'Currency',
-      body: `
+function currencyPanel() {
+  return Panel({
+    title: 'Currency',
+    body: `
       <div class="form-row">
         <label>Currency for new people <select id="base-currency">${currencyOptions(state.settings.baseCurrency)}</select></label>
       </div>
@@ -1395,12 +1433,14 @@ function renderSettings() {
         <label><input type="checkbox" id="round-whole" ${state.settings.roundWhole ? 'checked' : ''}> Round amounts to whole numbers</label>
       </div>
       <p class="muted">Hides paise/cents everywhere — balances, interest and existing entries all show as whole numbers. New splits divide into whole units too, with any remainder handed out at random so the same person isn't always charged the extra.</p>`,
-    })}
+  });
+}
 
-    ${Panel({
-      title: 'Data',
-      body: `
-      <p class="muted" style="margin-bottom:12px">Your ledger lives only in this browser. Clearing site data or switching devices wipes it — so keep a backup.</p>
+function dataPanel() {
+  return Panel({
+    title: 'Data',
+    body: `
+      <p class="muted" style="margin-bottom:12px">Your ledger lives only in this browser. Clearing site data or switching devices wipes it — so keep a backup (or turn on cloud sync above).</p>
 
       <h4 class="data-subhead">Full backup</h4>
       <div class="form-row">
@@ -1423,7 +1463,26 @@ function renderSettings() {
       <div class="form-row tight" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
         <button class="btn danger" data-action="reset-data">Erase everything</button>
       </div>`,
-    })}
+  });
+}
+
+/* Settings is grouped into a few labelled sections so the long stack of panels
+   reads as an organised page rather than one undifferentiated list. */
+function renderSettings() {
+  const group = (title, body) => `
+    <section class="settings-group">
+      <h3 class="settings-group-title">${title}</h3>
+      ${body}
+    </section>`;
+
+  return `
+    <h2 class="section-title">Settings</h2>
+    <p class="section-sub">Your ledger lives in this browser — nothing leaves it unless you turn on cloud sync or export it.</p>
+
+    ${group('Preferences', appearancePanel() + currencyPanel())}
+    ${group('Sync &amp; alerts', cloudSyncPanel() + notificationsPanel())}
+    ${group('Interest', interestRulesPanel())}
+    ${group('Your data', dataPanel())}
   `;
 }
 
@@ -1576,6 +1635,7 @@ function render() {
   renderIndirectModal();
   renderSplitModal();
   renderShareModal();
+  renderCloudPrompt();
   if (ui.indirectOpen) updateTransferPreview();
   if (ui.splitOpen) updateSplitPreview();
   if (ui.shareGroupId || ui.sharePeopleOpen) updateSharePreview();
@@ -1618,6 +1678,7 @@ document.addEventListener('click', e => {
   if (e.target.id === 'member-confirm-overlay') { ui.confirmRemoveMembers = false; render(); return; }
   if (e.target.id === 'person-confirm-overlay') { ui.confirmDeletePeople = false; render(); return; }
   if (e.target.id === 'clear-debt-overlay') { ui.confirmClearDebt = null; render(); return; }
+  if (e.target.id === 'cloud-prompt-overlay') { dismissCloudPrompt(); return; }
   if (!btn) return;
 
   const { action, id, sign, group } = btn.dataset;
@@ -1848,6 +1909,13 @@ document.addEventListener('click', e => {
     case 'cloud-reset-email': cloudResetToEmail(); break;
     case 'cloud-sync-now': cloudSyncNow(); break;
     case 'cloud-signout': doCloudSignOut(); break;
+
+    /* ---- first-run sync prompt ---- */
+    case 'cloud-prompt-dismiss': dismissCloudPrompt(); break;
+    case 'cloud-prompt-signin':
+      dismissCloudPrompt();
+      openCloudSyncSettings();
+      break;
   }
 });
 
@@ -2231,6 +2299,13 @@ render();
 runNotificationCheck();
 registerPeriodicSync();
 if (typeof cloudInit === 'function') cloudInit();   // opt-in cloud sync (no-op unless configured + signed in)
+
+/* First-time visitors get a one-time popup offering cloud sync; returning users
+   (or deployments without sync) just see the panel waiting in Settings. */
+if (typeof cloudShouldPrompt === 'function' && cloudShouldPrompt()) {
+  ui.cloudPromptOpen = true;
+  render();
+}
 
 /* Reflect connectivity changes immediately. The local ledger keeps rendering
    either way; going offline just shows the badge, and coming back online clears
