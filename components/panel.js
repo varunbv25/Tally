@@ -6,9 +6,11 @@
      title — heading text for the default <h3>
      head  — custom header HTML (overrides title)
      body  — panel content HTML
-     style — optional inline style string */
-function Panel({ title, body, head, style }) {
+     style — optional inline style string
+     id    — optional element id (e.g. for scroll-into-view) */
+function Panel({ title, body, head, style, id }) {
   const styleAttr = style ? ` style="${style}"` : '';
+  const idAttr = id ? ` id="${id}"` : '';
   const header = head != null ? head : (title != null ? `<h3>${title}</h3>` : '');
-  return `<div class="panel"${styleAttr}>${header}${body}</div>`;
+  return `<div class="panel"${idAttr}${styleAttr}>${header}${body}</div>`;
 }
