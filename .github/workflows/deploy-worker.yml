@@ -1,0 +1,42 @@
+# Deploys the Tally API Worker (worker/) to Cloudflare.
+#
+# Setup (one-time):
+#   1. Create a Cloudflare API token with the "Edit Cloudflare Workers" template
+#      at https://dash.cloudflare.com/profile/api-tokens
+#   2. Add it as a repo secret named CLOUDFLARE_API_TOKEN
+#      (Settings → Secrets and variables → Actions → New repository secret).
+#
+# Runs automatically when worker code changes land on main, and on demand via
+# the "Run workflow" button (Actions tab). Worker secrets (AUTH_SECRET,
+# RESEND_API_KEY, MAIL_FROM, …) and the TALLY_SYNC KV binding are configured
+# directly against the Worker with `wrangler secret put` / the dashboard — they
+# are not managed here.
+name: Deploy Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/deploy-worker.yml'
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install worker dependencies
+        run: npm ci || npm install
+        working-directory: worker
+
+      - name: Deploy to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: worker
