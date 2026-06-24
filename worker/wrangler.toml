@@ -1,4 +1,9 @@
-name = "tally"
+# Distinct name from the static-assets deployment in ../wrangler.jsonc (also
+# "tally"): sharing a name puts both on the same *.workers.dev hostname, and
+# whichever deploys last wins it. When the asset host won, it answered the API
+# routes (/auth/*, /subscribe) with no CORS headers, so the browser blocked
+# sign-in with "Couldn't reach the sync server". Keep the API on its own host.
+name = "tally-api"
 main = "src/index.js"
 compatibility_date = "2026-06-01"
 

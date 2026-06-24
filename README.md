@@ -152,7 +152,12 @@ whose free tier covers 3,000 emails/month. Phone/SMS sign-in is deliberately
    and `MAIL_FROM` from a verified Resend sender —
    `npx wrangler secret put AUTH_SECRET` (and likewise for the others).
 3. Deploy the Worker and point `SYNC_SERVER` in `cloud.js` at it (it defaults
-   to the same `PUSH_SERVER` URL from `push.js`).
+   to the same `PUSH_SERVER` URL from `push.js`). Keep the Worker's `name`
+   (`worker/wrangler.toml`, `tally-api`) **distinct from** the static-assets
+   deployment's `name` (`wrangler.jsonc`, `tally`) — a shared name puts both on
+   the same `*.workers.dev` host, and whichever deploys last serves it. If the
+   asset host wins, it answers `/auth/*` without CORS headers and sign-in fails
+   with "Couldn't reach the sync server".
 4. *(Optional)* To enable **Sign in with Google**: create an OAuth 2.0 Web
    client ID in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
    add your app's origin to its **Authorized JavaScript origins**, then paste
