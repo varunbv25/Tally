@@ -127,7 +127,13 @@
 :root[data-theme="dark"] .notif-value,
 :root[data-theme="dark"] .chip { font-weight: 500; }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* {
+  box-sizing: border-box; margin: 0; padding: 0;
+  /* installed-app feel: don't flash the browser's grey/blue highlight box on
+     every tap — that default is meant for links/buttons on a web page, not a
+     native-feeling UI where everything is tappable */
+  -webkit-tap-highlight-color: transparent;
+}
 
 body {
   font-family: var(--body);
@@ -308,17 +314,33 @@ body.menu-open { overflow: hidden; }
 /* Settings is split into labelled groups (Preferences, Sync & alerts, …) so the
    stack of panels reads as an organised page. The eyebrow heading sits above its
    cards; the divider gives each group a clear start. */
-.settings-group { margin-bottom: var(--sp-6); }
+.settings-group { margin-bottom: var(--sp-4); }
 .settings-group:last-child { margin-bottom: 0; }
 .settings-group .panel:last-child { margin-bottom: 0; }
+
+/* Each group is a tappable header that discloses its panels — the eyebrow label
+   sits on a row with a chevron that rotates when the section opens. */
 .settings-group-title {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
   font-family: var(--body); font-size: var(--fs-tag); font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--ink-soft);
-  margin: 0 0 var(--sp-3);
-  padding-bottom: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3) 0;
   border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  list-style: none; /* hide the default disclosure triangle */
 }
+.settings-group-title::-webkit-details-marker { display: none; }
+.settings-group-chevron {
+  width: 18px; height: 18px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+  transition: transform 0.2s ease;
+}
+.settings-group[open] > .settings-group-title { color: var(--ink); }
+.settings-group[open] > .settings-group-title .settings-group-chevron { transform: rotate(90deg); }
+.settings-group-body { padding-top: var(--sp-3); }
 
 /* Brief highlight when "Set up cloud sync" drops the user onto the panel. */
 .panel-flash { animation: panel-flash 1.6s ease-out; }

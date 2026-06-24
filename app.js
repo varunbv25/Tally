@@ -1472,14 +1472,20 @@ function dataPanel() {
   });
 }
 
-/* Settings is grouped into a few labelled sections so the long stack of panels
-   reads as an organised page rather than one undifferentiated list. */
+/* Settings is grouped into a few labelled sections. Each is a collapsible
+   disclosure (like the iPhone Settings app) so the page opens as a short tappable
+   list of headings rather than one long stack of panels; tapping a heading
+   expands just that section. Native <details>/<summary> handles the toggling, so
+   the open/closed state survives re-renders without any extra wiring. */
 function renderSettings() {
   const group = (title, body) => `
-    <section class="settings-group">
-      <h3 class="settings-group-title">${title}</h3>
-      ${body}
-    </section>`;
+    <details class="settings-group">
+      <summary class="settings-group-title">
+        <span>${title}</span>
+        <svg class="settings-group-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </summary>
+      <div class="settings-group-body">${body}</div>
+    </details>`;
 
   return `
     <h2 class="section-title">Settings</h2>
