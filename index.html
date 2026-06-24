@@ -134,7 +134,26 @@
 <script src="app.js"></script>
 <script>
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  // When a deploy ships a new worker, sw.js calls skipWaiting()+clients.claim()
+  // so it takes control right away. Reload once at that moment so the open page
+  // runs the fresh shell instead of the code it booted with — this is what
+  // stops users from sitting on stale cached HTML/CSS/JS after an update.
+  // The first-ever load has no prior controller, so claim() won't reload it.
+  let refreshing = false;
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
   navigator.serviceWorker.register('sw.js');
+}
+
+// Ask the browser to mark our storage persistent so the ledger (localStorage +
+// IndexedDB) is not evicted under storage pressure. Best-effort: it resolves
+// false where unsupported or not yet granted, which changes nothing.
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persisted().then(p => { if (!p) navigator.storage.persist(); });
 }
 </script>
 </body>

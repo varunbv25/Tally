@@ -35,7 +35,13 @@ const SHELL = [
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      // Fetch every shell file with cache:'reload' so the precache is filled
+      // straight from the network, never from the browser's HTTP cache — that
+      // is what stops a stale styles.css/app.js from being baked into a new
+      // cache version.
+      .then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
   );
 });
 
