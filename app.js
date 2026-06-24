@@ -1472,16 +1472,22 @@ function dataPanel() {
   });
 }
 
-/* Settings is grouped into a few labelled sections. Each is a collapsible
-   disclosure (like the iPhone Settings app) so the page opens as a short tappable
-   list of headings rather than one long stack of panels; tapping a heading
-   expands just that section. Native <details>/<summary> handles the toggling, so
-   the open/closed state survives re-renders without any extra wiring. */
+/* Settings is grouped into a few labelled sections rendered as a list of
+   tappable cards (like the iPhone Settings app): each card shows an icon tile,
+   the section name and a one-line summary of what's inside, so the page opens
+   as a short, scannable list rather than one long stack of panels. Each card is
+   a collapsible disclosure — tapping it expands just that section. Native
+   <details>/<summary> handles the toggling, so the open/closed state survives
+   re-renders without any extra wiring. */
 function renderSettings() {
-  const group = (title, body) => `
+  const group = (icon, title, desc, body) => `
     <details class="settings-group">
       <summary class="settings-group-title">
-        <span>${title}</span>
+        <span class="settings-group-icon">${icon}</span>
+        <span class="settings-group-text">
+          <span class="settings-group-name">${title}</span>
+          <span class="settings-group-desc">${desc}</span>
+        </span>
         <svg class="settings-group-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </summary>
       <div class="settings-group-body">${body}</div>
@@ -1491,10 +1497,12 @@ function renderSettings() {
     <h2 class="section-title">Settings</h2>
     <p class="section-sub">Your ledger lives in this browser — nothing leaves it unless you turn on cloud sync (under Account) or export it.</p>
 
-    ${group('Preferences', appearancePanel() + currencyPanel())}
-    ${group('Alerts', notificationsPanel())}
-    ${group('Interest', interestRulesPanel())}
-    ${group('Your data', dataPanel())}
+    <div class="settings-list">
+      ${group(Icons.sliders(), 'Preferences', 'Theme, currency &amp; rounding', appearancePanel() + currencyPanel())}
+      ${group(Icons.bell(), 'Alerts', 'Reminders for what you’re owed', notificationsPanel())}
+      ${group(Icons.percent(), 'Interest', 'How balances grow over time', interestRulesPanel())}
+      ${group(Icons.database(), 'Your data', 'Back up, export or erase', dataPanel())}
+    </div>
   `;
 }
 

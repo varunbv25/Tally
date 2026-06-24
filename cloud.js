@@ -29,6 +29,7 @@ const CLOUD_AUTH_KEY = 'tally-cloud';          // { token, email }
 const CLOUD_UPDATED_KEY = 'tally-cloud-updated'; // local ledger version (ms)
 const CLOUD_PROMPT_KEY = 'tally-cloud-prompt';   // '1' once we've offered sync to a first-time user
 const CLOUD_TIMEOUT_MS = 8000;                 // give up on a slow request and fall back to local data
+const CLOUD_AUTH_TIMEOUT_MS = 20000;           // sign-in code requests also send an email server-side, so allow longer
 
 /* UI-facing state machine, read by cloudSyncPanel() in app.js. */
 let cloudAuth = {
@@ -176,19 +177,28 @@ function clearCloudSession() {
 /* ---------- network ---------- */
 
 async function cloudFetch(path, opts = {}) {
-  const headers = { 'content-type': 'application/json', ...(opts.headers || {}) };
+  const { timeout = CLOUD_TIMEOUT_MS, ...fetchOpts } = opts;
+  const headers = { 'content-type': 'application/json', ...(fetchOpts.headers || {}) };
   if (cloudAuth.token) headers.authorization = `Bearer ${cloudAuth.token}`;
 
   /* Time-box every call: a weak connection should fail fast and fall back to
      the local copy, never hang the UI on a spinner. */
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), CLOUD_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), timeout);
   let res;
   try {
-    res = await fetch(SYNC_SERVER + path, { ...opts, headers, signal: ctrl.signal });
-  } catch {
-    setCloudOffline(true);   // timeout, abort, or no network
-    throw new Error('No connection — showing the copy saved on this device');
+    res = await fetch(SYNC_SERVER + path, { ...fetchOpts, headers, signal: ctrl.signal });
+  } catch (err) {
+    /* Don't conflate "this device is offline" with "the request was slow or the
+       server hiccuped". navigator.onLine is the only signal the browser gives
+       us; when it says we're online, calling it a missing connection is just
+       wrong and confusing — surface a timeout/server message instead, and don't
+       flip the offline indicator. */
+    const reallyOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    setCloudOffline(reallyOffline);
+    if (reallyOffline) throw new Error('No connection — showing the copy saved on this device');
+    if (err && err.name === 'AbortError') throw new Error('The server took too long to respond — please try again');
+    throw new Error('Couldn’t reach the sync server — please try again');
   } finally {
     clearTimeout(timer);
   }
@@ -211,7 +221,7 @@ async function cloudRequestCode(email) {
   cloudAuth.busy = true; cloudAuth.error = '';
   if (typeof render === 'function') render();
   try {
-    await cloudFetch('/auth/start', { method: 'POST', body: JSON.stringify({ email }) });
+    await cloudFetch('/auth/start', { method: 'POST', body: JSON.stringify({ email }), timeout: CLOUD_AUTH_TIMEOUT_MS });
     cloudAuth.email = email;
     cloudAuth.status = 'code-sent';
   } catch (err) {
