@@ -3,7 +3,7 @@
 
 importScripts('./store.js', './notif.js');
 
-const CACHE = 'tally-v31';
+const CACHE = 'tally-v32';
 const SHELL = [
   './',
   './index.html',
@@ -53,27 +53,54 @@ self.addEventListener('activate', e => {
   );
 });
 
+/* How long to wait for the network before falling back to the cached shell.
+   Keeps a slow-but-connected network from leaving the user on a blank screen:
+   we still prefer a fresh response, but never block the first paint for longer
+   than this. */
+const NET_TIMEOUT_MS = 2000;
+
+/* Network-first, but time-boxed. Race the network against NET_TIMEOUT_MS:
+   - network wins  -> serve it (and it has already refreshed the cache)
+   - timer wins     -> serve the cached copy now; the in-flight network request
+                       still updates the cache in the background for next time
+   - network fails  -> serve the cached copy (offline)
+   With no cached copy yet (first visit) we simply wait for the network and fall
+   back to the app shell so deep links still resolve offline. */
+async function networkFirstWithTimeout(request) {
+  const cache = await caches.open(CACHE);
+
+  // Never rejects: resolves to the response (refreshing the cache on the way)
+  // or to null if the network is down. Keeps running even after we've already
+  // answered from cache, so a slow response still warms the cache.
+  const network = fetch(request)
+    .then(res => {
+      if (res && res.ok) cache.put(request, res.clone());
+      return res;
+    })
+    .catch(() => null);
+
+  const cached = await cache.match(request, { ignoreSearch: true });
+  if (cached) {
+    const winner = await Promise.race([
+      network,
+      new Promise(resolve => setTimeout(() => resolve(null), NET_TIMEOUT_MS)),
+    ]);
+    return winner || cached;
+  }
+
+  return (await network)
+    || (await cache.match('./index.html'))
+    || Response.error();
+}
+
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const sameOrigin = new URL(e.request.url).origin === self.location.origin;
 
   if (sameOrigin) {
-    /* network-first for app files: users get updates immediately when
-       online; the cache only serves when offline */
-    e.respondWith(
-      fetch(e.request)
-        .then(res => {
-          if (res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then(c => c.put(e.request, copy));
-          }
-          return res;
-        })
-        .catch(() =>
-          caches.match(e.request, { ignoreSearch: true })
-            .then(hit => hit || caches.match('./index.html'))
-        )
-    );
+    /* network-first for app files so users get updates immediately when online,
+       but time-boxed so a slow network falls back to the cached shell fast */
+    e.respondWith(networkFirstWithTimeout(e.request));
   } else {
     /* cache-first for cross-origin assets (fonts) — they never change */
     e.respondWith(
