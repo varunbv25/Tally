@@ -1,8 +1,9 @@
 /* =========================================================
-   TALLY — opt-in cloud sync (email accounts)
+   TALLY — opt-in cloud sync (Google + email accounts)
    Local-first: localStorage stays the source of truth. When the user
-   signs in (a 6-digit code emailed by the Worker), the whole ledger blob
-   is mirrored to the cloud so it can be pulled onto another device.
+   signs in (with Google, or a 6-digit code emailed by the Worker), the whole
+   ledger blob is mirrored to the cloud so it can be pulled onto another device.
+   Both methods key the account by email, so they resolve to one ledger.
 
    Reconciliation is deliberately simple — whole-blob last-write-wins by
    timestamp. Tally's data is single-user, so the only "conflict" is the
@@ -16,6 +17,13 @@
 
 /* Reuse the same Worker that serves push. Empty string disables sync. */
 const SYNC_SERVER = (typeof PUSH_SERVER === 'string' && PUSH_SERVER) || '';
+
+/* Google sign-in (optional, primary auth). Paste your OAuth 2.0 Web client ID
+   from the Google Cloud Console here to light up the "Sign in with Google"
+   button; the same id must be set as GOOGLE_CLIENT_ID on the Worker so it can
+   verify the returned token. Empty string keeps Google sign-in hidden and the
+   email one-time-code flow remains the only way in. */
+const GOOGLE_CLIENT_ID = '';
 
 const CLOUD_AUTH_KEY = 'tally-cloud';          // { token, email }
 const CLOUD_UPDATED_KEY = 'tally-cloud-updated'; // local ledger version (ms)
@@ -38,6 +46,84 @@ let cloudPushTimer = null;
 
 function cloudConfigured() { return !!SYNC_SERVER; }
 function cloudSignedIn() { return cloudAuth.status === 'signed-in' && !!cloudAuth.token; }
+
+/* Google sign-in is available only when both the cloud is configured and a
+   client id has been pasted in above. */
+function googleConfigured() { return cloudConfigured() && !!GOOGLE_CLIENT_ID; }
+
+/* ---------- Google sign-in ---------- */
+
+let gisLoading = null;     // promise for the one-time GIS script load
+let gisInited = false;     // google.accounts.id.initialize() called once
+
+/* Lazily inject Google's Identity Services library. No-ops (and never adds a
+   third-party script) on deployments that haven't set GOOGLE_CLIENT_ID. */
+function loadGsi() {
+  if (window.google?.accounts?.id) return Promise.resolve();
+  if (gisLoading) return gisLoading;
+  gisLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true; s.defer = true;
+    s.onload = () => resolve();
+    s.onerror = () => { gisLoading = null; reject(new Error('Could not load Google sign-in')); };
+    document.head.appendChild(s);
+  });
+  return gisLoading;
+}
+
+/* Render Google's official button into the Account view's placeholder. Called
+   from app.js render() after each paint, since the container is recreated on
+   every re-render. */
+function cloudMountGoogleButton() {
+  if (!googleConfigured() || cloudSignedIn()) return;
+  const host = document.getElementById('google-signin-btn');
+  if (!host || host.dataset.rendered === '1') return;
+  loadGsi().then(() => {
+    if (!gisInited) {
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: resp => cloudGoogleSignIn(resp && resp.credential),
+      });
+      gisInited = true;
+    }
+    const el = document.getElementById('google-signin-btn');
+    if (!el || el.dataset.rendered === '1') return;
+    el.dataset.rendered = '1';
+    window.google.accounts.id.renderButton(el, {
+      type: 'standard', theme: 'outline', size: 'large',
+      text: 'signin_with', shape: 'pill', logo_alignment: 'left',
+    });
+  }).catch(err => {
+    cloudAuth.error = err.message;
+    if (typeof render === 'function') render();
+  });
+}
+
+/* Exchange the Google ID token (credential JWT) for our own bearer token.
+   The Worker verifies it and keys the account by email — so the same address
+   maps to one ledger whether you came in via Google or the email code. */
+async function cloudGoogleSignIn(credential) {
+  if (!credential || !cloudConfigured() || cloudAuth.busy) return;
+  cloudAuth.busy = true; cloudAuth.error = '';
+  if (typeof render === 'function') render();
+  try {
+    const { token, email } = await cloudFetch('/auth/google', {
+      method: 'POST', body: JSON.stringify({ credential }),
+    });
+    cloudAuth.token = token;
+    cloudAuth.email = email;
+    cloudAuth.status = 'signed-in';
+    saveCloudSession();
+    if (typeof showToast === 'function') showToast('Signed in — syncing…');
+    await cloudReconcile();
+  } catch (err) {
+    cloudAuth.error = err.message;
+  } finally {
+    cloudAuth.busy = false;
+    if (typeof render === 'function') render();
+  }
+}
 
 /* The connection is considered down when the browser reports offline OR a sync
    request just failed/timed out (weak signal). The app always keeps rendering

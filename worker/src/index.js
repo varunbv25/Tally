@@ -199,6 +199,31 @@ async function handleSync(req, env, path) {
     return json({ ok: true, token, email });
   }
 
+  /* Sign in with Google → mint a bearer token. The client posts the ID-token
+     (credential JWT) from Google Identity Services; we validate it via Google's
+     tokeninfo endpoint (which checks the signature and expiry), confirm it was
+     minted for *our* client id and carries a verified email, then key the
+     account by the same email hash as the code flow — so Google and email
+     sign-in for one address resolve to a single ledger. */
+  if (path === '/auth/google' && req.method === 'POST') {
+    if (!env.GOOGLE_CLIENT_ID) return json({ error: 'Google sign-in is not configured on the server' }, 503);
+    const { credential } = await req.json();
+    if (!credential || typeof credential !== 'string') return json({ error: 'missing Google credential' }, 400);
+
+    const resp = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential));
+    if (!resp.ok) return json({ error: 'invalid Google sign-in' }, 401);
+    const info = await resp.json();
+
+    const audOk = info.aud === env.GOOGLE_CLIENT_ID;
+    const emailVerified = info.email_verified === true || info.email_verified === 'true';
+    if (!audOk || !info.email || !emailVerified) return json({ error: 'invalid Google sign-in' }, 401);
+
+    const email = normalizeEmail(info.email);
+    const hash = await sha256hex(email);
+    const token = await mintToken(env.AUTH_SECRET, hash);
+    return json({ ok: true, token, email });
+  }
+
   /* Ledger blob — one per account, opaque to the server. */
   if (path === '/ledger') {
     const payload = await verifyToken(env.AUTH_SECRET, bearer(req));

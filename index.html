@@ -50,19 +50,52 @@
 
 <header class="masthead">
   <div class="masthead-inner">
-    <h1 class="wordmark">Tally<span class="wordmark-dot">.</span></h1>
+    <button class="hamburger" id="menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="drawer">
+      <span></span><span></span><span></span>
+    </button>
+    <h1 class="wordmark" id="home-link" role="button" tabindex="0" title="Back to the ledger">Tally<span class="wordmark-dot">.</span></h1>
     <span class="offline-flag" id="offline-flag" role="status" hidden>
       <span class="offline-dot" aria-hidden="true"></span>Offline · showing saved data
     </span>
     <div class="net-stamps" id="net-stamps"></div>
   </div>
-  <nav class="tabs" id="tabs">
-    <button class="tab" data-tab="ledger">Ledger</button>
-    <button class="tab" data-tab="groups">Groups</button>
-    <button class="tab" data-tab="history">History</button>
-    <button class="tab" data-tab="settings">Settings</button>
-  </nav>
 </header>
+
+<!-- Off-canvas navigation drawer, opened by the hamburger. Groups/History sit
+     at the top; Settings/Account are pinned to the bottom. -->
+<div class="drawer-scrim" id="drawer-scrim" hidden></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="Main menu">
+  <div class="drawer-head">
+    <span class="drawer-brand">Tally<span class="wordmark-dot">.</span></span>
+    <button class="drawer-close" id="menu-close" aria-label="Close menu">✕</button>
+  </div>
+  <nav class="drawer-nav" id="drawer-nav">
+    <div class="drawer-section">
+      <button class="drawer-item" data-tab="ledger">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/><circle cx="19" cy="19" r="2.4"/></svg>
+        <span>Ledger</span>
+      </button>
+      <button class="drawer-item" data-tab="groups">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19"/><circle cx="10" cy="8" r="3.2"/><path d="M20 19v-1.5a3.5 3.5 0 0 0-2.6-3.4M15.5 5a3.2 3.2 0 0 1 0 6.2"/></svg>
+        <span>Groups</span>
+      </button>
+      <button class="drawer-item" data-tab="history">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+        <span>History</span>
+      </button>
+    </div>
+    <div class="drawer-section drawer-section-end">
+      <button class="drawer-item" data-tab="settings">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.2A1.6 1.6 0 0 0 6.8 19l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 13H3a2 2 0 0 1 0-4h.2A1.6 1.6 0 0 0 4.6 6.3l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 0 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.4 1H21a2 2 0 0 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z"/></svg>
+        <span>Settings</span>
+      </button>
+      <button class="drawer-item" data-tab="account">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3"/><path d="M6.2 18.5a6 6 0 0 1 11.6 0"/></svg>
+        <span>Account</span>
+      </button>
+    </div>
+  </nav>
+</aside>
 
 <main id="view" class="view"></main>
 

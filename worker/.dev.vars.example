@@ -16,3 +16,10 @@ AUTH_SECRET=""
 # verified sender on a domain you've added to Resend.
 RESEND_API_KEY=""
 MAIL_FROM="Tally <login@yourdomain.com>"
+
+# --- Google sign-in (optional, primary auth) ---
+# OAuth 2.0 Web client ID from the Google Cloud Console. Must match the
+# GOOGLE_CLIENT_ID pasted into cloud.js so tokens verify. Leave empty to keep
+# Google sign-in hidden and use the email code flow only. This one isn't a
+# secret, but it's set the same way: npx wrangler secret put GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_ID=""
