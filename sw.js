@@ -3,7 +3,7 @@
 
 importScripts('./store.js', './notif.js');
 
-const CACHE = 'tally-v34';
+const CACHE = 'tally-v39';
 const SHELL = [
   './',
   './index.html',
@@ -88,9 +88,18 @@ async function networkFirstWithTimeout(request) {
     return winner || cached;
   }
 
-  return (await network)
-    || (await cache.match('./index.html'))
-    || Response.error();
+  const net = await network;
+  if (net) return net;
+
+  /* Nothing cached and the network is down. Only a NAVIGATION may fall back to
+     the app shell (so deep links still resolve offline). An asset request
+     (styles.css, app.js, …) must NOT receive index.html — handing HTML back for
+     a stylesheet/script makes the browser fail to parse it and renders the app
+     completely unstyled/broken. Fail honestly instead. */
+  if (request.mode === 'navigate') {
+    return (await cache.match('./index.html')) || Response.error();
+  }
+  return Response.error();
 }
 
 self.addEventListener('fetch', e => {

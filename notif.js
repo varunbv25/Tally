@@ -17,6 +17,7 @@ const NOTIF_DEFAULTS = {
   settleUpNudge:     { enabled: true, days: 7 },
   interestMilestone: { enabled: true, amount: 100 },
   capitalizeSuggest: { enabled: true, percent: 10 },
+  scheduledDue:      { enabled: true },   // a future-dated (scheduled) debt has reached its day
 };
 
 const NUDGE_MS = { weekly: 7 * 86_400_000, monthly: 30 * 86_400_000 };
@@ -70,7 +71,13 @@ function evaluateNotifications(st, log, now) {
   if (!ns.enabled) return due;
 
   const ids = new Set(st.people.map(p => p.id));
+  const schedIds = new Set((st.scheduled || []).map(s => s.id));
   for (const key of Object.keys(log.fired)) {
+    // re-arm a scheduled reminder's key only once its debt is gone (confirmed/discarded)
+    if (key.startsWith('scheduled:')) {
+      if (!schedIds.has(key.slice('scheduled:'.length))) delete log.fired[key];
+      continue;
+    }
     const pid = key.split(':')[1];
     if (pid && !ids.has(pid)) delete log.fired[key];
   }
@@ -118,6 +125,17 @@ function evaluateNotifications(st, log, now) {
            interest >= principal * ns.capitalizeSuggest.percent / 100,
         `capitalize:${p.id}`, 'Capitalize interest?',
         `${p.name}'s accrued interest (${fmtMoney(interest, p.currency)}) is over ${ns.capitalizeSuggest.percent}% of the principal.`);
+    }
+  }
+
+  if (ns.scheduledDue && ns.scheduledDue.enabled) {
+    for (const s of (st.scheduled || [])) {
+      const p = st.people.find(x => x.id === s.personId);
+      if (!p) continue;
+      const owe = s.amount >= 0;
+      mark(new Date(s.date).getTime() <= now,
+        `scheduled:${s.id}`, 'Scheduled debt due',
+        `${s.note ? '“' + s.note + '” — ' : ''}${owe ? p.name + ' owes you' : 'you owe ' + p.name} ${fmtMoney(Math.abs(s.amount), p.currency)}. Open Tally to confirm.`);
     }
   }
 

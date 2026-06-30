@@ -44,6 +44,8 @@ function defaultState() {
     transactions: [],  // {id, personId, groupId|null, amount, note, date, isInterest}
     interestRules: [], // {id, name, enabled, op, value, type:'simple'|'compound', rate, periodUnit, capPeriods|null, groupId|null}
                        // groupId null = applies to everyone; otherwise only to members of that group
+    scheduled: [],     // future-dated debts not yet on the ledger {id, personId, groupId|null, amount(signed), note, date, createdAt}
+                       // when `date` arrives the app asks whether to record it (e.g. a bet) — see confirmScheduled/cancelScheduled
     settings: {
       baseCurrency: 'INR',        // default currency for new people
       tzHistory: [],              // device-timezone segments {since, offsetMin} for interest timing
@@ -103,6 +105,7 @@ function getPerson(id) { return state.people.find(p => p.id === id); }
 function deletePerson(id) {
   state.people = state.people.filter(p => p.id !== id);
   state.transactions = state.transactions.filter(t => t.personId !== id);
+  state.scheduled = (state.scheduled || []).filter(s => s.personId !== id);
   state.groups.forEach(g => { g.memberIds = g.memberIds.filter(m => m !== id); });
 }
 
@@ -137,6 +140,50 @@ function addTransaction({ personId, groupId = null, amount, note = '', date = nu
 
 function deleteTransaction(id) {
   state.transactions = state.transactions.filter(t => t.id !== id);
+}
+
+/* ---------- scheduled (future) debts ----------
+   A debt arranged now but dated in the future — e.g. a bet, or a promised loan.
+   It is NOT on the ledger and changes nobody's balance until its date arrives.
+   On (and after) that date the app prompts whether to record it: confirming adds
+   it as a normal dated entry (so interest accrues from the scheduled date),
+   declining discards it (the bet didn't land). Amount is SIGNED: positive means
+   they'll owe you, negative means you'll owe them. */
+function addScheduledDebt({ personId, groupId = null, amount, note = '', date }) {
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt === 0) throw new Error('Enter an amount that isn’t zero.');
+  if (!getPerson(personId)) throw new Error('Pick a person.');
+  if (!date) throw new Error('Pick a date.');
+  const s = {
+    id: uid(), personId, groupId,
+    amount: amt, note: String(note).trim(), date,
+    createdAt: new Date().toISOString(),
+  };
+  (state.scheduled = state.scheduled || []).push(s);
+  return s;
+}
+
+function getScheduled(id) { return (state.scheduled || []).find(s => s.id === id); }
+
+/* Scheduled debts whose date has arrived (<= now) and still await a decision. */
+function dueScheduled(now = Date.now()) {
+  return (state.scheduled || []).filter(s => new Date(s.date).getTime() <= now && getPerson(s.personId));
+}
+
+/* Record a scheduled debt onto the ledger (the bet landed). Dated to the
+   scheduled date, mirroring a normal dated entry (capitalize-on-drop first). */
+function confirmScheduled(id) {
+  const s = getScheduled(id);
+  if (!s) return null;
+  capitalizeOnDrop(s.personId, s.amount, new Date(s.date).getTime());
+  const t = addTransaction({ personId: s.personId, groupId: s.groupId, amount: s.amount, note: s.note, date: s.date });
+  cancelScheduled(id);
+  return t;
+}
+
+/* Drop a scheduled debt without recording it (declined, or cleaned up early). */
+function cancelScheduled(id) {
+  state.scheduled = (state.scheduled || []).filter(s => s.id !== id);
 }
 
 /* ---------- indirect payments (debt routing) ----------
@@ -353,6 +400,29 @@ function interestRuleName(ruleId) {
     return p ? personInterestRule(p)?.name || 'Custom interest' : 'Custom interest';
   }
   return state.interestRules.find(r => r.id === ruleId)?.name || null;
+}
+
+/* Resolve a rule id back to its full rule object (global or the synthetic
+   per-person rule), so callers can read its rate/period/type — e.g. to show an
+   effective annual rate. */
+function interestRuleById(ruleId) {
+  if (typeof ruleId === 'string' && ruleId.startsWith('person:')) {
+    const p = getPerson(ruleId.slice('person:'.length));
+    return p ? personInterestRule(p) : null;
+  }
+  return state.interestRules.find(r => r.id === ruleId) || null;
+}
+
+/* The effective annual rate a periodic rule actually implies — the honest
+   "cost per year" figure. Compound rules grow on the running balance, so 2% a
+   month is ~26.8%/yr, not 24%; simple rules just scale by periods/year. Returns
+   a percentage number, or null if the period or rate is unusable. */
+const PERIODS_PER_YEAR = { day: 365, week: 52, month: 12, year: 1 };
+function effectiveAnnualRate(rate, periodUnit, type) {
+  const k = PERIODS_PER_YEAR[periodUnit];
+  const r = Number(rate);
+  if (!k || !(r > 0)) return null;
+  return type === 'simple' ? r * k : (Math.pow(1 + r / 100, k) - 1) * 100;
 }
 
 /*
