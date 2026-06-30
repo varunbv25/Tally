@@ -341,7 +341,7 @@ function renderLedger() {
       <div class="head-side">
         <div class="head-actions">
           <button class="btn ghost head-action" data-action="open-split" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>÷ Split expense</button>
-          <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>⇄ Indirect payment</button>
+          <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 1 ? 'disabled title="Add a person first"' : ''}>⇄ Indirect payment</button>
         </div>
       </div>
     </div>
@@ -1050,81 +1050,139 @@ function balancePhrase(n, currency) {
   return 'settled';
 }
 
-function transferPreviewHTML(lenderId, receiverId, amt) {
-  if (!lenderId || !receiverId || !Number.isFinite(amt) || amt <= 0) {
-    return '<span class="muted">Pick both people and an amount to preview the effect.</span>';
+/* Live preview of a one-lender-to-many indirect payment. Every ticked recipient
+   has `amount` added to what they owe you; the lender's balance drops by the
+   total. "Me" is the lender lending to you directly — it's part of the lender's
+   drop but creates no new debtor (you simply owe the lender that share). */
+function indirectPreviewHTML(lenderId, receiverIds, includeMe, amt) {
+  const lender = getPerson(lenderId);
+  const receivers = receiverIds.map(getPerson).filter(Boolean);
+  const count = receivers.length + (includeMe ? 1 : 0);
+  if (!lender || !count || !Number.isFinite(amt) || amt <= 0) {
+    return '<span class="muted">Pick the lender, tick who they lent to, and enter an amount.</span>';
   }
-  if (lenderId === receiverId) return '<span class="xfer-warn">Pick two different people.</span>';
-  const lender = getPerson(lenderId), receiver = getPerson(receiverId);
-  if (!lender || !receiver) return '';
-  const lBefore = totalOf(lender), rBefore = totalOf(receiver);
-  const mismatch = lender.currency !== receiver.currency
-    ? `<div class="xfer-warn">${esc(lender.name)} is in ${lender.currency} and ${esc(receiver.name)} is in ${receiver.currency} — the amount is applied in each person's own currency, nothing is converted.</div>`
-    : '';
-  return `
+  const total = amt * count;
+  const lBefore = totalOf(lender);
+  const head = `<div class="split-head">${count} ${count === 1 ? 'recipient' : 'recipients'} · ${fmtMoney(total, lender.currency)} from ${esc(lender.name)}</div>`;
+  const lenderLine = `
     <div class="xfer-line">
       <span><b>${esc(lender.name)}</b> ${balancePhrase(lBefore, lender.currency)}
-      <span class="xfer-arrow">→</span> ${balancePhrase(lBefore - amt, lender.currency)}</span>
-      <span class="xfer-delta neg">−${fmtMoney(amt, lender.currency)}</span>
-    </div>
+      <span class="xfer-arrow">→</span> ${balancePhrase(lBefore - total, lender.currency)}</span>
+      <span class="xfer-delta neg">−${fmtMoney(total, lender.currency)}</span>
+    </div>`;
+  const receiverLines = receivers.map(r => {
+    const rBefore = totalOf(r);
+    return `<div class="xfer-line">
+      <span><b>${esc(r.name)}</b> ${balancePhrase(rBefore, r.currency)}
+      <span class="xfer-arrow">→</span> ${balancePhrase(rBefore + amt, r.currency)}</span>
+      <span class="xfer-delta pos">+${fmtMoney(amt, r.currency)}</span>
+    </div>`;
+  }).join('');
+  const meLine = includeMe ? `
     <div class="xfer-line">
-      <span><b>${esc(receiver.name)}</b> ${balancePhrase(rBefore, receiver.currency)}
-      <span class="xfer-arrow">→</span> ${balancePhrase(rBefore + amt, receiver.currency)}</span>
-      <span class="xfer-delta pos">+${fmtMoney(amt, receiver.currency)}</span>
-    </div>
-    ${mismatch}`;
+      <span><b>Me</b> · ${esc(lender.name)} lent you ${fmtMoney(amt, lender.currency)}</span>
+      <span class="xfer-delta neg">you owe +${fmtMoney(amt, lender.currency)}</span>
+    </div>` : '';
+  const curs = new Set([lender.currency, ...receivers.map(r => r.currency)]);
+  const mismatch = curs.size > 1
+    ? `<div class="xfer-warn">People here use different currencies — each amount is applied in that person's own currency, nothing is converted.</div>`
+    : '';
+  return head + lenderLine + receiverLines + meLine + mismatch;
 }
 
-/* The popup speaks in "left <owes|lent> right". Map that to the
-   lender (balance with you drops) / receiver (now owes you) the data
-   layer expects: with "lent", left lent to right, so left is the lender;
-   with "owes", left owes right, so right is the lender. */
-function transferRoles(leftId, rightId, rel) {
-  return rel === 'owes'
-    ? { lenderId: rightId, receiverId: leftId }
-    : { lenderId: leftId, receiverId: rightId };
+/* ids of ticked recipients (real people, not "Me"), in checklist order */
+function indirectSelectedIds() {
+  return [...document.querySelectorAll('[data-xfer-receiver]')]
+    .filter(cb => cb.checked)
+    .map(cb => cb.dataset.xferReceiver);
+}
+
+function indirectIncludesMe() {
+  const me = document.querySelector('[data-xfer-me]');
+  return !!(me && me.checked);
 }
 
 function updateTransferPreview() {
   const form = document.querySelector('[data-form="add-transfer"]');
   const node = document.getElementById('xfer-preview');
   if (!form || !node) return;
-  const { lenderId, receiverId } = transferRoles(form.leftId.value, form.rightId.value, form.rel.value);
-  node.innerHTML = transferPreviewHTML(lenderId, receiverId, parseFloat(form.amount.value));
+  node.innerHTML = indirectPreviewHTML(form.lenderId.value, indirectSelectedIds(), indirectIncludesMe(), parseFloat(form.amount.value));
+}
+
+function freshIndirectDraft() {
+  return {
+    lenderId: state.people[0] ? state.people[0].id : '',
+    selected: new Set(), me: false, amount: '',
+    date: new Date().toISOString().slice(0, 10), note: '',
+  };
+}
+
+/* Snapshot the live form so changing the lender (which re-renders to drop that
+   person from the recipient list) doesn't wipe the typed amount/note or ticks. */
+function syncIndirectDraft() {
+  if (!ui.indirectDraft) ui.indirectDraft = freshIndirectDraft();
+  const form = document.querySelector('[data-form="add-transfer"]');
+  if (!form) return;
+  ui.indirectDraft.lenderId = form.lenderId.value;
+  ui.indirectDraft.amount = form.amount.value;
+  ui.indirectDraft.date = form.date.value;
+  ui.indirectDraft.note = form.note.value;
+  ui.indirectDraft.selected = new Set(indirectSelectedIds());
+  ui.indirectDraft.me = indirectIncludesMe();
 }
 
 function renderIndirectModal() {
   const root = document.getElementById('indirect-root');
-  if (!ui.indirectOpen) { root.innerHTML = ''; return; }
+  if (!ui.indirectOpen) { root.innerHTML = ''; ui.indirectDraft = null; return; }
 
-  const people = state.people;
-  const opts = sel => people.map(p =>
-    `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.name)}</option>`
+  const draft = ui.indirectDraft || (ui.indirectDraft = freshIndirectDraft());
+  if (!getPerson(draft.lenderId)) draft.lenderId = state.people[0].id;
+  const sel = draft.selected;
+
+  const lenderOpts = state.people.map(p =>
+    `<option value="${p.id}" ${p.id === draft.lenderId ? 'selected' : ''}>${esc(p.name)}</option>`
   ).join('');
+
+  const meRow =
+    `<label class="share-pick-row">
+      <input type="checkbox" data-xfer-me ${draft.me ? 'checked' : ''}>
+      <span class="share-pick-name">Me</span>
+      ${Chip(esc(state.settings.baseCurrency))}
+    </label>`;
+
+  const rows = state.people.filter(p => p.id !== draft.lenderId).map(p =>
+    `<label class="share-pick-row">
+      <input type="checkbox" data-xfer-receiver="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>
+      <span class="share-pick-name">${esc(p.name)}</span>
+      ${Chip(p.currency)}
+    </label>`).join('');
 
   root.innerHTML = Modal({
     overlayId: 'indirect-overlay',
+    modalCls: 'modal-split',
     title: 'Indirect payment',
     closeAction: 'close-indirect',
     body: `
-      <p class="section-sub" style="margin-bottom:18px">Route a debt across people: the lender's balance with you drops, and the person who owed them now owes you instead. Your total is unchanged — it just moves to whoever can actually pay.</p>
+      <p class="section-sub split-intro">One person lent to several. Pick the lender and tick everyone they lent to — each gets the amount added to what they owe you, and the lender's balance drops by the total.</p>
 
       <form data-form="add-transfer">
-        <div class="xfer-sentence">
-          <select name="leftId">${opts(people[0].id)}</select>
-          <select name="rel">
-            <option value="lent">lent to</option>
-            <option value="owes">owes</option>
-          </select>
-          <select name="rightId">${opts(people[1].id)}</select>
+        <h3 class="subhead">Lender</h3>
+        <div class="form-row tight">
+          <select name="lenderId" style="flex:1">${lenderOpts}</select>
         </div>
-        <div class="form-row">
-          <input name="amount" type="number" step="any" min="0.01" placeholder="amount" required>
-          <input name="date" type="date" value="${new Date().toISOString().slice(0, 10)}">
-          <input name="note" placeholder="reason (optional)" maxlength="80" style="flex:1">
+
+        <h3 class="subhead">Lent to</h3>
+        <div class="share-pick-list split-scroll">${meRow}${rows}</div>
+
+        <div class="split-fixed">
+          <div class="form-row">
+            <input name="amount" type="number" step="any" min="0.01" placeholder="amount each" value="${esc(draft.amount || '')}" required>
+            <input name="date" type="date" value="${esc(draft.date || new Date().toISOString().slice(0, 10))}">
+            <input name="note" placeholder="reason (optional)" maxlength="80" value="${esc(draft.note || '')}" style="flex:1">
+          </div>
+          <div id="xfer-preview" class="xfer-preview"></div>
+          <div class="form-row tight"><button class="btn" type="submit">Record indirect payment</button></div>
         </div>
-        <div id="xfer-preview" class="xfer-preview"></div>
-        <div class="form-row tight"><button class="btn" type="submit">Record indirect payment</button></div>
       </form>`,
   });
 }
@@ -2024,19 +2082,20 @@ document.addEventListener('submit', e => {
 
     case 'add-transfer': {
       const dateStr = fd.get('date');
-      const { lenderId, receiverId } = transferRoles(fd.get('leftId'), fd.get('rightId'), fd.get('rel'));
       try {
-        addIndirectPayment({
-          lenderId,
-          receiverId,
+        const { count } = addIndirectPayments({
+          lenderId: fd.get('lenderId'),
+          receiverIds: indirectSelectedIds(),
+          includeMe: indirectIncludesMe(),
           amount: parseFloat(fd.get('amount')),
           note: fd.get('note') || '',
           date: entryDate(dateStr).toISOString(),
         });
         ui.indirectOpen = false;
+        ui.indirectDraft = null;
         goBack();          // pop the nav entry the popup pushed, then commit re-renders
         commit();
-        showToast('Indirect payment recorded');
+        showToast(`Indirect payment recorded across ${count} ${count === 1 ? 'recipient' : 'recipients'}`);
       } catch (err) {
         alert(err.message);
       }
@@ -2189,7 +2248,11 @@ document.addEventListener('change', e => {
       : Math.max(0, parseFloat(e.target.value) || 0);
     commit();
   }
-  if (e.target.closest('[data-form="add-transfer"]')) updateTransferPreview();
+  if (e.target.closest('[data-form="add-transfer"]')) {
+    syncIndirectDraft();
+    // changing the lender must re-render to drop them from the recipient list
+    if (e.target.name === 'lenderId') render(); else updateTransferPreview();
+  }
   if (e.target.closest('[data-form="add-split"]')) { syncSplitDraft(); updateSplitPreview(); }
   if (e.target.matches('[data-share-member]')) updateSharePreview();
 });
@@ -2211,7 +2274,7 @@ document.addEventListener('input', e => {
     box.focus();
     box.setSelectionRange(pos, pos);
   }
-  if (e.target.closest('[data-form="add-transfer"]')) updateTransferPreview();
+  if (e.target.closest('[data-form="add-transfer"]')) { syncIndirectDraft(); updateTransferPreview(); }
   if (e.target.closest('[data-form="add-split"]')) { syncSplitDraft(); updateSplitPreview(); }
 
   // ledger quick-entry: arm the +paid / −repaid buttons once an amount is typed
