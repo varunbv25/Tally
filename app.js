@@ -15,6 +15,8 @@ const ui = {
   sharePeopleOpen: false,   // ledger share-picker popup open (pick who to share)
   search: '',
   historySearch: '',
+  historyDate: null,        // history calendar: picked day (yyyy-mm-dd) or null for all days
+  historyMonth: null,       // history calendar: month in view (yyyy-mm); lazy-set to current month
   renamingGroup: false,
   creatingGroup: false,     // group-create panel revealed
   selectMode: false,        // history multi-select for deletion
@@ -40,6 +42,20 @@ function esc(s) {
 
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/* The day-key everything keys off: the UTC date, matching how transactions are
+   stamped (entryDate anchors backdated entries at local noon → same UTC day)
+   and how History search already slices `t.date`. Calendar cells, "today", and
+   the selected day all compare these strings, so nothing drifts across zones. */
+function dayKey(iso) { return new Date(iso).toISOString().slice(0, 10); }
+function todayKey() { return new Date().toISOString().slice(0, 10); }
+function monthKey(dayStr) { return dayStr.slice(0, 7); }
+
+/* Human label for a yyyy-mm-dd, read as a UTC day so it never shifts back a day. */
+function fmtDayKey(dayStr) {
+  return new Date(dayStr + 'T12:00:00Z')
+    .toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 /* Turn a date-picker value into a timestamp. For today we record the real
@@ -845,7 +861,17 @@ function renderHistory() {
     return hay.includes(q);
   });
 
-  const rows = matches.map(({ t, p, g }) => {
+  /* The calendar marks every day that has a (search-filtered) entry, so dots
+     track the search too. The list below then narrows to the picked day. */
+  const dayCounts = {};
+  matches.forEach(({ t }) => { const k = dayKey(t.date); dayCounts[k] = (dayCounts[k] || 0) + 1; });
+  const calendar = renderHistoryCalendar(dayCounts);
+
+  const visible = ui.historyDate
+    ? matches.filter(({ t }) => dayKey(t.date) === ui.historyDate)
+    : matches;
+
+  const rows = visible.map(({ t, p, g }) => {
     /* Virtual interest charge — display only, no selection/delete affordances. */
     if (t.virtual) {
       const cur = p ? p.currency : state.settings.baseCurrency;
@@ -933,17 +959,78 @@ function renderHistory() {
       <input id="history-search" placeholder="Search person, reason, amount, date…" value="${esc(ui.historySearch)}" style="flex:1">
     </div>
 
+    ${entries.length ? calendar : ''}
+
     ${entries.length ? (matches.length ? `
-    <p class="muted" style="margin-bottom:10px">${matches.length} ${matches.length === 1 ? 'entry' : 'entries'}${q ? ' matching' : ''}</p>
+    <p class="muted history-count" style="margin-bottom:10px">${visible.length} ${visible.length === 1 ? 'entry' : 'entries'}${ui.historyDate ? ` on ${esc(fmtDayKey(ui.historyDate))}` : (q ? ' matching' : '')}</p>
+    ${visible.length ? `
     <table class="ledger-table history-table">
       <thead><tr>
         <th>Person</th><th>Date</th><th>Type</th><th>Group</th><th>Reason</th><th class="num">Amount</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`
+      : EmptyState(`No entries on ${esc(fmtDayKey(ui.historyDate))}.`)}`
       : EmptyState(`No entries match “${esc(ui.historySearch)}”.`))
       : EmptyState('No transactions yet. Record some lending or repayments on the Ledger.')}
   `;
+}
+
+/* Google-Calendar-style month grid for History: pick a day to filter the list
+   to that day's entries. Dots mark days that have entries (after search). The
+   month in view lives in ui.historyMonth; the picked day in ui.historyDate. */
+function renderHistoryCalendar(dayCounts) {
+  const today = todayKey();
+  const month = ui.historyMonth || (ui.historyDate ? monthKey(ui.historyDate) : monthKey(today));
+  const [y, m] = month.split('-').map(Number);                 // m is 1-12
+
+  // UTC math so day boundaries never drift: first weekday + number of days.
+  const firstDow = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();   // 0=Sun
+  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const monthLabel = new Date(Date.UTC(y, m - 1, 1))
+    .toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+  const dows = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+    .map(d => `<span class="cal-dow">${d}</span>`).join('');
+
+  let cells = '';
+  for (let i = 0; i < firstDow; i++) cells += '<span class="cal-cell cal-blank"></span>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = `${month}-${String(d).padStart(2, '0')}`;
+    const count = dayCounts[key] || 0;
+    const cls = ['cal-cell', 'cal-day'];
+    if (key === ui.historyDate) cls.push('selected');
+    if (key === today) cls.push('today');
+    if (count) cls.push('has-entries');
+    const title = count ? ` title="${count} ${count === 1 ? 'entry' : 'entries'}"` : '';
+    cells += `<button type="button" class="${cls.join(' ')}" data-action="cal-pick" data-date="${key}"${title}>
+      <span class="cal-num">${d}</span>${count ? '<span class="cal-dot" aria-hidden="true"></span>' : ''}
+    </button>`;
+  }
+
+  return `
+    <div class="cal" role="group" aria-label="Filter history by date">
+      <div class="cal-head">
+        <button type="button" class="cal-nav" data-action="cal-prev" aria-label="Previous month">‹</button>
+        <span class="cal-title">${esc(monthLabel)}</span>
+        <button type="button" class="cal-nav" data-action="cal-next" aria-label="Next month">›</button>
+      </div>
+      <div class="cal-grid cal-dows">${dows}</div>
+      <div class="cal-grid cal-days">${cells}</div>
+      <div class="cal-foot">
+        <button type="button" class="cal-link" data-action="cal-today">Today</button>
+        ${ui.historyDate ? `<button type="button" class="cal-link cal-clear" data-action="cal-clear">Clear date · ${esc(fmtDayKey(ui.historyDate))}</button>` : '<span class="muted cal-hint">Tap a day to filter</span>'}
+      </div>
+    </div>`;
+}
+
+/* Shift the calendar month by ±1, keeping the yyyy-mm key tidy. */
+function shiftHistoryMonth(delta) {
+  const base = ui.historyMonth || (ui.historyDate ? monthKey(ui.historyDate) : monthKey(todayKey()));
+  let [y, m] = base.split('-').map(Number);
+  m += delta;
+  if (m < 1) { m = 12; y--; } else if (m > 12) { m = 1; y++; }
+  ui.historyMonth = `${y}-${String(m).padStart(2, '0')}`;
 }
 
 function enterSelectMode(txnId) {
@@ -1820,6 +1907,25 @@ document.addEventListener('click', e => {
 
     case 'clear-search': ui.search = ''; render(); document.getElementById('search-box')?.focus(); break;
     case 'focus-search': document.getElementById('search-box')?.focus(); break;
+
+    /* History calendar: pick a day to filter, page months, jump to today, clear. */
+    case 'cal-pick': {
+      const d = btn.dataset.date;
+      ui.historyDate = ui.historyDate === d ? null : d;   // tap the picked day again to clear
+      ui.historyMonth = monthKey(d);
+      render();
+      break;
+    }
+    case 'cal-prev': shiftHistoryMonth(-1); render(); break;
+    case 'cal-next': shiftHistoryMonth(1); render(); break;
+    case 'cal-today': {
+      const t = todayKey();
+      ui.historyDate = t;
+      ui.historyMonth = monthKey(t);
+      render();
+      break;
+    }
+    case 'cal-clear': ui.historyDate = null; render(); break;
 
     case 'open-indirect': ui.indirectOpen = true; pushNav(); render(); break;
     case 'close-indirect': goBack(); break;
