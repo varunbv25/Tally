@@ -167,6 +167,25 @@ function addIndirectPayment({ lenderId, receiverId, amount, note = '', date = nu
   return { linkId, lenderTxn, receiverTxn };
 }
 
+/* One lender lent the same amount to several recipients at once. Each real
+   recipient becomes its own indirect pair (lender −amt, recipient +amt). A
+   recipient of "Me" is just the lender lending to you directly — the lender's
+   balance drops by amt with no second leg (you simply owe them that much). */
+function addIndirectPayments({ lenderId, receiverIds = [], includeMe = false, amount, note = '', date = null }) {
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt <= 0) throw new Error('Enter an amount greater than zero.');
+  if (!lenderId || !getPerson(lenderId)) throw new Error('Pick the lender.');
+  const ids = receiverIds.filter(id => id && id !== lenderId);
+  if (!ids.length && !includeMe) throw new Error('Pick at least one recipient.');
+  const when = date || new Date().toISOString();
+  ids.forEach(rid => addIndirectPayment({ lenderId, receiverId: rid, amount: amt, note, date: when }));
+  if (includeMe) {
+    capitalizeOnDrop(lenderId, -amt, new Date(when).getTime());
+    addTransaction({ personId: lenderId, amount: -amt, note, date: when });
+  }
+  return { count: ids.length + (includeMe ? 1 : 0) };
+}
+
 /* All recorded indirect payments as {linkId, lender, receiver, amount, note, date},
    newest first. A half-pair (one leg deleted directly) is skipped. */
 function indirectPayments() {
