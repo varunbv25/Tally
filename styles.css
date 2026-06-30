@@ -17,14 +17,14 @@
   --bg: #faf8f2;
   --card: #ffffff;
   --ink: #232a23;
-  --ink-soft: #6b7268;
+  --ink-soft: #5f6459;     /* darkened for AA contrast on cream (was #6b7268, ~4.4:1) */
   --green: #1e5b3f;
   --green-deep: #143d2b;
   --green-tint: rgba(30,91,63,0.10);
   --red: #b23a26;
-  --amber: #a06410;
+  --amber: #8a5500;        /* darkened for AA contrast (was #a06410) */
   --blue: #2b5b8a;
-  --gold: #a3823a;
+  --gold: #836a2a;         /* the interest figure — darkened to clear AA on white/cream (was #a3823a) */
   --line: #e4ded0;
   --line-strong: #cfc7b2;
 
@@ -33,7 +33,7 @@
   --danger: #b23a26;                   /* danger button fill (always white text) */
   --danger-hover: #8c2d1d;
   --focus-ring: rgba(30,91,63,0.12);
-  --overlay: rgba(20,61,43,0.30);      /* modal / confirm scrim */
+  --overlay: rgba(20,61,43,0.48);      /* modal / confirm scrim — opaque enough that page content behind reads as inert, not a live control */
   --row-tint: rgba(30,91,63,0.11);     /* pressed / selected table rows */
   --tag-neutral: rgba(0,0,0,0.05);     /* neutral chip background */
   --shadow-card: rgba(20,61,43,0.06);
@@ -679,6 +679,13 @@ button { font-family: var(--body); cursor: pointer; }
 .group-card .group-net .money { font-weight: 600; }
 .group-card .net-square { color: var(--ink-soft); font-style: italic; }
 
+/* gentle caution that per-group nets overlap and aren't additive */
+.group-overlap-note {
+  border-left: 3px solid var(--gold);
+  padding-left: var(--sp-3);
+  margin-top: calc(var(--sp-4) * -0.5);
+}
+
 /* panel header with a close affordance (e.g. the reveal-able create-group form) */
 .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-2); }
 .panel-head h3 { margin-bottom: var(--sp-3); }
@@ -724,6 +731,11 @@ button { font-family: var(--body); cursor: pointer; }
 .rule-sentence { font-size: var(--fs-base); }
 .rule-sentence .hl { font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600; color: var(--green-deep); }
 .rule-sentence .rule-name { font-weight: 700; }
+/* effective annual rate — the honest "cost per year" figure beside a rule */
+.rule-ear {
+  font-family: var(--mono); font-size: var(--fs-cap); font-weight: 600;
+  color: var(--amber); white-space: nowrap;
+}
 
 /* ---------- indirect payments ---------- */
 
@@ -772,8 +784,8 @@ button { font-family: var(--body); cursor: pointer; }
 .modal-overlay {
   position: fixed; inset: 0; z-index: 50;
   background: var(--overlay);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(9px);
+  backdrop-filter: blur(9px);
   display: flex; align-items: flex-start; justify-content: center;
   padding: 40px var(--sp-4); overflow-y: auto;
 }
@@ -851,6 +863,9 @@ button { font-family: var(--body); cursor: pointer; }
   padding: var(--sp-3) 0; margin: var(--sp-3) 0 var(--sp-4);
 }
 .balance-strip b { display: block; font-size: var(--fs-h2); }
+/* the accrued-interest figure sits beside Principal/Total — same size, gold kept
+   (the small .money.interest size is for the dense ledger rows, not here) */
+.balance-strip b.money.interest { font-size: var(--fs-h2); }
 
 .txn-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 .txn-table td, .txn-table th { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: left; }
@@ -875,6 +890,20 @@ button { font-family: var(--body); cursor: pointer; }
 .hist-amount { display: none; }   /* shown only on mobile cards */
 
 /* ---------- History calendar ---------- */
+/* Collapsed by default so the register leads; this compact strip toggles the
+   month grid open. When a day is picked it shows the active filter inline. */
+.cal-toggle {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  font-family: var(--body); font-size: var(--fs-sm); font-weight: 600;
+  color: var(--ink-soft); cursor: pointer;
+  background: var(--card); border: 1px solid var(--line-strong);
+  border-radius: var(--pill); padding: 7px 14px; margin-bottom: var(--sp-3);
+  transition: color var(--duration-fast), border-color var(--duration-fast);
+}
+.cal-toggle:hover, .cal-toggle:focus-visible { color: var(--green-deep); border-color: var(--green); }
+.cal-toggle.open { color: var(--green-deep); }
+.cal-toggle-icon { display: inline-flex; }
+.cal-toggle-chev { font-size: var(--fs-cap); }
 .cal {
   background: var(--card); border: 1px solid var(--line);
   border-radius: var(--radius); padding: var(--sp-3) var(--sp-3) var(--sp-2);
@@ -921,6 +950,13 @@ button { font-family: var(--body); cursor: pointer; }
   background: var(--green);
 }
 .cal-day.selected .cal-dot { background: var(--btn-ink); }
+/* a future scheduled debt: hollow amber ring, distinct from the solid green
+   "has entries" dot */
+.cal-dot-sched {
+  background: transparent; border: 1.5px solid var(--amber);
+  width: 6px; height: 6px;
+}
+.cal-day.selected .cal-dot-sched { border-color: var(--btn-ink); }
 .cal-foot {
   display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
   margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line);
@@ -933,6 +969,25 @@ button { font-family: var(--body); cursor: pointer; }
 .cal-link:hover { text-decoration: underline; }
 .cal-clear { color: var(--red); }
 .cal-hint { font-size: var(--fs-cap); }
+
+/* ---------- schedule-a-future-debt panel ---------- */
+.sched-panel {
+  background: var(--card); border: 1px solid var(--line);
+  border-left: 3px solid var(--amber);
+  border-radius: var(--radius); padding: var(--sp-4) var(--sp-5);
+  margin-bottom: var(--sp-4); box-shadow: 0 1px 2px var(--shadow-card);
+}
+.sched-list { display: flex; flex-direction: column; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+.sched-item {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.sched-item-main { font-size: var(--fs-base); }
+.sched-item-main .money { font-size: var(--fs-base); }
+/* the due-day reminder's headline amount */
+.sched-due-amount { font-size: var(--fs-lead); margin: var(--sp-2) 0 var(--sp-3); }
+.sched-due-amount .money { font-size: var(--fs-h2); }
 
 /* long-press to start selecting: row tints while held */
 .history-table tr[data-txn-id],
@@ -985,7 +1040,7 @@ button { font-family: var(--body); cursor: pointer; }
   position: fixed; inset: 0; z-index: 200;
   display: flex; align-items: center; justify-content: center; padding: var(--sp-5);
   background: var(--overlay);
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(9px); backdrop-filter: blur(9px);
   animation: fade 0.18s ease both;
 }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
@@ -1012,13 +1067,14 @@ button { font-family: var(--body); cursor: pointer; }
    keeps a fixed position. On desktop they read inline after the name. */
 .row-actions { display: inline-flex; align-items: center; gap: var(--sp-1); }
 
-/* "Clear" — settle a person's balance to zero straight from their ledger row.
-   Sits quietly beside the name and warms green on hover, signalling a done deal. */
+/* "Settle" — zero a person's balance straight from their ledger row. A quiet
+   ghost: transparent until hovered, so a real settlement never reads as a benign
+   field control. Warms green on hover/focus, signalling a deliberate done deal. */
 .btn.small.clear-debt {
   margin-left: var(--sp-2);
   color: var(--ink-soft);
-  background: var(--tag-neutral);
-  border-color: transparent;
+  background: transparent;
+  border-color: var(--line-strong);
   vertical-align: middle;
 }
 .btn.small.clear-debt:hover, .btn.small.clear-debt:focus-visible {
@@ -1044,7 +1100,8 @@ button { font-family: var(--body); cursor: pointer; }
 
 /* Share action sitting just above the list of names (ledger people / group
    members) rather than pinned in the header's top-right corner. */
-.list-share { display: flex; justify-content: flex-end; margin-bottom: var(--sp-2); }
+.list-share { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.as-of { font-family: var(--mono); font-size: var(--fs-cap); color: var(--ink-soft); }
 
 .empty-state {
   text-align: center; padding: 48px var(--sp-5); color: var(--ink-soft);
@@ -1195,6 +1252,9 @@ button { font-family: var(--body); cursor: pointer; }
   .modal-share { max-height: calc(100vh - 2 * var(--sp-4)); }
   .form-row { row-gap: var(--sp-2); }
   input[type="date"] { width: auto; }
+  /* when the person-modal action row wraps, keep the destructive "Delete person"
+     in flow (left-aligned on its own line) instead of floating alone, right-edged */
+  .modal .form-row .btn.quiet-danger { margin-left: 0; }
 }
 
 /* ---------- notifications settings ---------- */

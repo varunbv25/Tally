@@ -17,6 +17,7 @@ const ui = {
   historySearch: '',
   historyDate: null,        // history calendar: picked day (yyyy-mm-dd) or null for all days
   historyMonth: null,       // history calendar: month in view (yyyy-mm); lazy-set to current month
+  calendarOpen: false,      // history calendar collapsed by default so the register leads
   renamingGroup: false,
   creatingGroup: false,     // group-create panel revealed
   selectMode: false,        // history multi-select for deletion
@@ -30,6 +31,7 @@ const ui = {
   confirmDeletePeople: false, // delete-people confirmation overlay open
   confirmClearDebt: null,   // person id whose clear-debt confirmation overlay is open
   cloudPromptOpen: false,   // first-run "sync across devices?" popup open
+  scheduledSnoozed: new Set(), // scheduled-debt ids the user said "remind me later" to this session
 };
 
 /* ---------- helpers ---------- */
@@ -42,6 +44,14 @@ function esc(s) {
 
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/* Date + time "now" stamp for the Ledger's "Balances as of …" caption. Interest
+   is time-based, so a balance is only fully meaningful with an as-of moment. */
+function fmtAsOf() {
+  return new Date().toLocaleString(undefined, {
+    day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
 }
 
 /* The day-key everything keys off: the UTC date, matching how transactions are
@@ -273,17 +283,19 @@ function updateConnectivity() {
   if (el) el.hidden = !connectionDown();
 }
 
+/* The header shows a single net stamp, in the currency preferred in Settings.
+   Other currencies are never converted — their nets live per-person on the
+   Ledger and in History — so the masthead stays one clean figure. */
 function renderStamps() {
   const { perCurrency } = netSummary();
+  const code = state.settings.baseCurrency;
+  const amt = perCurrency[code] || 0;
   const el = document.getElementById('net-stamps');
-  const stamps = [];
-  for (const [code, amt] of Object.entries(perCurrency)) {
-    if (Math.abs(amt) < 0.005) continue;
-    stamps.push(amt > 0
-      ? `<span class="stamp owed-to-you">Owed to you · ${fmtMoney(amt, code)}</span>`
-      : `<span class="stamp you-owe">You owe · ${fmtMoney(-amt, code)}</span>`);
-  }
-  el.innerHTML = stamps.join('') || '<span class="stamp grand">All square</span>';
+  el.innerHTML = Math.abs(amt) < 0.005
+    ? '<span class="stamp grand">All square</span>'
+    : (amt > 0
+        ? `<span class="stamp owed-to-you">Owed to you · ${fmtMoney(amt, code)}</span>`
+        : `<span class="stamp you-owe">You owe · ${fmtMoney(-amt, code)}</span>`);
 }
 
 /* ---------- ledger view ---------- */
@@ -353,9 +365,9 @@ function renderLedger() {
     id: 'clear-debt-overlay',
     closeAction: 'cancel-clear-debt',
     inner: `
-        <h3>Clear ${esc(clearTarget.name)}'s debt?</h3>
+        <h3>Settle ${esc(clearTarget.name)}'s balance?</h3>
         <p class="muted">Any outstanding interest is added, then the balance is zeroed and recorded in History as a repayment.</p>
-        <button class="btn block" data-action="confirm-clear-debt" data-id="${clearTarget.id}">Clear debt</button>
+        <button class="btn block" data-action="confirm-clear-debt" data-id="${clearTarget.id}">Settle balance</button>
         <button class="btn ghost block" data-action="cancel-clear-debt">Cancel</button>`,
   }) : '';
 
@@ -372,7 +384,7 @@ function renderLedger() {
         </div>
       </div>
     </div>
-    <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ paid</em> or <em>− repaid</em>, just like a spreadsheet row. Tap <em>Clear</em> beside a name to settle their debt to zero. Long-press a name to select people, then tap the bin to delete.</p>
+    <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ paid</em> or <em>− repaid</em>, just like a spreadsheet row. Tap <em>Settle</em> beside a name to zero their balance. Long-press a name to select people, then tap the bin to delete.</p>
 
     <form id="person-search" data-form="person-search" class="people-search" role="search">
       <span class="people-search-icon" aria-hidden="true">${Icons.search()}</span>
@@ -383,6 +395,7 @@ function renderLedger() {
 
     ${people.length ? `
     <div class="list-share">
+      <span class="as-of" title="Interest accrues continuously, so totals are computed at this moment">Balances as of ${esc(fmtAsOf())}</span>
       ${ShareButton({ cls: 'btn ghost head-action head-share', action: 'open-share-people', extra: state.people.length < 1 ? 'disabled title="Add someone first"' : '' })}
     </div>
     <table class="ledger-table">
@@ -447,6 +460,14 @@ function renderGroups() {
     `<label><input type="checkbox" name="member" value="${p.id}"> ${esc(p.name)}</label>`
   ).join('');
 
+  /* A person can sit in several groups, and each group's net counts their full
+     global balance — so the per-group nets overlap and must not be summed. Only
+     warn when that overlap actually exists. */
+  const overlap = state.people.some(p => groupsOf(p.id).length > 1);
+  const overlapNote = overlap
+    ? `<p class="section-sub group-overlap-note">Heads up: someone here belongs to more than one group, and each group's net counts their full balance — so the group nets overlap and don't add up to a single total.</p>`
+    : '';
+
   // The create form takes the prime slot only when there's nothing else to show
   // or the user explicitly opens it; otherwise existing groups lead.
   const showCreate = ui.creatingGroup || state.groups.length === 0;
@@ -471,6 +492,7 @@ function renderGroups() {
         ? '<button class="btn ghost head-action" data-action="new-group">+ New group</button>' : ''}
     </div>
     <p class="section-sub">People can live in many groups at once. Balances are global — record a payment in one group and it shows up in every other group instantly.</p>
+    ${overlapNote}
 
     ${showCreate ? createPanel : ''}
 
@@ -587,6 +609,16 @@ function renderGroupDetail() {
 
 /* ---------- rules view ---------- */
 
+/* "≈ 26.8% a year" — the effective annual rate of a periodic rule, for display.
+   Empty when the period is yearly (the rate already IS the annual figure) or the
+   rate is zero, so it only appears where it adds information. */
+function fmtEffectiveAnnual(rate, periodUnit, type) {
+  if (periodUnit === 'year') return '';
+  const ear = effectiveAnnualRate(rate, periodUnit, type);
+  if (ear == null) return '';
+  return `≈ ${ear.toFixed(ear >= 100 ? 0 : 1)}% a year`;
+}
+
 function describeInterestRule(r) {
   const cap = r.capPeriods ? ` for at most <span class="hl">${r.capPeriods} ${r.periodUnit}${r.capPeriods > 1 ? 's' : ''}</span>` : '';
   let scope = '';
@@ -595,8 +627,10 @@ function describeInterestRule(r) {
     scope = g ? ` and they're in <span class="hl">${esc(g.name)}</span>`
               : ' and they\'re in <span class="hl">a deleted group (rule inactive)</span>';
   }
+  const ear = fmtEffectiveAnnual(r.rate, r.periodUnit, r.type);
+  const earTag = ear ? ` <span class="rule-ear" title="Effective annual rate">${ear}</span>` : '';
   return `<span class="rule-name">${esc(r.name)}</span> — if balance <span class="hl">${r.op} ${r.value}</span>${scope},
-    charge <span class="hl">${r.rate}%</span> <span class="hl">${r.type}</span> interest per <span class="hl">${r.periodUnit}</span>${cap}.`;
+    charge <span class="hl">${r.rate}%</span> <span class="hl">${r.type}</span> interest per <span class="hl">${r.periodUnit}</span>${cap}.${earTag}`;
 }
 
 function interestRulesPanel() {
@@ -865,7 +899,28 @@ function renderHistory() {
      track the search too. The list below then narrows to the picked day. */
   const dayCounts = {};
   matches.forEach(({ t }) => { const k = dayKey(t.date); dayCounts[k] = (dayCounts[k] || 0) + 1; });
-  const calendar = renderHistoryCalendar(dayCounts);
+  /* Days that carry a future scheduled debt — marked with a hollow dot so
+     upcoming bets/loans are visible at a glance. */
+  const schedDays = new Set((state.scheduled || [])
+    .filter(s => getPerson(s.personId)).map(s => dayKey(s.date)));
+  /* The register is why anyone opens History, so it leads; the month grid is
+     tucked behind a toggle. A picked day forces it open so the filter stays
+     visible (and undoable). */
+  const calOpen = ui.calendarOpen || !!ui.historyDate;
+  const calToggle = `
+    <button type="button" class="cal-toggle${calOpen ? ' open' : ''}" data-action="cal-toggle" aria-expanded="${calOpen}">
+      <span class="cal-toggle-icon" aria-hidden="true">${Icons.calendar()}</span>
+      <span>${ui.historyDate ? `Filtered to ${esc(fmtDayKey(ui.historyDate))}` : 'Filter by date'}</span>
+      <span class="cal-toggle-chev" aria-hidden="true">${calOpen ? '▾' : '▸'}</span>
+    </button>`;
+  const calendar = calToggle + (calOpen ? renderHistoryCalendar(dayCounts, schedDays) : '');
+
+  // A future day is picked → show the "schedule a debt" panel instead of the
+  // (necessarily empty) entries list for that day.
+  const futureDay = ui.historyDate && ui.historyDate > todayKey();
+  // Show the calendar whenever there's something to navigate or someone to
+  // schedule against, even before any transaction exists.
+  const showCal = entries.length || schedDays.size || state.people.length;
 
   const visible = ui.historyDate
     ? matches.filter(({ t }) => dayKey(t.date) === ui.historyDate)
@@ -959,9 +1014,10 @@ function renderHistory() {
       <input id="history-search" placeholder="Search person, reason, amount, date…" value="${esc(ui.historySearch)}" style="flex:1">
     </div>
 
-    ${entries.length ? calendar : ''}
+    ${showCal ? calendar : ''}
 
-    ${entries.length ? (matches.length ? `
+    ${futureDay ? renderSchedulePanel(ui.historyDate)
+      : (entries.length ? (matches.length ? `
     <p class="muted history-count" style="margin-bottom:10px">${visible.length} ${visible.length === 1 ? 'entry' : 'entries'}${ui.historyDate ? ` on ${esc(fmtDayKey(ui.historyDate))}` : (q ? ' matching' : '')}</p>
     ${visible.length ? `
     <table class="ledger-table history-table">
@@ -972,14 +1028,82 @@ function renderHistory() {
     </table>`
       : EmptyState(`No entries on ${esc(fmtDayKey(ui.historyDate))}.`)}`
       : EmptyState(`No entries match “${esc(ui.historySearch)}”.`))
-      : EmptyState('No transactions yet. Record some lending or repayments on the Ledger.')}
+      : EmptyState('No transactions yet. Record some lending or repayments on the Ledger.'))}
   `;
+}
+
+/* The "schedule a future debt" panel, shown when a future day is picked in the
+   calendar. Lists anything already scheduled for that day (each cancellable) and
+   offers a small form to add one. Off-ledger until the day arrives — see
+   renderScheduledPrompt for the due-day confirmation. */
+function renderSchedulePanel(day) {
+  const people = peopleByName();
+  const items = (state.scheduled || [])
+    .filter(s => dayKey(s.date) === day && getPerson(s.personId))
+    .map(s => {
+      const p = getPerson(s.personId);
+      const owe = s.amount >= 0;
+      return `<div class="sched-item">
+        <span class="sched-item-main">${esc(p.name)} <span class="muted">${owe ? 'will owe you' : 'you will owe'}</span> ${Money(Math.abs(s.amount), p.currency, { tag: 'b', cls: owe ? 'pos' : 'neg' })}${esc(s.note) ? ` · ${esc(s.note)}` : ''}</span>
+        <button class="del-x" data-action="cancel-scheduled" data-id="${s.id}" title="Remove this scheduled debt">✕</button>
+      </div>`;
+    }).join('');
+
+  const personOptions = people.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  return `
+    <div class="sched-panel">
+      <h3 class="subhead">Schedule a debt · ${esc(fmtDayKey(day))}</h3>
+      <p class="section-sub" style="margin-bottom:14px">Set up a future debt — a bet, a promised loan. It stays off the ledger until that day, when Tally reminds you and asks whether to add it.</p>
+      ${items ? `<div class="sched-list">${items}</div>` : ''}
+      ${people.length ? `
+      <form data-form="schedule-debt">
+        <input type="hidden" name="date" value="${esc(day)}">
+        <div class="form-row">
+          <select name="personId">${personOptions}</select>
+          <select name="sign">
+            <option value="1">They’ll owe you (+)</option>
+            <option value="-1">You’ll owe them (−)</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <input name="amount" type="number" step="any" min="0.01" placeholder="amount" required style="flex:1;min-width:0">
+          <input name="note" placeholder="reason (e.g. lost a bet)" maxlength="80" style="flex:1;min-width:0">
+        </div>
+        <div class="form-row tight"><button class="btn" type="submit">Schedule it</button></div>
+      </form>`
+      : '<p class="muted">Add a person on the Ledger first, then schedule a debt for them here.</p>'}
+    </div>`;
+}
+
+/* The due-day reminder: when a scheduled debt's date has arrived, a confirmation
+   card asks whether to record it (the bet landed) or drop it. Shown over any tab.
+   One at a time; "Remind me later" snoozes it for this session. */
+function renderScheduledPrompt() {
+  const root = document.getElementById('scheduled-root');
+  if (!root) return;
+  const due = dueScheduled().filter(s => !ui.scheduledSnoozed.has(s.id));
+  if (!due.length) { root.innerHTML = ''; return; }
+  const s = due[0];
+  const p = getPerson(s.personId);
+  const owe = s.amount >= 0;
+  root.innerHTML = ConfirmOverlay({
+    id: 'scheduled-overlay',
+    closeAction: 'snooze-scheduled',
+    inner: `
+        <h3>A scheduled debt is due</h3>
+        <p class="muted">You scheduled this for ${esc(fmtDayKey(dayKey(s.date)))}${s.note ? ` — “${esc(s.note)}”` : ''}:</p>
+        <p class="sched-due-amount">${owe ? `${esc(p.name)} owes you` : `You owe ${esc(p.name)}`} <b class="money ${owe ? 'pos' : 'neg'}">${esc(fmtMoney(Math.abs(s.amount), p.currency))}</b></p>
+        <p class="muted">Add it to the ledger now?</p>
+        <button class="btn block" data-action="confirm-scheduled" data-id="${s.id}">Add it to the ledger</button>
+        <button class="btn ghost block" data-action="skip-scheduled" data-id="${s.id}">Don’t add it (discard)</button>
+        <button class="btn ghost block" data-action="snooze-scheduled" data-id="${s.id}">Remind me later</button>`,
+  });
 }
 
 /* Google-Calendar-style month grid for History: pick a day to filter the list
    to that day's entries. Dots mark days that have entries (after search). The
    month in view lives in ui.historyMonth; the picked day in ui.historyDate. */
-function renderHistoryCalendar(dayCounts) {
+function renderHistoryCalendar(dayCounts, schedDays = new Set()) {
   const today = todayKey();
   const month = ui.historyMonth || (ui.historyDate ? monthKey(ui.historyDate) : monthKey(today));
   const [y, m] = month.split('-').map(Number);                 // m is 1-12
@@ -998,13 +1122,19 @@ function renderHistoryCalendar(dayCounts) {
   for (let d = 1; d <= daysInMonth; d++) {
     const key = `${month}-${String(d).padStart(2, '0')}`;
     const count = dayCounts[key] || 0;
+    const scheduled = schedDays.has(key);
     const cls = ['cal-cell', 'cal-day'];
     if (key === ui.historyDate) cls.push('selected');
     if (key === today) cls.push('today');
     if (count) cls.push('has-entries');
-    const title = count ? ` title="${count} ${count === 1 ? 'entry' : 'entries'}"` : '';
+    if (scheduled) cls.push('has-scheduled');
+    const title = scheduled
+      ? ' title="Scheduled debt — tap to view"'
+      : (count ? ` title="${count} ${count === 1 ? 'entry' : 'entries'}"` : '');
+    const dot = count ? '<span class="cal-dot" aria-hidden="true"></span>'
+      : (scheduled ? '<span class="cal-dot cal-dot-sched" aria-hidden="true"></span>' : '');
     cells += `<button type="button" class="${cls.join(' ')}" data-action="cal-pick" data-date="${key}"${title}>
-      <span class="cal-num">${d}</span>${count ? '<span class="cal-dot" aria-hidden="true"></span>' : ''}
+      <span class="cal-num">${d}</span>${dot}
     </button>`;
   }
 
@@ -1019,7 +1149,7 @@ function renderHistoryCalendar(dayCounts) {
       <div class="cal-grid cal-days">${cells}</div>
       <div class="cal-foot">
         <button type="button" class="cal-link" data-action="cal-today">Today</button>
-        ${ui.historyDate ? `<button type="button" class="cal-link cal-clear" data-action="cal-clear">Clear date · ${esc(fmtDayKey(ui.historyDate))}</button>` : '<span class="muted cal-hint">Tap a day to filter</span>'}
+        ${ui.historyDate ? `<button type="button" class="cal-link cal-clear" data-action="cal-clear">Clear date · ${esc(fmtDayKey(ui.historyDate))}</button>` : '<span class="muted cal-hint">Tap a day to filter · a future day to schedule</span>'}
       </div>
     </div>`;
 }
@@ -1298,30 +1428,13 @@ function splitSelectedIds() {
     .map(cb => cb.dataset.splitMember);
 }
 
-/* The order in which split participants receive the leftover minor units, so
-   the same person isn't always the one charged a little extra. Fisher–Yates
-   shuffle of the participant indices: when you're in the split you (index 0)
-   still absorb the first leftover unit to keep the others' shares clean, then
-   the rest go out at random. The order is cached on the draft and only
-   reshuffled when the head count (or whether you're included) changes, so the
-   live preview matches exactly what's recorded on submit. A new split (fresh
-   draft) reshuffles, rotating who gets the bigger share next time. */
-function splitOrder(n, includeMe) {
-  const draft = ui.splitDraft;
-  const sig = `${n}|${includeMe ? 1 : 0}`;
-  if (draft && draft.orderSig === sig && draft.order && draft.order.length === n) {
-    return draft.order;
-  }
-  const rest = [];
-  for (let i = includeMe ? 1 : 0; i < n; i++) rest.push(i);
-  for (let i = rest.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [rest[i], rest[j]] = [rest[j], rest[i]];
-  }
-  const order = includeMe ? [0, ...rest] : rest;
-  if (draft) { draft.order = order; draft.orderSig = sig; }
-  return order;
-}
+/* Leftover minor units are assigned deterministically, not at random: a
+   reconciler should be able to predict exactly who pays the odd cent. splitShares
+   defaults to handing the leftover to the first participant(s) in listed order —
+   and when you're in the split you're index 0, so the leftover lands on you, the
+   payer, keeping everyone else's shares clean. Listed order is the order people
+   appear in the picker, which is the order the preview shows, so the live preview
+   matches what's recorded on submit. */
 
 function splitPreviewHTML(ids, amt, includeMe) {
   const people = ids.map(getPerson).filter(Boolean);
@@ -1333,7 +1446,7 @@ function splitPreviewHTML(ids, amt, includeMe) {
      (and any leftover cent lands on you, the payer). */
   const n = people.length + (includeMe ? 1 : 0);
   const offset = includeMe ? 1 : 0;
-  const shares = splitShares(amt, n, { whole: roundingOn(), order: splitOrder(n, includeMe) });
+  const shares = splitShares(amt, n, { whole: roundingOn() });
   const currencies = people.map(p => p.currency);
   if (includeMe) currencies.push(baseCur);
   const multiCurrency = new Set(currencies).size > 1;
@@ -1438,7 +1551,7 @@ function renderSplitModal() {
 
         <div class="split-fixed">
           <div class="form-row">
-            <input name="amount" type="number" step="any" min="0.01" placeholder="total amount" value="${esc(draft.amount || '')}" required>
+            <input name="amount" type="number" step="any" min="0.01" placeholder="total amount" value="${esc(draft.amount || '')}" style="flex:1;min-width:0" required>
             <input name="date" type="date" value="${esc(draft.date || new Date().toISOString().slice(0, 10))}" required>
           </div>
           <div class="form-row">
@@ -1593,7 +1706,7 @@ function currencyPanel() {
       <div class="form-row tight" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">
         <label><input type="checkbox" id="round-whole" ${state.settings.roundWhole ? 'checked' : ''}> Round amounts to whole numbers</label>
       </div>
-      <p class="muted">Hides paise/cents everywhere — balances, interest and existing entries all show as whole numbers. New splits divide into whole units too, with any remainder handed out at random so the same person isn't always charged the extra.</p>`,
+      <p class="muted">Hides paise/cents everywhere — balances, interest and existing entries all show as whole numbers. New splits divide into whole units too, with any remainder going to the first person listed — or to you, the payer, when you're in the split.</p>`,
   });
 }
 
@@ -1684,7 +1797,13 @@ function renderModal() {
   const detail = accruedInterestDetail(p);
   const { principal, interest, total } = balanceDisplay(p);
   const ruleNames = Object.keys(detail.byRule)
-    .map(id => interestRuleName(id)).filter(Boolean).join(', ');
+    .map(id => {
+      const name = interestRuleName(id);
+      if (!name) return null;
+      const r = interestRuleById(id);
+      const ear = r ? fmtEffectiveAnnual(r.rate, r.periodUnit, r.type) : '';
+      return ear ? `${esc(name)} <span class="rule-ear">${ear}</span>` : esc(name);
+    }).filter(Boolean).join(', ');
   const ic = p.interestConfig || defaultPersonInterest();
 
   /* Real entries plus the day-by-day accrued-interest charges (virtual, not yet
@@ -1784,7 +1903,7 @@ function renderModal() {
         <span>Accrued interest<b class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</b></span>
         <span>Total${Money(total, p.currency, { tag: 'b' })}</span>
       </div>
-      ${ruleNames ? `<p class="muted" style="margin:-8px 0 14px">Interest from rule: <em>${esc(ruleNames)}</em></p>` : ''}
+      ${ruleNames ? `<p class="muted" style="margin:-8px 0 14px">Interest from rule: <em>${ruleNames}</em></p>` : ''}
 
       <div class="form-row">
         <button class="btn ghost" data-action="capitalize" data-id="${p.id}" ${detail.total > 0.005 ? '' : 'disabled'}>Capitalize interest</button>
@@ -1827,6 +1946,7 @@ function render() {
   renderSplitModal();
   renderShareModal();
   renderCloudPrompt();
+  renderScheduledPrompt();
   if (ui.indirectOpen) updateTransferPreview();
   if (ui.splitOpen) updateSplitPreview();
   if (ui.shareGroupId || ui.sharePeopleOpen) updateSharePreview();
@@ -1869,6 +1989,12 @@ document.addEventListener('click', e => {
   if (e.target.id === 'member-confirm-overlay') { ui.confirmRemoveMembers = false; render(); return; }
   if (e.target.id === 'person-confirm-overlay') { ui.confirmDeletePeople = false; render(); return; }
   if (e.target.id === 'clear-debt-overlay') { ui.confirmClearDebt = null; render(); return; }
+  if (e.target.id === 'scheduled-overlay') {   // tap-away = remind me later (keep the scheduled debt)
+    const id = e.target.querySelector('[data-action="snooze-scheduled"]')?.dataset.id;
+    if (id) ui.scheduledSnoozed.add(id);
+    render();
+    return;
+  }
   if (e.target.id === 'cloud-prompt-overlay') { dismissCloudPrompt(); return; }
   if (!btn) return;
 
@@ -1908,7 +2034,9 @@ document.addEventListener('click', e => {
     case 'clear-search': ui.search = ''; render(); document.getElementById('search-box')?.focus(); break;
     case 'focus-search': document.getElementById('search-box')?.focus(); break;
 
-    /* History calendar: pick a day to filter, page months, jump to today, clear. */
+    /* History calendar: collapse/expand, pick a day to filter, page months,
+       jump to today, clear. */
+    case 'cal-toggle': ui.calendarOpen = !ui.calendarOpen; render(); break;
     case 'cal-pick': {
       const d = btn.dataset.date;
       ui.historyDate = ui.historyDate === d ? null : d;   // tap the picked day again to clear
@@ -1926,6 +2054,29 @@ document.addEventListener('click', e => {
       break;
     }
     case 'cal-clear': ui.historyDate = null; render(); break;
+
+    /* Scheduled (future) debts. */
+    case 'cancel-scheduled':       // remove an upcoming one from the schedule panel
+      if (getScheduled(id)) { cancelScheduled(id); commit(); showToast('Scheduled debt removed'); }
+      break;
+    case 'confirm-scheduled': {     // due-day reminder: record it onto the ledger
+      const s = getScheduled(id);
+      if (s) {
+        const before = totalOf(getPerson(s.personId));
+        confirmScheduled(id);
+        ui.scheduledSnoozed.delete(id);
+        commit();
+        maybeCelebrate(s.personId, before);
+        showToast('Added to the ledger');
+      }
+      break;
+    }
+    case 'skip-scheduled':          // due-day reminder: discard without recording
+      if (getScheduled(id)) { cancelScheduled(id); ui.scheduledSnoozed.delete(id); commit(); showToast('Scheduled debt discarded'); }
+      break;
+    case 'snooze-scheduled':        // due-day reminder: remind me again next time
+      ui.scheduledSnoozed.add(id); render();
+      break;
 
     case 'open-indirect': ui.indirectOpen = true; pushNav(); render(); break;
     case 'close-indirect': goBack(); break;
@@ -2196,6 +2347,27 @@ document.addEventListener('submit', e => {
       break;
     }
 
+    case 'schedule-debt': {
+      const amt = parseFloat(fd.get('amount'));
+      if (!Number.isFinite(amt) || amt <= 0) return;
+      try {
+        // noon on the chosen day, matching how dated entries are stamped, so the
+        // calendar day never drifts across timezones.
+        const iso = entryDate(fd.get('date')).toISOString();
+        addScheduledDebt({
+          personId: fd.get('personId'),
+          amount: amt * Number(fd.get('sign')),
+          note: fd.get('note') || '',
+          date: iso,
+        });
+        commit();
+        showToast('Debt scheduled');
+      } catch (err) {
+        alert(err.message);
+      }
+      break;
+    }
+
     case 'add-transfer': {
       const dateStr = fd.get('date');
       try {
@@ -2229,7 +2401,6 @@ document.addEventListener('submit', e => {
           includeMe,
           note: fd.get('note') || '',
           date: entryDate(dateStr).toISOString(),
-          order: splitOrder(ids.length + (includeMe ? 1 : 0), includeMe),
         });
         ui.splitOpen = false;
         ui.splitDraft = null;
