@@ -190,6 +190,29 @@ input, textarea, select, [contenteditable="true"] {
 
 .net-stamps { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; }
 
+/* ---------- top tab bar ----------
+   Primary navigation for the everyday views. Sits along the bottom edge of
+   the masthead; the active tab's underline lines up with the masthead border. */
+.tabbar {
+  max-width: 1000px; margin: 0 auto;
+  padding: 0 var(--sp-6);
+  display: flex; gap: var(--sp-2);
+}
+.tab-btn {
+  padding: 9px var(--sp-3) 11px;
+  background: none; border: none; cursor: pointer;
+  font-family: var(--body); font-size: var(--fs-base); font-weight: 600;
+  color: var(--ink-soft);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px; /* overlap the masthead's 1px bottom border */
+  transition: color var(--duration-fast), border-color var(--duration-fast);
+}
+.tab-btn:hover { color: var(--ink); }
+.tab-btn.active {
+  color: var(--green-deep);
+  border-bottom-color: var(--green);
+}
+
 /* Offline indicator — subtle pill in the masthead; the app stays fully usable
    on the locally-stored data, so this reassures rather than alarms. */
 .offline-flag {
@@ -769,6 +792,9 @@ button { font-family: var(--body); cursor: pointer; }
    only the list of people scrolls. */
 .modal-split { display: flex; flex-direction: column; max-height: calc(100vh - 80px); }
 .modal-split .split-intro { margin-bottom: 18px; }
+/* Breathing room between a field (e.g. the lender select) and the next
+   section heading below it, so headings like "Lent to" aren't cramped. */
+.modal-split .form-row + .subhead { margin-top: 18px; }
 .modal-split form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .modal-split .split-scroll {
   flex: 1; min-height: 0; overflow-y: auto;
@@ -1044,6 +1070,7 @@ button { font-family: var(--body); cursor: pointer; }
     align-items: center; gap: var(--sp-2);
   }
   .wordmark { font-size: var(--fs-h1); }
+  .tabbar { padding: 0 var(--sp-4); }
   .net-stamps { margin-left: auto; justify-content: flex-end; }
   .stamp { font-size: var(--fs-tag); padding: 4px 10px; }
   .view { padding: 18px 14px 60px; }

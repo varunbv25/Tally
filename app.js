@@ -55,6 +55,17 @@ function entryDate(dateStr) {
 
 function commit() { saveState(); render(); runNotificationCheck(); }
 
+/* Case-insensitive name comparator. Every list of people is shown in this
+   order so names read alphabetically everywhere, matching the Ledger tab. */
+function byName(a, b) {
+  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+}
+
+/* People sorted alphabetically by name, without mutating state.people. */
+function peopleByName() {
+  return state.people.slice().sort(byName);
+}
+
 /* ---------- theme ----------
    The user's choice ('light' | 'dark' | 'device') lives in settings.
    We resolve it to a concrete light/dark value, stamp <html data-theme>
@@ -266,7 +277,7 @@ function renderLedger() {
   const query = ui.search.trim();
   const people = state.people
     .filter(p => !q || p.name.toLowerCase().includes(q))
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    .sort(byName);
   const exactMatch = state.people.some(p => p.name.toLowerCase() === q);
   const showAdd = query.length > 0 && !exactMatch;
 
@@ -404,7 +415,7 @@ function renderGroups() {
   if (ui.openGroupId) return renderGroupDetail();
 
   const cards = state.groups.map(g => {
-    const names = g.memberIds.map(id => getPerson(id)?.name).filter(Boolean).join(', ');
+    const names = g.memberIds.map(getPerson).filter(Boolean).sort(byName).map(p => p.name).join(', ');
     const count = g.memberIds.length;
     return `<button class="group-card" data-action="open-group" data-id="${g.id}">
       <div class="group-card-head">
@@ -416,7 +427,7 @@ function renderGroups() {
     </button>`;
   }).join('');
 
-  const memberChecks = state.people.map(p =>
+  const memberChecks = peopleByName().map(p =>
     `<label><input type="checkbox" name="member" value="${p.id}"> ${esc(p.name)}</label>`
   ).join('');
 
@@ -456,7 +467,7 @@ function renderGroupDetail() {
   const g = getGroup(ui.openGroupId);
   if (!g) { ui.openGroupId = null; return renderGroups(); }
 
-  const members = g.memberIds.map(getPerson).filter(Boolean);
+  const members = g.memberIds.map(getPerson).filter(Boolean).sort(byName);
 
   const rows = members.map(p => {
     const total = totalOf(p);
@@ -473,7 +484,7 @@ function renderGroupDetail() {
     </tr>`;
   }).join('');
 
-  const nonMembers = state.people.filter(p => !g.memberIds.includes(p.id));
+  const nonMembers = state.people.filter(p => !g.memberIds.includes(p.id)).sort(byName);
   const addMemberOptions = nonMembers.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
 
   const activity = state.transactions
@@ -1139,7 +1150,7 @@ function renderIndirectModal() {
   if (!getPerson(draft.lenderId)) draft.lenderId = state.people[0].id;
   const sel = draft.selected;
 
-  const lenderOpts = state.people.map(p =>
+  const lenderOpts = peopleByName().map(p =>
     `<option value="${p.id}" ${p.id === draft.lenderId ? 'selected' : ''}>${esc(p.name)}</option>`
   ).join('');
 
@@ -1150,7 +1161,7 @@ function renderIndirectModal() {
       ${Chip(esc(state.settings.baseCurrency))}
     </label>`;
 
-  const rows = state.people.filter(p => p.id !== draft.lenderId).map(p =>
+  const rows = peopleByName().filter(p => p.id !== draft.lenderId).map(p =>
     `<label class="share-pick-row">
       <input type="checkbox" data-xfer-receiver="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>
       <span class="share-pick-name">${esc(p.name)}</span>
@@ -1311,7 +1322,7 @@ function renderSplitModal() {
       ${Chip(esc(state.settings.baseCurrency))}
     </label>`;
 
-  const rows = state.people.map(p =>
+  const rows = peopleByName().map(p =>
     `<label class="share-pick-row">
       <input type="checkbox" data-split-member="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>
       <span class="share-pick-name">${esc(p.name)}</span>
@@ -1366,8 +1377,7 @@ function renderSplitModal() {
 /* The Ledger share picker: every person, nobody ticked. Tick who to include
    and the preview/share covers exactly that selection. */
 function renderSharePeopleModal(root) {
-  const people = state.people.slice()
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  const people = peopleByName();
   const rows = people.map(p => {
     const total = totalOf(p);
     const settled = Math.abs(total) <= 0.005;
@@ -1406,7 +1416,7 @@ function renderShareModal() {
   const g = getGroup(ui.shareGroupId);
   if (!g) { ui.shareGroupId = null; root.innerHTML = ''; return; }
 
-  const members = g.memberIds.map(getPerson).filter(Boolean);
+  const members = g.memberIds.map(getPerson).filter(Boolean).sort(byName);
   const rows = members.map(p => {
     const total = totalOf(p);
     const settled = Math.abs(total) <= 0.005;
@@ -1711,7 +1721,7 @@ function render() {
   renderStamps();
   updateConnectivity();
 
-  document.querySelectorAll('.drawer-item').forEach(t =>
+  document.querySelectorAll('.drawer-item, .tab-btn').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === ui.tab));
 
   const view = document.getElementById('view');
@@ -2378,6 +2388,13 @@ document.getElementById('drawer-nav').addEventListener('click', e => {
   if (!item) return;
   closeDrawer();
   navigateTab(item.dataset.tab);
+});
+
+// Top tab bar: the everyday views (Ledger/Groups/History) switch from here.
+document.getElementById('tabbar').addEventListener('click', e => {
+  const btn = e.target.closest('.tab-btn');
+  if (!btn) return;
+  navigateTab(btn.dataset.tab);
 });
 
 // Tapping the wordmark returns home to the ledger.
