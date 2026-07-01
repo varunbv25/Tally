@@ -16,7 +16,7 @@ function QuickAdd({ idSuffix, action, dataId, group, titles }) {
   const minusTitle = titles ? ' title="They paid you back"' : '';
   return `<div class="quick-add">
           <div class="quick-add-main">
-            <input type="number" step="any" min="0" placeholder="amount" id="qa-${idSuffix}">
+            <input type="number" inputmode="decimal" step="any" min="0" placeholder="amount" id="qa-${idSuffix}">
             <button class="btn small plus" data-action="${action}"${idAttr}${groupAttr} data-sign="1"${plusTitle}>+ paid</button>
             <button class="btn small minus" data-action="${action}"${idAttr}${groupAttr} data-sign="-1"${minusTitle}>− repaid</button>
           </div>

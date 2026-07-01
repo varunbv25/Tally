@@ -1066,7 +1066,7 @@ function renderSchedulePanel(day) {
           </select>
         </div>
         <div class="form-row">
-          <input name="amount" type="number" step="any" min="0.01" placeholder="amount" required style="flex:1;min-width:0">
+          <input name="amount" type="number" inputmode="decimal" step="any" min="0.01" placeholder="amount" required style="flex:1;min-width:0">
           <input name="note" placeholder="reason (e.g. lost a bet)" maxlength="80" style="flex:1;min-width:0">
         </div>
         <div class="form-row tight"><button class="btn" type="submit">Schedule it</button></div>
@@ -1404,7 +1404,7 @@ function renderIndirectModal() {
 
         <div class="split-fixed">
           <div class="form-row">
-            <input name="amount" type="number" step="any" min="0.01" placeholder="amount each" value="${esc(draft.amount || '')}" required>
+            <input name="amount" type="number" inputmode="decimal" step="any" min="0.01" placeholder="amount each" value="${esc(draft.amount || '')}" required>
             <input name="date" type="date" value="${esc(draft.date || new Date().toISOString().slice(0, 10))}">
             <input name="note" placeholder="reason (optional)" maxlength="80" value="${esc(draft.note || '')}" style="flex:1">
           </div>
@@ -1551,7 +1551,7 @@ function renderSplitModal() {
 
         <div class="split-fixed">
           <div class="form-row">
-            <input name="amount" type="number" step="any" min="0.01" placeholder="total amount" value="${esc(draft.amount || '')}" style="flex:1;min-width:0" required>
+            <input name="amount" type="number" inputmode="decimal" step="any" min="0.01" placeholder="total amount" value="${esc(draft.amount || '')}" style="flex:1;min-width:8em" required>
             <input name="date" type="date" value="${esc(draft.date || new Date().toISOString().slice(0, 10))}" required>
           </div>
           <div class="form-row">
@@ -1877,7 +1877,7 @@ function renderModal() {
               <option value="1">They borrowed (+)</option>
               <option value="-1">They paid back (−)</option>
             </select>
-            <input name="amount" type="number" step="any" min="0.01" required placeholder="amount">
+            <input name="amount" type="number" inputmode="decimal" step="any" min="0.01" required placeholder="amount">
             <input name="date" type="date" value="${new Date().toISOString().slice(0, 10)}">
           </div>
           <div class="form-row">

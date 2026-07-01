@@ -140,7 +140,11 @@ body {
   font-family: var(--body);
   background: var(--bg);
   color: var(--ink);
+  /* 100vh on mobile Safari counts the area behind the retracting toolbar,
+     which causes a bottom-cutoff / jump on scroll; 100dvh tracks the visible
+     viewport. Keep the vh line first as a fallback for browsers without dvh. */
   min-height: 100vh;
+  min-height: 100dvh;
   font-size: var(--fs-lead);
   line-height: 1.5;
   overflow-x: hidden;
@@ -1177,10 +1181,35 @@ button { font-family: var(--body); cursor: pointer; }
 /* ---------- responsive ---------- */
 
 @media (max-width: 680px) {
-  /* prevent iOS zoom-on-focus and keep touch targets comfortable */
-  input, select { font-size: 16px; }
-  .btn { padding: 10px 16px; }
-  .btn.small { padding: 8px 12px; font-size: var(--fs-sm); }
+  /* Prevent iOS zoom-on-focus: any focused control under 16px makes Safari
+     auto-zoom and reflow. `input, select` alone is not enough — the attribute
+     selector input[type="number"] (font-size: var(--fs-sm)=13px) is more
+     specific and wins regardless of the media query, so the amount field (the
+     most-tapped control on the phone) kept zooming while its neighbours didn't.
+     Match that specificity here to hold every field at 16px. */
+  input, select, textarea { font-size: 16px; }
+  input[type="number"], input[type="date"] { font-size: 16px; }
+
+  /* Touch targets: iOS asks for 44x44, Material for 48x48. Bring every
+     interactive control up to at least 44px tall on the phone — the amount
+     input and the +paid/−repaid/Settle buttons sat around 31–33px. */
+  input, select, textarea, .btn { min-height: 44px; }
+  .btn { padding: 11px 16px; }
+  .btn.small { padding: 10px 14px; font-size: var(--fs-sm); }
+  .tab-btn { padding: 12px var(--sp-3); }
+  .hamburger { width: 44px; height: 44px; }
+  .people-search-clear { width: 44px; height: 44px; }
+
+  /* Pin the primary navigation. The ledger runs ~2.5 screens even for a
+     handful of people, so a static masthead means Ledger/Groups/History and
+     the net-position chips scroll out of reach the instant the user moves —
+     and switching those three views is the core loop. Keep them on screen.
+     padding-top clears the notch now that viewport-fit=cover is set. */
+  .masthead {
+    position: sticky; top: 0; z-index: 40; /* below the modal overlay (50) so modals cover it */
+    padding-top: env(safe-area-inset-top, 0px);
+    box-shadow: 0 2px 10px var(--shadow-bar);
+  }
 
   .masthead-inner {
     padding: 14px var(--sp-4) var(--sp-1);
@@ -1192,6 +1221,15 @@ button { font-family: var(--body); cursor: pointer; }
   .stamp { font-size: var(--fs-tag); padding: 4px 10px; }
   .view { padding: 18px 14px 60px; }
   .panel { padding: 14px; }
+
+  /* Onboarding/intro prose is heavy on a phone — the ledger and History intros
+     each ate roughly a third of the first screen before any data. Drop them to
+     caption size and tighten the margin so the balances the user came to read
+     sit higher up. */
+  .section-sub {
+    font-size: var(--fs-cap); line-height: 1.45;
+    margin-bottom: var(--sp-3);
+  }
 
   /* tables become stacked cards */
   .ledger-table thead { display: none; }
