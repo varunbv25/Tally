@@ -1180,6 +1180,16 @@ button { font-family: var(--body); cursor: pointer; }
 
 /* ---------- responsive ---------- */
 
+/* The number-input zoom is a touch-Safari problem, not a small-screen one: any
+   focused control under 16px auto-zooms regardless of viewport width, so iPads
+   and phones in landscape — both wider than the 680px phone breakpoint below —
+   would still zoom the amount field on the desktop-style layout. Gate this on
+   the input mechanism, not the width, so every touch device is covered. (The
+   680px block repeats it so it also holds when a coarse pointer isn't reported.) */
+@media (pointer: coarse) {
+  input[type="number"], input[type="date"] { font-size: 16px; }
+}
+
 @media (max-width: 680px) {
   /* Prevent iOS zoom-on-focus: any focused control under 16px makes Safari
      auto-zoom and reflow. `input, select` alone is not enough — the attribute
