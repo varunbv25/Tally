@@ -6,6 +6,7 @@
 name = "tally-api"
 main = "src/index.js"
 compatibility_date = "2026-06-01"
+compatibility_flags = ["nodejs_compat"]  # webcrypto-web-push imports node:crypto
 
 kv_namespaces = [
   { binding = "TALLY_PUSH", id = "843aea42ba0248139aade8b5e276734a" },
@@ -13,7 +14,7 @@ kv_namespaces = [
   #   npx wrangler kv namespace create TALLY_SYNC
   # then uncomment the line below with the printed id, and set the AUTH_SECRET /
   # RESEND_API_KEY / MAIL_FROM secrets (see .dev.vars.example).
-  # { binding = "TALLY_SYNC", id = "PASTE_TALLY_SYNC_KV_ID" }
+  { binding = "TALLY_SYNC", id = "37a7d7a81ca34b609c0d8c48200c6ed5" }
 ]
 
 [triggers]

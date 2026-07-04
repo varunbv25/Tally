@@ -8,7 +8,7 @@
 
 /* config — VAPID_PUBLIC_KEY filled in at deployment */
 const PUSH_SERVER = 'https://tally-api.varunbv2505.workers.dev';
-const VAPID_PUBLIC_KEY = 'BHUx27aDf72m7PzdXfoyeryp3IFa__EgxkOS_cBXhBcsYBHpOgt5igL5v3R7aAORRL9DfBQryDmmFkeBtrhdQUM';
+const VAPID_PUBLIC_KEY = 'BAhSlziDbQk5OLrraR9iCL7SzDOfs2unhOAbqFTD-oCpleusO37jRyJA0Kz8YOPQpuukPauFBvSFJRgjifdf4G8';
 
 const PUSH_HORIZON_DAYS = 90;
 const PUSH_STEP_MS = 6 * 3600 * 1000;

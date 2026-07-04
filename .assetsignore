@@ -1,0 +1,18 @@
+# Only the PWA frontend should be publicly served by the "tally" assets worker.
+# assets.directory is the repo root, so everything below would otherwise be
+# downloadable (incl. the whole .git history and backend source). Exclude it.
+.git
+.github
+.claude
+worker
+docs
+tests
+node_modules
+serve.js
+wrangler.jsonc
+package.json
+package-lock.json
+.gitignore
+.assetsignore
+.DS_Store
+*.md

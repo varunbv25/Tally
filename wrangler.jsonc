@@ -1,14 +1,21 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "tally",
-  "compatibility_date": "2026-06-12",
-  "observability": {
-    "enabled": true
-  },
-  "assets": {
-    "directory": "."
-  },
-  "compatibility_flags": [
-    "nodejs_compat"
-  ]
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "tally",
+	"compatibility_date": "2026-06-12",
+	"observability": {
+		"enabled": true
+	},
+	"assets": {
+		"directory": "."
+	},
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"kv_namespaces": [
+		{
+			"binding": "TALLY_SYNC",
+			"id": "37a7d7a81ca34b609c0d8c48200c6ed5",
+			"remote": true
+		}
+	]
 }
