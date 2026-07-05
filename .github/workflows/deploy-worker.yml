@@ -1,4 +1,12 @@
-# Deploys the Tally API Worker (worker/) to Cloudflare.
+# Deploys Tally to Cloudflare — two independent Workers:
+#
+#   * deploy       → worker/ (the API Worker "tally-api": push + email cloud sync)
+#   * deploy-site  → repo root via wrangler.jsonc (the static PWA, Worker "tally")
+#
+# These are deliberately separate Workers with distinct names. The frontend
+# reaches the API over its absolute URL (PUSH_SERVER in push.js), so the two
+# never collide on a hostname and email sync keeps working regardless of where
+# the site is served.
 #
 # Setup (one-time):
 #   1. Create a Cloudflare API token with the "Edit Cloudflare Workers" template
@@ -6,10 +14,10 @@
 #   2. Add it as a repo secret named CLOUDFLARE_API_TOKEN
 #      (Settings → Secrets and variables → Actions → New repository secret).
 #
-# Runs automatically when worker code changes land on main, and on demand via
-# the "Run workflow" button (Actions tab). Worker secrets (AUTH_SECRET,
+# Runs automatically when worker or frontend code lands on main, and on demand
+# via the "Run workflow" button (Actions tab). Worker secrets (AUTH_SECRET,
 # RESEND_API_KEY, MAIL_FROM, …) and the TALLY_SYNC KV binding are configured
-# directly against the Worker with `wrangler secret put` / the dashboard — they
+# directly against each Worker with `wrangler secret put` / the dashboard — they
 # are not managed here.
 name: Deploy Worker
 
@@ -17,7 +25,23 @@ on:
   push:
     branches: [main]
     paths:
+      # API Worker
       - 'worker/**'
+      # Static PWA (served by the "tally" assets Worker)
+      - 'index.html'
+      - 'app.js'
+      - 'cloud.js'
+      - 'push.js'
+      - 'notif.js'
+      - 'store.js'
+      - 'styles.css'
+      - 'sw.js'
+      - 'manifest.json'
+      - 'icons/**'
+      - 'components/**'
+      - 'wrangler.jsonc'
+      - '.assetsignore'
+      # This workflow
       - '.github/workflows/deploy-worker.yml'
   workflow_dispatch: {}
 
@@ -55,4 +79,36 @@ jobs:
           workingDirectory: worker
           # Pin a modern Wrangler; the action otherwise defaults to an old 3.x
           # that warns it is out-of-date against the v4 wrangler.toml config.
+          wranglerVersion: '4.107.0'
+
+  # Deploys the static PWA (repo root, ../wrangler.jsonc → Worker "tally"),
+  # replacing the Cloudflare "Workers Builds" git integration. Assets-only, so
+  # no dependency install is needed; .assetsignore keeps .git / worker / tests
+  # and other non-frontend files out of what gets served.
+  deploy-site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check for Cloudflare API token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN repo secret is not set — the static site cannot be deployed."
+            echo "Create a token with the 'Edit Cloudflare Workers' template at" \
+                 "https://dash.cloudflare.com/profile/api-tokens and add it under" \
+                 "Settings → Secrets and variables → Actions as CLOUDFLARE_API_TOKEN."
+            exit 1
+          fi
+
+      - name: Deploy static site to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Root wrangler.jsonc (Worker "tally", assets-only).
           wranglerVersion: '4.107.0'
