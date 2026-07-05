@@ -103,6 +103,9 @@ function cloudMountGoogleButton() {
       const el = document.getElementById("google-signin-btn");
       if (!el || el.dataset.rendered === "1") return;
       el.dataset.rendered = "1";
+      // Fill the container so the button reads as a real full-width button
+      // (GSI caps width at 400px — plenty for the mobile card).
+      const width = Math.min(400, Math.round(el.clientWidth)) || undefined;
       window.google.accounts.id.renderButton(el, {
         type: "standard",
         theme: "outline",
@@ -110,6 +113,7 @@ function cloudMountGoogleButton() {
         text: "signin_with",
         shape: "pill",
         logo_alignment: "left",
+        width,
       });
     })
     .catch((err) => {
