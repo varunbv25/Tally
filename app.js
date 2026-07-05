@@ -31,6 +31,7 @@ const ui = {
   confirmDeletePeople: false, // delete-people confirmation overlay open
   confirmClearDebt: null,   // person id whose clear-debt confirmation overlay is open
   cloudPromptOpen: false,   // first-run "sync across devices?" popup open
+  drawerOpen: false,        // hamburger navigation drawer open
   scheduledSnoozed: new Set(), // scheduled-debt ids the user said "remind me later" to this session
 };
 
@@ -135,7 +136,7 @@ if (window.matchMedia) {
 let navDepth = 0;
 
 function navState() {
-  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, splitOpen: ui.splitOpen, shareGroupId: ui.shareGroupId, sharePeopleOpen: ui.sharePeopleOpen, selectMode: ui.selectMode, memberSelect: ui.memberSelect, personSelect: ui.personSelect };
+  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, indirectOpen: ui.indirectOpen, splitOpen: ui.splitOpen, shareGroupId: ui.shareGroupId, sharePeopleOpen: ui.sharePeopleOpen, selectMode: ui.selectMode, memberSelect: ui.memberSelect, personSelect: ui.personSelect, drawerOpen: ui.drawerOpen, cloudPromptOpen: ui.cloudPromptOpen, confirmDelete: ui.confirmDelete, confirmRemoveMembers: ui.confirmRemoveMembers, confirmDeletePeople: ui.confirmDeletePeople, confirmClearDebt: ui.confirmClearDebt, calendarOpen: ui.calendarOpen };
 }
 
 function pushNav() {
@@ -153,20 +154,42 @@ function applyNav(s) {
   ui.sharePeopleOpen = !!(s && s.sharePeopleOpen);
   ui.renamingGroup = false;
   ui.selectMode = !!(s && s.selectMode);
-  if (!ui.selectMode) { ui.selected = new Set(); ui.confirmDelete = false; }
+  if (!ui.selectMode) ui.selected = new Set();
+  ui.confirmDelete = !!(s && s.confirmDelete);
   ui.memberSelect = !!(s && s.memberSelect);
-  if (!ui.memberSelect) { ui.selectedMembers = new Set(); ui.confirmRemoveMembers = false; }
+  if (!ui.memberSelect) ui.selectedMembers = new Set();
+  ui.confirmRemoveMembers = !!(s && s.confirmRemoveMembers);
   ui.personSelect = !!(s && s.personSelect);
-  if (!ui.personSelect) { ui.selectedPeople = new Set(); ui.confirmDeletePeople = false; }
+  if (!ui.personSelect) ui.selectedPeople = new Set();
+  ui.confirmDeletePeople = !!(s && s.confirmDeletePeople);
+  ui.confirmClearDebt = (s && s.confirmClearDebt) || null;
+  ui.calendarOpen = !!(s && s.calendarOpen);
+  ui.cloudPromptOpen = !!(s && s.cloudPromptOpen);
+  ui.drawerOpen = !!(s && s.drawerOpen);
 }
 
 function goBack() { history.back(); }
+
+/* A drawer nav item wants to switch tabs, but the drawer owns the top history
+   entry — so we pop it first (closing the drawer) and run the navigation once
+   popstate settles, avoiding a pushState/popstate race. */
+let pendingDrawerNav = null;
+
+/* The drawer lives in static DOM (not re-rendered), so reconcile it to the
+   nav state after a back/forward restore. */
+function syncDrawer() {
+  const shown = document.body.classList.contains('menu-open');
+  if (ui.drawerOpen && !shown) openDrawer();
+  else if (!ui.drawerOpen && shown) closeDrawer();
+}
 
 window.addEventListener('popstate', e => {
   const s = e.state && e.state.tally ? e.state : { tab: 'ledger', depth: 0 };
   navDepth = s.depth || 0;
   applyNav(s);
+  syncDrawer();
   render();
+  if (pendingDrawerNav) { const t = pendingDrawerNav; pendingDrawerNav = null; navigateTab(t); }
 });
 
 /* ---------- notifications plumbing ---------- */
@@ -816,18 +839,20 @@ function renderCloudPrompt() {
   });
 }
 
-/* Close the first-run popup and remember it was offered, so it never reappears. */
+/* Close the first-run popup and remember it was offered, so it never reappears.
+   goBack() pops the popup's history entry; popstate clears the flag + re-renders. */
 function dismissCloudPrompt() {
-  ui.cloudPromptOpen = false;
   if (typeof markCloudPromptSeen === 'function') markCloudPromptSeen();
-  render();
+  goBack();
 }
 
 /* Jump to Settings and bring the Cloud sync panel into view + briefly highlight
    it, so "Set up cloud sync" lands the user exactly where they can sign in. */
 function openCloudSyncSettings() {
+  // Reached only from the first-run popup, which already owns a history entry —
+  // replace it (don't push) so back returns to the ledger, not the popup.
   ui.tab = 'account';
-  pushNav();
+  history.replaceState(navState(), '');
   render();
   requestAnimationFrame(() => {
     const panel = document.getElementById('cloud-sync-panel');
@@ -992,15 +1017,8 @@ function renderHistory() {
     closeAction: 'cancel-confirm',
     inner: `
         <h3>Delete ${selCount} ${selCount === 1 ? 'entry' : 'entries'}?</h3>
-        <p class="muted">Choose how these should be removed:</p>
-        <button class="btn danger block" data-action="confirm-delete" data-mode="adjust">
-          Delete &amp; adjust balances
-        </button>
-        <p class="confirm-hint">Removes the entries and updates each person's balance by those amounts.</p>
-        <button class="btn block" data-action="confirm-delete" data-mode="archive">
-          Remove from history only
-        </button>
-        <p class="confirm-hint">Hides them from history. Everyone's balance stays exactly the same.</p>
+        <p class="muted">Removes ${selCount === 1 ? 'it' : 'them'} and updates each person's balance by ${selCount === 1 ? 'that amount' : 'those amounts'}.</p>
+        <button class="btn danger block" data-action="confirm-delete">Delete</button>
         <button class="btn ghost block" data-action="cancel-confirm">Cancel</button>`,
   }) : '';
 
@@ -1180,9 +1198,8 @@ function toggleSelected(txnId) {
   render();
 }
 
-/* mode: 'adjust' removes the entries and changes balances;
-   'archive' hides them from history but keeps balances unchanged. */
-function performDelete(mode) {
+/* Removes the entries and adjusts each person's balance accordingly. */
+function performDelete() {
   const ids = new Set(ui.selected);
   if (!ids.size) return;
   // an indirect payment is two linked legs — act on its sibling too so balances stay consistent
@@ -1192,20 +1209,12 @@ function performDelete(mode) {
       state.transactions.forEach(x => { if (x.linkId === t.linkId) ids.add(x.id); });
     }
   });
-  ids.forEach(id => {
-    if (mode === 'adjust') {
-      deleteTransaction(id);
-    } else {
-      const t = state.transactions.find(x => x.id === id);
-      if (t) t.archived = true;
-    }
-  });
+  ids.forEach(id => deleteTransaction(id));
   saveState();
   runNotificationCheck();
   const n = ids.size;
-  ui.confirmDelete = false;
-  goBack();   // pops the select-mode entry; popstate clears selection and re-renders
-  showToast(`${n} ${n === 1 ? 'entry' : 'entries'} ${mode === 'adjust' ? 'deleted' : 'removed from history'}`);
+  history.go(-2);   // pop the confirm + select-mode entries; popstate clears selection and re-renders
+  showToast(`${n} ${n === 1 ? 'entry' : 'entries'} deleted`);
 }
 
 /* ---------- group-member multi-select removal ---------- */
@@ -1235,8 +1244,7 @@ function performRemoveMembers() {
   saveState();
   runNotificationCheck();
   const n = ids.size;
-  ui.confirmRemoveMembers = false;
-  goBack();   // pops the member-select entry; popstate clears selection and re-renders
+  history.go(-2);   // pop the confirm + member-select entries; popstate clears selection and re-renders
   showToast(`${n} ${n === 1 ? 'person' : 'people'} removed from ${g.name}`);
 }
 
@@ -1265,8 +1273,7 @@ function performDeletePeople() {
   saveState();
   runNotificationCheck();
   const n = ids.size;
-  ui.confirmDeletePeople = false;
-  goBack();   // pops the person-select entry; popstate clears selection and re-renders
+  history.go(-2);   // pop the confirm + person-select entries; popstate clears selection and re-renders
   showToast(`${n} ${n === 1 ? 'person' : 'people'} deleted`);
 }
 
@@ -1985,10 +1992,10 @@ document.addEventListener('click', e => {
   if (e.target.id === 'indirect-overlay') { goBack(); return; }
   if (e.target.id === 'split-overlay') { goBack(); return; }
   if (e.target.id === 'share-overlay') { goBack(); return; }
-  if (e.target.id === 'confirm-overlay') { ui.confirmDelete = false; render(); return; }
-  if (e.target.id === 'member-confirm-overlay') { ui.confirmRemoveMembers = false; render(); return; }
-  if (e.target.id === 'person-confirm-overlay') { ui.confirmDeletePeople = false; render(); return; }
-  if (e.target.id === 'clear-debt-overlay') { ui.confirmClearDebt = null; render(); return; }
+  if (e.target.id === 'confirm-overlay') { goBack(); return; }
+  if (e.target.id === 'member-confirm-overlay') { goBack(); return; }
+  if (e.target.id === 'person-confirm-overlay') { goBack(); return; }
+  if (e.target.id === 'clear-debt-overlay') { goBack(); return; }
   if (e.target.id === 'scheduled-overlay') {   // tap-away = remind me later (keep the scheduled debt)
     const id = e.target.querySelector('[data-action="snooze-scheduled"]')?.dataset.id;
     if (id) ui.scheduledSnoozed.add(id);
@@ -2036,7 +2043,10 @@ document.addEventListener('click', e => {
 
     /* History calendar: collapse/expand, pick a day to filter, page months,
        jump to today, clear. */
-    case 'cal-toggle': ui.calendarOpen = !ui.calendarOpen; render(); break;
+    case 'cal-toggle':
+      if (ui.calendarOpen) goBack();                             // pop the calendar entry
+      else { ui.calendarOpen = true; pushNav(); render(); }       // so back collapses it
+      break;
     case 'cal-pick': {
       const d = btn.dataset.date;
       ui.historyDate = ui.historyDate === d ? null : d;   // tap the picked day again to clear
@@ -2136,13 +2146,13 @@ document.addEventListener('click', e => {
       break;
     }
 
-    case 'open-remove-members-confirm': if (ui.selectedMembers.size) { ui.confirmRemoveMembers = true; render(); } break;
-    case 'cancel-remove-members': ui.confirmRemoveMembers = false; render(); break;
+    case 'open-remove-members-confirm': if (ui.selectedMembers.size) { ui.confirmRemoveMembers = true; pushNav(); render(); } break;
+    case 'cancel-remove-members': goBack(); break;
     case 'confirm-remove-members': performRemoveMembers(); break;
     case 'exit-member-select': goBack(); break;
 
-    case 'open-delete-people-confirm': if (ui.selectedPeople.size) { ui.confirmDeletePeople = true; render(); } break;
-    case 'cancel-delete-people': ui.confirmDeletePeople = false; render(); break;
+    case 'open-delete-people-confirm': if (ui.selectedPeople.size) { ui.confirmDeletePeople = true; pushNav(); render(); } break;
+    case 'cancel-delete-people': goBack(); break;
     case 'confirm-delete-people': performDeletePeople(); break;
     case 'exit-person-select': goBack(); break;
 
@@ -2171,9 +2181,9 @@ document.addEventListener('click', e => {
       break;
 
     case 'clear-debt':
-      if (getPerson(id)) { ui.confirmClearDebt = id; render(); }
+      if (getPerson(id)) { ui.confirmClearDebt = id; pushNav(); render(); }
       break;
-    case 'cancel-clear-debt': ui.confirmClearDebt = null; render(); break;
+    case 'cancel-clear-debt': goBack(); break;
     case 'confirm-clear-debt': {
       const person = getPerson(id);
       ui.confirmClearDebt = null;
@@ -2184,6 +2194,7 @@ document.addEventListener('click', e => {
       } else {
         render();
       }
+      goBack();   // pop the now-closed confirm entry so history stays in sync
       break;
     }
 
@@ -2199,9 +2210,9 @@ document.addEventListener('click', e => {
       break;
     }
 
-    case 'open-delete-confirm': if (ui.selected.size) { ui.confirmDelete = true; render(); } break;
-    case 'cancel-confirm': ui.confirmDelete = false; render(); break;
-    case 'confirm-delete': performDelete(btn.dataset.mode); break;
+    case 'open-delete-confirm': if (ui.selected.size) { ui.confirmDelete = true; pushNav(); render(); } break;
+    case 'cancel-confirm': goBack(); break;
+    case 'confirm-delete': performDelete(); break;
     case 'exit-select': goBack(); break;
 
     case 'toggle-rule': {
@@ -2274,8 +2285,9 @@ document.addEventListener('click', e => {
     /* ---- first-run sync prompt ---- */
     case 'cloud-prompt-dismiss': dismissCloudPrompt(); break;
     case 'cloud-prompt-signin':
-      dismissCloudPrompt();
-      openCloudSyncSettings();
+      if (typeof markCloudPromptSeen === 'function') markCloudPromptSeen();
+      ui.cloudPromptOpen = false;
+      openCloudSyncSettings();   // replaces the popup's history entry with the Account view
       break;
   }
 });
@@ -2652,19 +2664,26 @@ function navigateTab(newTab) {
   ui.selectedPeople = new Set();
   ui.confirmDeletePeople = false;
   ui.confirmClearDebt = null;
+  ui.calendarOpen = false;
   pushNav();
   render();
 }
 
-document.getElementById('menu-toggle').addEventListener('click', openDrawer);
-document.getElementById('menu-close').addEventListener('click', closeDrawer);
-document.getElementById('drawer-scrim').addEventListener('click', closeDrawer);
+// Opening pushes a history entry so the OS back button/gesture closes the
+// drawer; every close route pops that entry (popstate → syncDrawer closes it).
+document.getElementById('menu-toggle').addEventListener('click', () => {
+  ui.drawerOpen = true;
+  openDrawer();
+  pushNav();
+});
+document.getElementById('menu-close').addEventListener('click', () => { if (ui.drawerOpen) goBack(); });
+document.getElementById('drawer-scrim').addEventListener('click', () => { if (ui.drawerOpen) goBack(); });
 
 document.getElementById('drawer-nav').addEventListener('click', e => {
   const item = e.target.closest('.drawer-item');
   if (!item) return;
-  closeDrawer();
-  navigateTab(item.dataset.tab);
+  pendingDrawerNav = item.dataset.tab;   // navigate after the drawer entry pops
+  goBack();
 });
 
 // Top tab bar: the everyday views (Ledger/Groups/History) switch from here.
@@ -2682,7 +2701,7 @@ homeLink.addEventListener('keydown', e => {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeDrawer();
+  if (e.key === 'Escape' && ui.drawerOpen) goBack();
 });
 
 /* ---------- long-press a history entry to delete it (touch + mouse) ---------- */
@@ -2747,6 +2766,7 @@ if (typeof cloudInit === 'function') cloudInit();   // opt-in cloud sync (no-op 
    (or deployments without sync) just see the panel waiting in Settings. */
 if (typeof cloudShouldPrompt === 'function' && cloudShouldPrompt()) {
   ui.cloudPromptOpen = true;
+  pushNav();   // so the OS back button/gesture dismisses the popup
   render();
 }
 
