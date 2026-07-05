@@ -31,6 +31,18 @@ jobs:
         with:
           node-version: 20
 
+      - name: Check for Cloudflare API token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN repo secret is not set — the Worker cannot be deployed."
+            echo "Create a token with the 'Edit Cloudflare Workers' template at" \
+                 "https://dash.cloudflare.com/profile/api-tokens and add it under" \
+                 "Settings → Secrets and variables → Actions as CLOUDFLARE_API_TOKEN."
+            exit 1
+          fi
+
       - name: Install worker dependencies
         run: npm ci || npm install
         working-directory: worker
@@ -40,3 +52,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: worker
+          # Pin a modern Wrangler; the action otherwise defaults to an old 3.x
+          # that warns it is out-of-date against the v4 wrangler.toml config.
+          wranglerVersion: '4.107.0'
