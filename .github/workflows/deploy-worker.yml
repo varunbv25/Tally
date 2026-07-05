@@ -29,7 +29,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Wrangler v4 requires Node >= 22; also clears the Node 20 deprecation.
+          node-version: 22
 
       - name: Check for Cloudflare API token
         env:
