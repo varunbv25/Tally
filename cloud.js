@@ -108,7 +108,7 @@ function cloudMountGoogleButton() {
       const width = Math.min(400, Math.round(el.clientWidth)) || undefined;
       window.google.accounts.id.renderButton(el, {
         type: "standard",
-        theme: "outline",
+        theme: "filled_black",
         size: "large",
         text: "signin_with",
         shape: "pill",
