@@ -106,9 +106,17 @@ function cloudMountGoogleButton() {
       // Fill the container so the button reads as a real full-width button
       // (GSI caps width at 400px — plenty for the mobile card).
       const width = Math.min(400, Math.round(el.clientWidth)) || undefined;
+      // GSI button themes are static, so pick one to match the app's current
+      // theme: the "outline" (white) pill on light, "filled_black" on dark.
+      // The container is rebuilt on every render, so a theme switch re-mounts
+      // the button with the right variant.
+      const dark =
+        typeof resolvedTheme === "function"
+          ? resolvedTheme() === "dark"
+          : document.documentElement.getAttribute("data-theme") === "dark";
       window.google.accounts.id.renderButton(el, {
         type: "standard",
-        theme: "filled_black",
+        theme: dark ? "filled_black" : "outline",
         size: "large",
         text: "signin_with",
         shape: "pill",
