@@ -21,7 +21,7 @@ function freshState() {
       { id: 'govind', name: 'Govind', currency: 'INR', interestExempt: false, interestAnchor: null, createdAt: '2026-01-01' },
     ],
     groups: [], transactions: [], interestRules: [],
-    settings: { baseCurrency: 'INR', tzHistory: [] },
+    settings: { baseCurrency: 'INR', interestTz: -330 },
   };
 }
 

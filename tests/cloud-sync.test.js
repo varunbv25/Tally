@@ -40,7 +40,7 @@ test('a pulled blob is normalized against defaultState', () => {
 
   assert.ok(Array.isArray(run(ctx, 'state.scheduled')), 'scheduled defaulted');
   assert.ok(Array.isArray(run(ctx, 'state.interestRules')), 'interestRules defaulted');
-  assert.ok(Array.isArray(run(ctx, 'state.settings.tzHistory')), 'tzHistory seeded');
+  assert.strictEqual(typeof run(ctx, 'state.settings.interestTz'), 'number', 'interest timezone seeded');
   assert.strictEqual(run(ctx, 'state.people.length'), 1, 'pulled data survived');
   assert.strictEqual(run(ctx, 'principalOf("p1")'), 100, 'totals compute after a pull');
   assert.strictEqual(run(ctx, 'cloudLocalUpdated()'), 1234, 'local version tracks the remote one');
@@ -49,7 +49,7 @@ test('a pulled blob is normalized against defaultState', () => {
 test('applying a pulled blob does not schedule a re-upload', () => {
   const ctx = load();
   /* cloudApplying must suppress cloudOnSave for the whole apply — including the
-     saveState() that recordDeviceTimezone() does internally. Otherwise the local
+     saveState() that ensureInterestTimezone() does internally. Otherwise the local
      version gets stamped Date.now() and the device bounces the blob straight
      back up, clobbering the timestamp it just agreed on. */
   run(ctx, `applyCloudState({ people: [], groups: [], transactions: [] }, 999)`);

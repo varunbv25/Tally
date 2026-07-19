@@ -219,12 +219,12 @@ test('projectSchedule finds interest-driven crossings', () => {
   assert.ok(Math.abs(m[0].fireAt - (NOW + 9.5 * DAY)) <= 6 * 3600 * 1000 + 1);
 });
 
-test('a timezone change freezes booked interest and re-phases the next charge', () => {
-  /* 1000 at 1%/day simple = 10 per charge. The device is in IST (offset -330)
-     until day 5, then moves to EDT (offset +240). Charges already booked under
-     IST must stay; only charges dated after the move shift to EDT's midnight,
-     which lands ~9.5h later — so the travelling timeline lags by one charge
-     right after the move while keeping every earlier charge identical. */
+test('interest is phased by the ledger timezone, not the viewing device', () => {
+  /* 1000 at 1%/day simple = 10 per charge. The phasing must come from
+     settings.interestTz, which rides along in the synced ledger, so two devices
+     reading the same ledger book the same charges at the same instants no
+     matter where either of them is standing. Reading the device's own timezone
+     is what used to make two phones disagree on what was owed. */
   const IST = -330, EDT = 240;
   const start = Date.parse('2026-01-01T00:00:00Z');
   const p = person('a');
@@ -232,24 +232,41 @@ test('a timezone change freezes booked interest and re-phases the next charge', 
                date: new Date(start).toISOString(), isInterest: false };
   const rule = { id: 'r', name: 'r', enabled: true, op: '>', value: 0,
                  type: 'simple', rate: 1, periodUnit: 'day', capPeriods: null, groupId: null };
-  const make = tzHistory => ({
+  const make = interestTz => ({
     people: [p], groups: [], transactions: [t1], interestRules: [rule],
-    settings: { baseCurrency: 'INR', tzHistory },
+    settings: { baseCurrency: 'INR', interestTz },
   });
-  const istOnly = [{ since: 0, offsetMin: IST }];
-  const travel  = [{ since: 0, offsetMin: IST }, { since: start + 5 * DAY, offsetMin: EDT }];
-  const charges = (tzHistory, t) => { setState(make(tzHistory)); return Math.round(ctx.accruedInterest(p, t) / 10); };
+  const charges = (tz, t) => { setState(make(tz)); return Math.round(ctx.accruedInterest(p, t) / 10); };
 
-  /* Before the move, both timelines are identical. */
-  const tPre = start + 4.78 * DAY;
-  assert.strictEqual(charges(istOnly, tPre), 5);
-  assert.strictEqual(charges(travel,  tPre), 5);
+  /* IST (UTC+5:30) ticks at 18:30 UTC; EDT (UTC-4) ticks at 04:00 UTC. Midway
+     through Jan 6 UTC the EDT-phased ledger has already booked that day's
+     charge and the IST-phased one has not — so the stored offset, and nothing
+     else, decides the amount. */
+  assert.strictEqual(charges(IST, start + 5.5 * DAY), 5);
+  assert.strictEqual(charges(EDT, start + 5.5 * DAY), 6);
 
-  /* Just past the 6th IST midnight: staying put books 6 charges, but after the
-     move the 6th charge waits for EDT midnight, so the traveller still has 5. */
-  const tPost = start + 5.78 * DAY;
-  assert.strictEqual(charges(istOnly, tPost), 6);
-  assert.strictEqual(charges(travel,  tPost), 5);
+  /* Past the IST tick they agree again — the difference is phase, not rate. */
+  assert.strictEqual(charges(IST, start + 5.78 * DAY), 6);
+  assert.strictEqual(charges(EDT, start + 5.78 * DAY), 6);
+});
+
+test('a ledger with no interestTz migrates from the old tzHistory', () => {
+  /* Existing ledgers carry tzHistory. The migration must take the EARLIEST
+     segment — the offset the ledger was created in, which nearly all of its
+     interest was charged at — and must ignore the bogus segments the sync bug
+     appended, which is what made two devices disagree in the same timezone. */
+  const clean = { settings: { baseCurrency: 'INR', tzHistory: [{ since: 0, offsetMin: -330 }] } };
+  const poisoned = { settings: { baseCurrency: 'INR', tzHistory: [
+    { since: 0, offsetMin: -330 },
+    { since: 1000, offsetMin: 240 },
+    { since: 2000, offsetMin: -330 },
+  ] } };
+  for (const st of [clean, poisoned]) {
+    setState(st);
+    ctx.ensureInterestTimezone();
+    assert.strictEqual(st.settings.interestTz, -330, 'seeded from the original offset');
+    assert.strictEqual(st.settings.tzHistory, undefined, 'old history dropped');
+  }
 });
 
 test('projectSchedule repeats the nudge at its cadence across the horizon', () => {

@@ -34,7 +34,7 @@ function baseState(rules, personOverrides = {}) {
     groups: [],
     transactions: [{ id: 't1', personId: 'a', groupId: null, amount: 1000, note: '', date: lentAt, isInterest: false }],
     interestRules: rules,
-    settings: { baseCurrency: 'INR', tzHistory: [] },
+    settings: { baseCurrency: 'INR', interestTz: -330 },
   };
 }
 const personA = () => ctx.getPerson('a');

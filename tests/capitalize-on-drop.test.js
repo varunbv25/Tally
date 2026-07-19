@@ -29,7 +29,7 @@ function freshState() {
     groups: [],
     transactions: [{ id: 't1', personId: 'a', groupId: null, amount: 1057, note: '', date: lentAt, isInterest: false }],
     interestRules: RULE,
-    settings: { baseCurrency: 'INR', tzHistory: [] },
+    settings: { baseCurrency: 'INR', interestTz: -330 },
   };
 }
 const personA = () => ctx.getPerson('a');
@@ -84,7 +84,7 @@ test('a dated drop capitalizes at the entry date, not today, and leaves nothing 
     groups: [],
     transactions: [{ id: 't1', personId: 'a', amount: 1500, note: '', date: new Date(lentAt).toISOString(), isInterest: false }],
     interestRules: RULE,
-    settings: { baseCurrency: 'INR', tzHistory: [] },
+    settings: { baseCurrency: 'INR', interestTz: -330 },
   });
 
   const accruedToNow = ctx.accruedInterest(personA());        // ~10 daily charges

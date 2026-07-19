@@ -51,7 +51,7 @@ function makeDevice(server, tzOffsetMin = -330) {
   for (const f of ['store.js', 'cloud.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   }
-  vm.runInContext(`loadState(); recordDeviceTimezone();
+  vm.runInContext(`loadState(); ensureInterestTimezone();
     cloudAuth.status = 'signed-in'; cloudAuth.token = 'tok'; cloudAuth.email = 'a@b.c';`, ctx);
   return ctx;
 }
@@ -138,35 +138,93 @@ test('idle foreground cycles never mutate the cloud', async () => {
   }
   assert.strictEqual(server.puts, writesBefore, 'no uploads while nothing changed');
   assert.strictEqual(server.rec.updatedAt, versionBefore, 'cloud version stable');
-  assert.strictEqual(run(a, `state.settings.tzHistory.length`), 1, 'tz history did not grow');
-  assert.strictEqual(run(b, `state.settings.tzHistory.length`), 1, 'tz history did not grow');
 });
 
-test('timezone history stays device-local across a pull', async () => {
+test('two devices in different timezones agree on the amount, all day', async () => {
   const server = makeServer();
   const india = makeDevice(server, -330);
   const newYork = makeDevice(server, 300);
 
-  run(india, `const p = addPerson('Ada','INR'); p.id='p1';
-              addTransaction({ personId:'p1', amount:1000, note:'loan' }); saveState();`);
+  /* An earlier version of this test had no interest rule enabled, so its
+     "totals agree" assertion was vacuous and shipped a real disagreement.
+     Charge interest daily and compare across a full 24h sweep — the window
+     between the two devices' local midnights is exactly where they used to
+     differ by a whole day's charge, for ~14 hours out of every 24. */
+  const BASE = Date.UTC(2026, 5, 1, 0, 0, 0);
+  run(india, `
+    const p = addPerson('Ada','INR'); p.id='p1';
+    state.interestRules.push({ id:'r1', name:'std', enabled:true, op:'>', value:0,
+      type:'compound', rate:10, periodUnit:'day', capPeriods:null, groupId:null });
+    addTransaction({ personId:'p1', amount:1000, note:'loan',
+                     date: new Date(${BASE}).toISOString() });
+    saveState();`);
   await runAsync(india, `await cloudPush();`);
   await runAsync(newYork, `return await cloudReconcile();`);
 
-  /* Adopting the sender's tzHistory would re-phase interest to its local
-     midnights, so the two devices would disagree on the same ledger. */
-  assert.deepStrictEqual(
-    JSON.parse(run(newYork, `JSON.stringify(state.settings.tzHistory)`)),
-    [{ since: 0, offsetMin: 300 }],
-    'puller kept its own timezone history',
-  );
-  assert.deepStrictEqual(
-    JSON.parse(run(india, `JSON.stringify(state.settings.tzHistory)`)),
-    [{ since: 0, offsetMin: -330 }],
-    'sender unchanged',
-  );
+  const disagreements = [];
+  for (let h = 0; h < 24; h++) {
+    const now = BASE + 30 * 86400000 + h * 3600000;
+    const a = run(india, `totalOf(getPerson('p1'), ${now})`);
+    const b = run(newYork, `totalOf(getPerson('p1'), ${now})`);
+    if (a !== b) disagreements.push({ hour: h, india: a, newYork: b });
+  }
+  assert.deepStrictEqual(disagreements, [], 'the two devices never disagree');
+
   assert.strictEqual(
-    run(india, `totalOf(getPerson('p1'))`),
-    run(newYork, `totalOf(getPerson('p1'))`),
-    'both devices agree on the total',
+    run(india, `state.settings.interestTz`),
+    run(newYork, `state.settings.interestTz`),
+    'both devices phase interest to the same ledger timezone',
+  );
+});
+
+test('a device carrying a corrupted timezone history is repaired on pull', async () => {
+  const server = makeServer();
+  const good = makeDevice(server, -330);
+  const poisoned = makeDevice(server, -330);
+
+  const BASE = Date.UTC(2026, 5, 1, 0, 0, 0);
+  const seed = `
+    const p = addPerson('Ada','INR'); p.id='p1';
+    state.interestRules.push({ id:'r1', name:'std', enabled:true, op:'>', value:0,
+      type:'compound', rate:5, periodUnit:'day', capPeriods:null, groupId:null });
+    addTransaction({ personId:'p1', amount:1000, note:'loan',
+                     date: new Date(${BASE}).toISOString() });
+    saveState();`;
+  run(good, seed);
+
+  /* Simulate a device poisoned by the old sync bug: a timezone history full of
+     places it was never in, which made it compute a different total from the
+     identical ledger even though both devices sit in the same timezone. */
+  run(poisoned, seed);
+  run(poisoned, `delete state.settings.interestTz;
+    state.settings.tzHistory = [{since:0,offsetMin:-330},
+      {since:${BASE + 10 * 86400000},offsetMin:300},
+      {since:${BASE + 20 * 86400000},offsetMin:-330}];
+    saveState();`);
+
+  const now = BASE + 60 * 86400000;
+
+  /* Booting alone must already repair it — that is the path a user hits, and
+     it seeds from the earliest segment rather than trusting the bogus ones. */
+  run(poisoned, `ensureInterestTimezone();`);
+  assert.strictEqual(run(poisoned, `state.settings.tzHistory`), undefined, 'corruption dropped on boot');
+  assert.strictEqual(run(poisoned, `state.settings.interestTz`), -330, 'seeded from the original offset');
+  assert.strictEqual(
+    run(good, `totalOf(getPerson('p1'), ${now})`),
+    run(poisoned, `totalOf(getPerson('p1'), ${now})`),
+    'repaired on boot, totals match',
+  );
+
+  // And a pull carries the ledger's timezone across too.
+  // saveState() bumps the version via cloudOnSave, so age it AFTER saving.
+  run(poisoned, `delete state.settings.interestTz; saveState(); setCloudLocalUpdated(1);`);
+  await runAsync(good, `await cloudPush();`);
+  const res = await runAsync(poisoned, `return await cloudReconcile();`);
+  assert.strictEqual(res, 'pulled', 'the stale device pulled');
+  assert.strictEqual(run(poisoned, `state.settings.tzHistory`), undefined, 'corruption dropped');
+  assert.strictEqual(
+    run(good, `totalOf(getPerson('p1'), ${now})`),
+    run(poisoned, `totalOf(getPerson('p1'), ${now})`),
+    'the repaired device now matches',
   );
 });
