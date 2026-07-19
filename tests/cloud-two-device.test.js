@@ -14,8 +14,9 @@ const ROOT = path.join(__dirname, '..');
 
 /* Mirrors worker/src/index.js: a PUT older than what's stored is refused. */
 function makeServer() {
-  const s = { rec: null };
+  const s = { rec: null, puts: 0 };
   s.put = (state, updatedAt) => {
+    s.puts++;
     if (s.rec && typeof s.rec.updatedAt === 'number' && s.rec.updatedAt > updatedAt) {
       return { ok: true, updatedAt: s.rec.updatedAt, stale: true };
     }
@@ -115,6 +116,30 @@ test('a device whose push is refused adopts the winning copy', async () => {
     'the stale device did not overwrite the cloud',
   );
   assert.strictEqual(run(b, `state.transactions.length`), 2, 'stale device adopted the winner');
+});
+
+test('idle foreground cycles never mutate the cloud', async () => {
+  const server = makeServer();
+  const a = makeDevice(server);
+  const b = makeDevice(server);
+
+  run(a, `const p = addPerson('Ada','INR'); p.id='p1';
+          addTransaction({ personId:'p1', amount:100, note:'a' }); saveState();`);
+  await runAsync(a, `await cloudPush();`);
+  await runAsync(b, `return await cloudReconcile();`);
+
+  /* The ping-pong this guards against: two devices each deciding the other is
+     behind and re-uploading on every resume, rewriting the ledger forever. */
+  const writesBefore = server.puts;
+  const versionBefore = server.rec.updatedAt;
+  for (let i = 0; i < 5; i++) {
+    await runAsync(a, `return await cloudReconcile();`);
+    await runAsync(b, `return await cloudReconcile();`);
+  }
+  assert.strictEqual(server.puts, writesBefore, 'no uploads while nothing changed');
+  assert.strictEqual(server.rec.updatedAt, versionBefore, 'cloud version stable');
+  assert.strictEqual(run(a, `state.settings.tzHistory.length`), 1, 'tz history did not grow');
+  assert.strictEqual(run(b, `state.settings.tzHistory.length`), 1, 'tz history did not grow');
 });
 
 test('timezone history stays device-local across a pull', async () => {
