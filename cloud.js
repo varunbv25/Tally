@@ -336,8 +336,16 @@ function cloudResetToEmail() {
 function applyCloudState(newState, updatedAt) {
   cloudApplying = true;
   try {
-    state = newState; // store.js' module-global, shared across scripts
-    saveState(); // writes localStorage + the SW's IDB mirror
+    /* Hydrate through the exact same path as boot rather than assigning the
+       blob straight onto `state`. loadState() merges over defaultState(), so a
+       ledger pushed by a device on an older app version (missing `scheduled`,
+       `interestRules`, a newer `settings` key…) still lands complete. Assigning
+       raw left those keys undefined, which is what broke interest/derived
+       totals on the pulling device. */
+    localStorage.setItem(LS_KEY, JSON.stringify(newState));
+    loadState(); // normalizes + repoints `state`
+    recordDeviceTimezone(); // the blob's tz history came from the other device
+    saveState(); // mirror the normalized copy to localStorage + the SW's IDB
     setCloudLocalUpdated(updatedAt);
   } finally {
     cloudApplying = false;
@@ -426,6 +434,29 @@ function cloudInit() {
     // pull anything newer that another device may have pushed while we were away
     cloudReconcile().catch(() => {});
   }
+  /* Installed as a PWA, the other device is usually resumed from the background
+     rather than reloaded — no boot, no 'online' event — so without this it would
+     sit on a stale ledger until the user hit "Sync now". Reconciling whenever the
+     app comes back to the foreground is what makes two devices agree in practice.
+     ponytail: foreground-triggered, not a live socket. If two devices ever need
+     to agree while BOTH are on screen, add a poll or SSE here. */
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") cloudOnForeground();
+  });
+  window.addEventListener("pageshow", cloudOnForeground);
+}
+
+/* Pull on resume, throttled so a burst of focus/visibility events (they fire
+   together on some browsers) costs one request. */
+let cloudLastForeground = 0;
+const CLOUD_FOREGROUND_MIN_MS = 5000;
+
+function cloudOnForeground() {
+  if (!cloudSignedIn() || cloudAuth.busy) return;
+  const now = Date.now();
+  if (now - cloudLastForeground < CLOUD_FOREGROUND_MIN_MS) return;
+  cloudLastForeground = now;
+  cloudReconcile().catch(() => {});
 }
 
 /* Called by app.js when the browser fires 'online'. Clears the offline flag and,
