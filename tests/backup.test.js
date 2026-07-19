@@ -36,7 +36,7 @@ function sampleState() {
     interestRules: [
       { id: 'r1', name: '5% monthly', enabled: true, op: '>', value: 100, type: 'compound', rate: 5, periodUnit: 'month', capPeriods: null, groupId: null },
     ],
-    settings: { baseCurrency: 'USD', tzHistory: [], theme: 'dark', roundWhole: false },
+    settings: { baseCurrency: 'USD', interestTz: -330, theme: 'dark', roundWhole: false },
   };
 }
 

@@ -342,16 +342,11 @@ function applyCloudState(newState, updatedAt) {
        `interestRules`, a newer `settings` key…) still lands complete. Assigning
        raw left those keys undefined, which is what broke interest/derived
        totals on the pulling device. */
-    /* tzHistory describes THIS device's travel, not the sender's, so it never
-       rides in on a pulled blob — adopting the other device's segments would
-       re-phase our interest charges to its local midnights and make the two
-       devices disagree on the same ledger. Keep ours; seed it if we're new. */
-    const localTz =
-      (state && state.settings && state.settings.tzHistory) || undefined;
     localStorage.setItem(LS_KEY, JSON.stringify(newState));
     loadState(); // normalizes + repoints `state`
-    if (localTz) state.settings.tzHistory = localTz;
-    recordDeviceTimezone(); // seeds/extends this device's own history
+    /* The interest timezone rides in with the blob, so both devices phase
+       charges identically; this only seeds it for a ledger that predates it. */
+    ensureInterestTimezone();
     saveState(); // mirror the normalized copy to localStorage + the SW's IDB
     setCloudLocalUpdated(updatedAt);
   } finally {

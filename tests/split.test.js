@@ -27,7 +27,7 @@ function freshState() {
     groups: [{ id: 'g1', name: 'Trip', memberIds: ['a', 'b', 'c'] }],
     transactions: [],
     interestRules: [],
-    settings: { baseCurrency: 'INR', tzHistory: [] },
+    settings: { baseCurrency: 'INR', interestTz: -330 },
   };
 }
 

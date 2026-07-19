@@ -48,7 +48,7 @@ function defaultState() {
                        // when `date` arrives the app asks whether to record it (e.g. a bet) — see confirmScheduled/cancelScheduled
     settings: {
       baseCurrency: 'INR',        // default currency for new people
-      tzHistory: [],              // device-timezone segments {since, offsetMin} for interest timing
+      interestTz: null,           // UTC offset (minutes) interest charges are phased to; see interestOffset()
       theme: 'device',            // 'light' | 'dark' | 'device' (follow OS preference)
       roundWhole: false,          // show every amount (incl. past entries & interest) as whole numbers
     },
@@ -450,23 +450,23 @@ function effectiveAnnualRate(rate, periodUnit, type) {
        accrues on once a rule matches again. The engine itself never wipes
        accrued interest; it only stops accruing while no rule matches.
 */
-/* Interest is timed against the device's own clock — "each day starts at
-   12am" wherever the user is — not a flat 24h after the condition is met.
+/* Interest is timed to "each day starts at 12am" rather than a flat 24h after
+   the condition is met, so the phasing needs a UTC offset to work from.
 
-   The device timezone is persisted as a history of segments in
-   settings.tzHistory: each { since, offsetMin } records the UTC offset
-   (Date.getTimezoneOffset() convention: minutes, e.g. -330 for IST) that
-   took effect at instant `since`. This lets the engine pin already-accrued
-   interest to the timezone it accrued in: past charges are recomputed with
-   the offset that was live back then, so they never shift, while a move to a
-   new timezone re-phases only the charges dated after the switch. With no
-   history recorded yet, we fall back to the device's current offset. */
-function deviceOffsetAt(ts) {
-  const hist = state && state.settings && state.settings.tzHistory;
-  if (!hist || !hist.length) return new Date(ts).getTimezoneOffset();
-  let off = hist[0].offsetMin;
-  for (const seg of hist) { if (seg.since <= ts) off = seg.offsetMin; else break; }
-  return off;
+   That offset belongs to the LEDGER, not to whichever device is looking at it:
+   settings.interestTz (Date.getTimezoneOffset() convention: minutes, e.g. -330
+   for IST) rides along with the synced blob, so every device charges at the
+   same instants and shows the same amount. Reading it from the local device
+   instead meant two phones could disagree on what was owed — for most of the
+   day if they were in different timezones — and a device that had picked up a
+   corrupted timezone history disagreed even in the same one.
+
+   The trade-off is deliberate: flying somewhere no longer re-phases future
+   charges. A debt's daily tick is a property of the debt, not of where its
+   owner happens to be standing. */
+function interestOffset() {
+  const tz = state && state.settings && state.settings.interestTz;
+  return typeof tz === 'number' ? tz : new Date().getTimezoneOffset();
 }
 
 /* The next local midnight strictly after `ts`, for a fixed UTC offset. */
@@ -477,20 +477,28 @@ function localMidnightAfter(ts, offsetMin) {
   return next - shift;                                 // back to a real UTC instant
 }
 
-/* Record a timezone change the moment the app notices one. Earlier segments
-   stay frozen, so interest already accrued never re-phases; only charges
-   dated after the switch land at the new local midnight. Call on boot (and
-   whenever the app regains focus) from a context that knows the live clock. */
-function recordDeviceTimezone(now = Date.now()) {
-  if (!state) return false;
-  if (!state.settings.tzHistory) state.settings.tzHistory = [];
-  const hist = state.settings.tzHistory;
-  const off = new Date(now).getTimezoneOffset();
-  if (!hist.length) { hist.push({ since: 0, offsetMin: off }); saveState(); return false; } // seed past
-  if (hist[hist.length - 1].offsetMin === off) return false;          // unchanged → nothing to do
-  hist.push({ since: now, offsetMin: off });                          // travelled → new segment
-  saveState();
-  return true;
+/* Give the ledger an interest timezone the first time we see one without it,
+   and retire the old per-device tzHistory.
+
+   Existing ledgers carry settings.tzHistory — a list of {since, offsetMin}
+   segments the app used to append to on every timezone change. The cloud-sync
+   bug appended a segment on every pull as well, so devices ended up holding
+   histories describing places they had never been, and computing a different
+   total from the same ledger. We seed from the earliest segment, which is the
+   offset the ledger was created in and the one nearly all of its interest was
+   charged at, then drop the list so it can't skew anything again. */
+function ensureInterestTimezone() {
+  if (!state || !state.settings) return false;
+  const s = state.settings;
+  if (typeof s.interestTz === 'number' && !s.tzHistory) return false;
+  if (typeof s.interestTz !== 'number') {
+    const hist = Array.isArray(s.tzHistory) ? s.tzHistory : null;
+    s.interestTz = hist && hist.length && typeof hist[0].offsetMin === 'number'
+      ? hist[0].offsetMin
+      : new Date().getTimezoneOffset();
+  }
+  delete s.tzHistory;
+  return true; // caller persists — this must not write on its own
 }
 
 /* Returns { total, byRule, schedule } where schedule is the chronological list
@@ -524,7 +532,7 @@ function accruedInterestDetail(person, now = Date.now()) {
     if (!rule) {
       stretch = null;                 // stop accruing; keep what's accrued so far
     } else if (!stretch || stretch.rule.id !== rule.id) {
-      const off = deviceOffsetAt(eventTime);
+      const off = interestOffset();
       stretch = { rule, accrued: 0, nextTick: localMidnightAfter(eventTime, off), tzOff: off };
     }
 
@@ -552,7 +560,7 @@ function accruedInterestDetail(person, now = Date.now()) {
       /* If the device moved timezones before this next charge, re-phase it to
          the new local midnight. Charges already booked above keep their old
          phase; only those dated after the switch shift. */
-      const off = deviceOffsetAt(stretch.nextTick);
+      const off = interestOffset();
       if (off !== stretch.tzOff) {
         stretch.nextTick += (off - stretch.tzOff) * 60_000;
         stretch.tzOff = off;

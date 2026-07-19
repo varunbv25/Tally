@@ -35,7 +35,7 @@ function freshState() {
     groups: [],
     transactions: [{ id: 't1', personId: 'a', groupId: null, amount: 1057, note: '', date: lentAt, isInterest: false }],
     interestRules: RULE,
-    settings: { baseCurrency: 'INR', tzHistory: [] },
+    settings: { baseCurrency: 'INR', interestTz: -330 },
   };
 }
 const personA = () => ctx.getPerson('a');

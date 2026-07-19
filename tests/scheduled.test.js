@@ -25,7 +25,7 @@ function freshState() {
     transactions: [],
     interestRules: [],
     scheduled: [],
-    settings: { baseCurrency: 'INR', tzHistory: [] },
+    settings: { baseCurrency: 'INR', interestTz: -330 },
   };
 }
 

@@ -2751,11 +2751,8 @@ setInterval(render, 60_000);
 
 loadState();
 applyTheme();            // stamp the saved (or OS-default) theme before first paint
-recordDeviceTimezone(); // pin interest timing to the device's current timezone
+ensureInterestTimezone(); // seed the ledger's interest timezone (migrates old tzHistory)
 saveState();            // ensure the IDB mirror exists even before the first edit
-/* Notice timezone changes when the user reopens the app after travelling, so
-   interest going forward re-phases to the new local midnight. */
-window.addEventListener('focus', () => { if (recordDeviceTimezone()) render(); });
 history.replaceState(navState(), '');   // anchor root so back-navigation has a floor
 render();
 runNotificationCheck();
