@@ -342,9 +342,16 @@ function applyCloudState(newState, updatedAt) {
        `interestRules`, a newer `settings` key…) still lands complete. Assigning
        raw left those keys undefined, which is what broke interest/derived
        totals on the pulling device. */
+    /* tzHistory describes THIS device's travel, not the sender's, so it never
+       rides in on a pulled blob — adopting the other device's segments would
+       re-phase our interest charges to its local midnights and make the two
+       devices disagree on the same ledger. Keep ours; seed it if we're new. */
+    const localTz =
+      (state && state.settings && state.settings.tzHistory) || undefined;
     localStorage.setItem(LS_KEY, JSON.stringify(newState));
     loadState(); // normalizes + repoints `state`
-    recordDeviceTimezone(); // the blob's tz history came from the other device
+    if (localTz) state.settings.tzHistory = localTz;
+    recordDeviceTimezone(); // seeds/extends this device's own history
     saveState(); // mirror the normalized copy to localStorage + the SW's IDB
     setCloudLocalUpdated(updatedAt);
   } finally {
@@ -380,11 +387,37 @@ async function cloudPush() {
   }
   const json = localStorage.getItem(LS_KEY);
   if (!json) return;
-  const updatedAt = cloudLocalUpdated() || Date.now();
-  await cloudFetch("/ledger", {
+  let updatedAt = cloudLocalUpdated();
+  if (!updatedAt) {
+    /* This device has never made a tracked edit, so it has no honest version to
+       claim. Stamping Date.now() here is how an empty device used to overwrite
+       a device that actually had data: it would push its blank ledger as the
+       newest thing in existence, and then keep re-pushing it because its own
+       invented timestamp stayed ahead of the real one. Only a ledger with
+       something in it may seed the cloud. */
+    const local = JSON.parse(json);
+    const hasData =
+      (local.people || []).length ||
+      (local.transactions || []).length ||
+      (local.groups || []).length;
+    if (!hasData) return;
+    updatedAt = Date.now();
+  }
+  const res = await cloudFetch("/ledger", {
     method: "PUT",
     body: JSON.stringify({ state: JSON.parse(json), updatedAt }),
   });
+  if (res && res.stale) {
+    /* The cloud holds something newer, so our upload was refused. Take their
+       copy rather than sitting on a version the server disagrees with —
+       otherwise we'd retry this same doomed push on every foreground. */
+    const remote = await cloudFetch("/ledger", { method: "GET" });
+    if (remote && remote.state != null) {
+      applyCloudState(remote.state, remote.updatedAt);
+      if (typeof render === "function") render();
+    }
+    return;
+  }
   setCloudLocalUpdated(updatedAt);
   cloudAuth.lastSync = Date.now();
 }
