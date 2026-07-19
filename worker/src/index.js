@@ -237,6 +237,14 @@ async function handleSync(req, env, path) {
     if (req.method === 'PUT') {
       const { state, updatedAt } = await req.json();
       if (state == null || typeof updatedAt !== 'number') return json({ error: 'bad request' }, 400);
+      /* Last-write-wins only works if the store refuses to go backwards. Without
+         this, a device holding an older copy could overwrite a newer one just by
+         arriving later, and two devices could ping-pong the ledger between them
+         indefinitely. The client reconciles on the returned updatedAt. */
+      const cur = await env.TALLY_SYNC.get(key, 'json');
+      if (cur && typeof cur.updatedAt === 'number' && cur.updatedAt > updatedAt) {
+        return json({ ok: true, updatedAt: cur.updatedAt, stale: true });
+      }
       await env.TALLY_SYNC.put(key, JSON.stringify({ state, updatedAt }));
       return json({ ok: true, updatedAt });
     }
