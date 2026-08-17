@@ -853,6 +853,16 @@ button { font-family: var(--body); cursor: pointer; }
 .share-pick-row:last-child { border-bottom: none; }
 .share-pick-row input[type="checkbox"] { width: auto; }
 .share-pick-name { flex: 1; font-weight: 500; }
+
+/* A row that carries its own amount box (indirect payment, custom amounts):
+   the tick + name stay one clickable label, the box sits beside them. */
+.share-pick-main { display: flex; align-items: center; gap: var(--sp-3); flex: 1; min-width: 0; cursor: pointer; }
+.pick-amt {
+  width: 7.5em; flex: none; text-align: right;
+  font-family: var(--mono); font-size: var(--fs-sm);
+  padding: 6px 8px;
+}
+.pick-amt:disabled { opacity: .45; }
 .share-preview {
   font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.6;
   background: var(--green-tint); border: 1px solid var(--line);

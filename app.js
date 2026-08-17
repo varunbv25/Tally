@@ -1286,17 +1286,24 @@ function balancePhrase(n, currency) {
 }
 
 /* Live preview of a one-lender-to-many indirect payment. Every ticked recipient
-   has `amount` added to what they owe you; the lender's balance drops by the
+   has their share added to what they owe you; the lender's balance drops by the
    total. "Me" is the lender lending to you directly — it's part of the lender's
-   drop but creates no new debtor (you simply owe the lender that share). */
-function indirectPreviewHTML(lenderId, receiverIds, includeMe, amt) {
+   drop but creates no new debtor (you simply owe the lender that share).
+   `amounts` is a {personId: share} map and `meAmount` your own share, so the
+   preview reads the same whether the shares are equal or entered per person. */
+function indirectPreviewHTML(lenderId, receiverIds, includeMe, amounts, meAmount) {
   const lender = getPerson(lenderId);
   const receivers = receiverIds.map(getPerson).filter(Boolean);
   const count = receivers.length + (includeMe ? 1 : 0);
-  if (!lender || !count || !Number.isFinite(amt) || amt <= 0) {
-    return '<span class="muted">Pick the lender, tick who they lent to, and enter an amount.</span>';
+  const shares = receivers.map(r => amounts[r.id]).concat(includeMe ? [meAmount] : []);
+  const filled = shares.every(amt => Number.isFinite(amt) && amt > 0);
+  if (!lender || !count || !filled) {
+    return `<span class="muted">${
+      count && lender && indirectMode() === 'custom'
+        ? 'Enter an amount for everyone you ticked.'
+        : 'Pick the lender, tick who they lent to, and enter an amount.'}</span>`;
   }
-  const total = amt * count;
+  const total = shares.reduce((s, amt) => s + amt, 0);
   const lBefore = totalOf(lender);
   const head = `<div class="split-head">${count} ${count === 1 ? 'recipient' : 'recipients'} · ${fmtMoney(total, lender.currency)} from ${esc(lender.name)}</div>`;
   const lenderLine = `
@@ -1306,7 +1313,7 @@ function indirectPreviewHTML(lenderId, receiverIds, includeMe, amt) {
       <span class="xfer-delta neg">−${fmtMoney(total, lender.currency)}</span>
     </div>`;
   const receiverLines = receivers.map(r => {
-    const rBefore = totalOf(r);
+    const rBefore = totalOf(r), amt = amounts[r.id];
     return `<div class="xfer-line">
       <span><b>${esc(r.name)}</b> ${balancePhrase(rBefore, r.currency)}
       <span class="xfer-arrow">→</span> ${balancePhrase(rBefore + amt, r.currency)}</span>
@@ -1315,8 +1322,8 @@ function indirectPreviewHTML(lenderId, receiverIds, includeMe, amt) {
   }).join('');
   const meLine = includeMe ? `
     <div class="xfer-line">
-      <span><b>Me</b> · ${esc(lender.name)} lent you ${fmtMoney(amt, lender.currency)}</span>
-      <span class="xfer-delta neg">you owe +${fmtMoney(amt, lender.currency)}</span>
+      <span><b>Me</b> · ${esc(lender.name)} lent you ${fmtMoney(meAmount, lender.currency)}</span>
+      <span class="xfer-delta neg">you owe +${fmtMoney(meAmount, lender.currency)}</span>
     </div>` : '';
   const curs = new Set([lender.currency, ...receivers.map(r => r.currency)]);
   const mismatch = curs.size > 1
@@ -1337,33 +1344,75 @@ function indirectIncludesMe() {
   return !!(me && me.checked);
 }
 
+function indirectMode() {
+  return (ui.indirectDraft && ui.indirectDraft.mode) === 'custom' ? 'custom' : 'equal';
+}
+
+/* What each ticked person was lent, straight off the live form. Split equally
+   means everyone gets the single "amount each" figure; in custom mode every
+   ticked person has their own box. Unfilled boxes come back as NaN, which the
+   preview reports and the store refuses. */
+function indirectShares() {
+  const form = document.querySelector('[data-form="add-transfer"]');
+  const ids = indirectSelectedIds();
+  const amounts = {};
+  if (!form) return { amounts, meAmount: NaN };
+  if (indirectMode() === 'custom') {
+    ids.forEach(id => {
+      const box = document.querySelector(`[data-xfer-amount="${id}"]`);
+      amounts[id] = parseFloat(box ? box.value : '');
+    });
+    const mine = document.querySelector('[data-xfer-me-amount]');
+    return { amounts, meAmount: parseFloat(mine ? mine.value : '') };
+  }
+  const each = parseFloat(form.amount ? form.amount.value : '');
+  ids.forEach(id => { amounts[id] = each; });
+  return { amounts, meAmount: each };
+}
+
 function updateTransferPreview() {
   const form = document.querySelector('[data-form="add-transfer"]');
   const node = document.getElementById('xfer-preview');
   if (!form || !node) return;
-  node.innerHTML = indirectPreviewHTML(form.lenderId.value, indirectSelectedIds(), indirectIncludesMe(), parseFloat(form.amount.value));
+  // a per-person box only takes an amount while that person is ticked
+  document.querySelectorAll('[data-xfer-amount]').forEach(box => {
+    const cb = document.querySelector(`[data-xfer-receiver="${box.dataset.xferAmount}"]`);
+    box.disabled = !(cb && cb.checked);
+  });
+  const meBox = document.querySelector('[data-xfer-me-amount]');
+  if (meBox) meBox.disabled = !indirectIncludesMe();
+  const { amounts, meAmount } = indirectShares();
+  node.innerHTML = indirectPreviewHTML(form.lenderId.value, indirectSelectedIds(), indirectIncludesMe(), amounts, meAmount);
 }
 
 function freshIndirectDraft() {
   return {
     lenderId: state.people[0] ? state.people[0].id : '',
     selected: new Set(), me: false, amount: '',
+    mode: 'equal', amounts: {}, meAmount: '',
     date: new Date().toISOString().slice(0, 10), note: '',
   };
 }
 
 /* Snapshot the live form so changing the lender (which re-renders to drop that
-   person from the recipient list) doesn't wipe the typed amount/note or ticks. */
+   person from the recipient list) doesn't wipe the typed amounts/note or ticks. */
 function syncIndirectDraft() {
   if (!ui.indirectDraft) ui.indirectDraft = freshIndirectDraft();
   const form = document.querySelector('[data-form="add-transfer"]');
   if (!form) return;
-  ui.indirectDraft.lenderId = form.lenderId.value;
-  ui.indirectDraft.amount = form.amount.value;
-  ui.indirectDraft.date = form.date.value;
-  ui.indirectDraft.note = form.note.value;
-  ui.indirectDraft.selected = new Set(indirectSelectedIds());
-  ui.indirectDraft.me = indirectIncludesMe();
+  const draft = ui.indirectDraft;
+  draft.lenderId = form.lenderId.value;
+  if (form.amount) draft.amount = form.amount.value;
+  draft.date = form.date.value;
+  draft.note = form.note.value;
+  draft.selected = new Set(indirectSelectedIds());
+  draft.me = indirectIncludesMe();
+  // keep every typed per-person figure, ticked or not, so unticking isn't destructive
+  document.querySelectorAll('[data-xfer-amount]').forEach(box => {
+    draft.amounts[box.dataset.xferAmount] = box.value;
+  });
+  const mine = document.querySelector('[data-xfer-me-amount]');
+  if (mine) draft.meAmount = mine.value;
 }
 
 function renderIndirectModal() {
@@ -1373,24 +1422,49 @@ function renderIndirectModal() {
   const draft = ui.indirectDraft || (ui.indirectDraft = freshIndirectDraft());
   if (!getPerson(draft.lenderId)) draft.lenderId = state.people[0].id;
   const sel = draft.selected;
+  const custom = indirectMode() === 'custom';
 
   const lenderOpts = peopleByName().map(p =>
     `<option value="${p.id}" ${p.id === draft.lenderId ? 'selected' : ''}>${esc(p.name)}</option>`
   ).join('');
 
+  /* In custom mode each row carries its own amount box, so different people can
+     owe the lender different figures. The box is dead until that person is
+     ticked (updateTransferPreview keeps the disabled state in step). */
+  const amountBox = (attr, value, ticked) => custom
+    ? `<input class="pick-amt" type="number" inputmode="decimal" step="any" min="0.01"
+         placeholder="amount" ${attr} value="${esc(value || '')}" ${ticked ? '' : 'disabled'}>`
+    : '';
+
   const meRow =
-    `<label class="share-pick-row">
-      <input type="checkbox" data-xfer-me ${draft.me ? 'checked' : ''}>
-      <span class="share-pick-name">Me</span>
+    `<div class="share-pick-row">
+      <label class="share-pick-main">
+        <input type="checkbox" data-xfer-me ${draft.me ? 'checked' : ''}>
+        <span class="share-pick-name">Me</span>
+      </label>
+      ${amountBox('data-xfer-me-amount', draft.meAmount, draft.me)}
       ${Chip(esc(state.settings.baseCurrency))}
-    </label>`;
+    </div>`;
 
   const rows = peopleByName().filter(p => p.id !== draft.lenderId).map(p =>
-    `<label class="share-pick-row">
-      <input type="checkbox" data-xfer-receiver="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>
-      <span class="share-pick-name">${esc(p.name)}</span>
+    `<div class="share-pick-row">
+      <label class="share-pick-main">
+        <input type="checkbox" data-xfer-receiver="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>
+        <span class="share-pick-name">${esc(p.name)}</span>
+      </label>
+      ${amountBox(`data-xfer-amount="${p.id}"`, draft.amounts[p.id], sel.has(p.id))}
       ${Chip(p.currency)}
-    </label>`).join('');
+    </div>`).join('');
+
+  const modeBar = `
+    <div class="seg-control" role="group" aria-label="How much each person was lent">
+      <button type="button" class="seg${custom ? '' : ' active'}" data-action="set-indirect-mode" data-mode="equal" aria-pressed="${!custom}">Split equally</button>
+      <button type="button" class="seg${custom ? ' active' : ''}" data-action="set-indirect-mode" data-mode="custom" aria-pressed="${custom}">Custom amounts</button>
+    </div>`;
+
+  const amountField = custom
+    ? ''
+    : `<input name="amount" type="number" inputmode="decimal" step="any" min="0.01" placeholder="amount each" value="${esc(draft.amount || '')}" required>`;
 
   root.innerHTML = Modal({
     overlayId: 'indirect-overlay',
@@ -1398,7 +1472,7 @@ function renderIndirectModal() {
     title: 'Indirect payment',
     closeAction: 'close-indirect',
     body: `
-      <p class="section-sub split-intro">One person lent to several. Pick the lender and tick everyone they lent to — each gets the amount added to what they owe you, and the lender's balance drops by the total.</p>
+      <p class="section-sub split-intro">One person lent to several. Pick the lender and tick everyone they lent to — each gets their share added to what they owe you, and the lender's balance drops by the total. Split it equally, or switch to custom amounts to give each person their own figure.</p>
 
       <form data-form="add-transfer">
         <h3 class="subhead">Lender</h3>
@@ -1407,11 +1481,12 @@ function renderIndirectModal() {
         </div>
 
         <h3 class="subhead">Lent to</h3>
+        ${modeBar}
         <div class="share-pick-list split-scroll">${meRow}${rows}</div>
 
         <div class="split-fixed">
           <div class="form-row">
-            <input name="amount" type="number" inputmode="decimal" step="any" min="0.01" placeholder="amount each" value="${esc(draft.amount || '')}" required>
+            ${amountField}
             <input name="date" type="date" value="${esc(draft.date || new Date().toISOString().slice(0, 10))}">
             <input name="note" placeholder="reason (optional)" maxlength="80" value="${esc(draft.note || '')}" style="flex:1">
           </div>
@@ -2090,6 +2165,23 @@ document.addEventListener('click', e => {
 
     case 'open-indirect': ui.indirectOpen = true; pushNav(); render(); break;
     case 'close-indirect': goBack(); break;
+
+    /* Equal ⇄ custom amounts. Switching to custom seeds every ticked person
+       with the equal figure, so an uneven split is edited from the even one
+       rather than typed out from scratch. */
+    case 'set-indirect-mode': {
+      syncIndirectDraft();
+      const draft = ui.indirectDraft || (ui.indirectDraft = freshIndirectDraft());
+      const mode = btn.dataset.mode === 'custom' ? 'custom' : 'equal';
+      if (mode === 'custom' && draft.mode !== 'custom') {
+        const each = draft.amount || '';
+        draft.selected.forEach(id => { if (!draft.amounts[id]) draft.amounts[id] = each; });
+        if (draft.me && !draft.meAmount) draft.meAmount = each;
+      }
+      draft.mode = mode;
+      render();
+      break;
+    }
     case 'open-split': ui.splitOpen = true; ui.splitDraft = freshSplitDraft(); pushNav(); render(); break;
     case 'close-split': goBack(); break;
     case 'split-add-person': {
@@ -2382,12 +2474,16 @@ document.addEventListener('submit', e => {
 
     case 'add-transfer': {
       const dateStr = fd.get('date');
+      const custom = indirectMode() === 'custom';
+      const { amounts, meAmount } = indirectShares();
       try {
         const { count } = addIndirectPayments({
           lenderId: fd.get('lenderId'),
           receiverIds: indirectSelectedIds(),
           includeMe: indirectIncludesMe(),
-          amount: parseFloat(fd.get('amount')),
+          amount: custom ? null : parseFloat(fd.get('amount')),
+          amounts: custom ? amounts : null,
+          meAmount: custom ? meAmount : null,
           note: fd.get('note') || '',
           date: entryDate(dateStr).toISOString(),
         });
