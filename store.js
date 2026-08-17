@@ -214,23 +214,36 @@ function addIndirectPayment({ lenderId, receiverId, amount, note = '', date = nu
   return { linkId, lenderTxn, receiverTxn };
 }
 
-/* One lender lent the same amount to several recipients at once. Each real
-   recipient becomes its own indirect pair (lender −amt, recipient +amt). A
+/* One lender lent to several recipients at once. By default everyone was lent
+   the same `amount`; pass `amounts` — a {personId: amount} map, plus `meAmount`
+   for the "Me" share — to record a different figure per recipient instead. Each
+   real recipient becomes its own indirect pair (lender −amt, recipient +amt). A
    recipient of "Me" is just the lender lending to you directly — the lender's
-   balance drops by amt with no second leg (you simply owe them that much). */
-function addIndirectPayments({ lenderId, receiverIds = [], includeMe = false, amount, note = '', date = null }) {
-  const amt = Number(amount);
-  if (!Number.isFinite(amt) || amt <= 0) throw new Error('Enter an amount greater than zero.');
+   balance drops by that share with no second leg (you simply owe them that much).
+
+   Every share is validated before anything is recorded, so one bad figure can't
+   leave half the recipients charged. */
+function addIndirectPayments({ lenderId, receiverIds = [], includeMe = false, amount, amounts = null, meAmount = null, note = '', date = null }) {
   if (!lenderId || !getPerson(lenderId)) throw new Error('Pick the lender.');
   const ids = receiverIds.filter(id => id && id !== lenderId);
   if (!ids.length && !includeMe) throw new Error('Pick at least one recipient.');
-  const when = date || new Date().toISOString();
-  ids.forEach(rid => addIndirectPayment({ lenderId, receiverId: rid, amount: amt, note, date: when }));
-  if (includeMe) {
-    capitalizeOnDrop(lenderId, -amt, new Date(when).getTime());
-    addTransaction({ personId: lenderId, amount: -amt, note, date: when });
+
+  const shareOf = id => Number(amounts ? amounts[id] : amount);
+  const shares = ids.map(id => [id, shareOf(id)]);
+  const mine = includeMe ? Number(amounts ? meAmount : amount) : 0;
+  const every = shares.map(([, amt]) => amt).concat(includeMe ? [mine] : []);
+  if (every.some(amt => !Number.isFinite(amt) || amt <= 0)) {
+    throw new Error('Enter an amount greater than zero.');
   }
-  return { count: ids.length + (includeMe ? 1 : 0) };
+
+  const when = date || new Date().toISOString();
+  shares.forEach(([rid, amt]) => addIndirectPayment({ lenderId, receiverId: rid, amount: amt, note, date: when }));
+  if (includeMe) {
+    capitalizeOnDrop(lenderId, -mine, new Date(when).getTime());
+    addTransaction({ personId: lenderId, amount: -mine, note, date: when });
+  }
+  const total = every.reduce((s, amt) => s + amt, 0);
+  return { count: ids.length + (includeMe ? 1 : 0), total };
 }
 
 /* All recorded indirect payments as {linkId, lender, receiver, amount, note, date},

@@ -67,6 +67,54 @@ test('the lender is never charged as their own recipient', () => {
   assert.strictEqual(round2(ctx.principalOf('pihu')), -50);
 });
 
+test('custom amounts: each recipient owes their own figure, lender drops by the sum', () => {
+  setState(freshState());
+  const { count, total } = ctx.addIndirectPayments({
+    lenderId: 'pihu',
+    receiverIds: ['uma', 'rishi', 'govind'],
+    amounts: { uma: 70, rishi: 50, govind: 30 },
+  });
+  assert.strictEqual(count, 3);
+  assert.strictEqual(round2(total), 150);
+  assert.strictEqual(round2(ctx.principalOf('uma')), 70);
+  assert.strictEqual(round2(ctx.principalOf('rishi')), 50);
+  assert.strictEqual(round2(ctx.principalOf('govind')), 30);
+  assert.strictEqual(round2(ctx.principalOf('pihu')), -150);
+  const net = ['pihu', 'uma', 'rishi', 'govind'].reduce((s, id) => s + ctx.principalOf(id), 0);
+  assert.strictEqual(round2(net), 0);
+});
+
+test('custom amounts: the "Me" share uses meAmount, not the recipient figures', () => {
+  setState(freshState());
+  const { count } = ctx.addIndirectPayments({
+    lenderId: 'pihu',
+    receiverIds: ['uma'],
+    includeMe: true,
+    amounts: { uma: 70 },
+    meAmount: 30,
+  });
+  assert.strictEqual(count, 2);
+  assert.strictEqual(round2(ctx.principalOf('uma')), 70);
+  assert.strictEqual(round2(ctx.principalOf('pihu')), -100);
+});
+
+test('custom amounts: a missing or non-positive share records nothing at all', () => {
+  setState(freshState());
+  assert.throws(() => ctx.addIndirectPayments({
+    lenderId: 'pihu', receiverIds: ['uma', 'rishi'], amounts: { uma: 70 },
+  }), /greater than zero/);
+  assert.throws(() => ctx.addIndirectPayments({
+    lenderId: 'pihu', receiverIds: ['uma', 'rishi'], amounts: { uma: 70, rishi: 0 },
+  }), /greater than zero/);
+  assert.throws(() => ctx.addIndirectPayments({
+    lenderId: 'pihu', receiverIds: ['uma'], includeMe: true, amounts: { uma: 70 },
+  }), /greater than zero/);
+  // the valid recipient in each rejected call must not have been charged
+  assert.strictEqual(ctx.__state.transactions.length, 0);
+  assert.strictEqual(round2(ctx.principalOf('uma')), 0);
+  assert.strictEqual(round2(ctx.principalOf('pihu')), 0);
+});
+
 test('rejects a non-positive amount and an empty recipient set', () => {
   setState(freshState());
   assert.throws(() => ctx.addIndirectPayments({ lenderId: 'pihu', receiverIds: ['uma'], amount: 0 }), /greater than zero/);

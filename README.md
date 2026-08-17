@@ -97,6 +97,14 @@ exact before/after for both people, and each transfer is recorded as two
 linked entries (tagged **INDIRECT**, with a *via* label) so it shows in
 History and can be undone in one step, reverting both balances.
 
+One lender can be routed to several receivers at once. **Split equally**
+(the default) gives everyone the same figure; switch to **Custom amounts**
+for a box beside each ticked name, so different people can owe the lender
+different sums. Switching over seeds each box with the equal figure, so an
+uneven split is edited from the even one rather than typed from scratch.
+The preview totals whatever you enter, and nothing is recorded until every
+ticked person has an amount.
+
 ### History
 A dedicated tab listing every entry across everyone — paid, repaid, and
 interest — newest first. Search filters by person, reason, amount, or
