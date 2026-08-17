@@ -165,6 +165,9 @@ input, textarea, select, [contenteditable="true"] {
   -webkit-touch-callout: default;
 }
 
+/* anything the UI hides stays hidden, even where a layout rule sets display */
+[hidden] { display: none !important; }
+
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 .paper-grain { display: none; }
@@ -849,10 +852,12 @@ button { font-family: var(--body); cursor: pointer; }
 .share-pick-row {
   display: flex; align-items: center; gap: var(--sp-3);
   padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer;
+  border-radius: var(--radius-sm); transition: background 0.2s;
+  -webkit-tap-highlight-color: transparent;
 }
 .share-pick-row:last-child { border-bottom: none; }
 .share-pick-row input[type="checkbox"] { width: auto; }
-.share-pick-name { flex: 1; font-weight: 500; }
+.share-pick-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* A row that carries its own amount box (indirect payment, custom amounts):
    the tick + name stay one clickable label, the box sits beside them. */
@@ -863,6 +868,16 @@ button { font-family: var(--body); cursor: pointer; }
   padding: 6px 8px;
 }
 .pick-amt:disabled { opacity: .45; }
+
+/* long-press a picker tile for an individual amount: the tile tints while held,
+   and the name carries a tag afterwards so it's clear who left the shared
+   figure (and that another press puts them back on it) */
+.share-pick-row.lp-pressing { background: var(--row-tint); }
+.share-pick-row.has-own .pick-amt { border-color: var(--green); }
+.pick-own-tag {
+  flex: none; font-size: var(--fs-cap); color: var(--green);
+  background: var(--green-tint); border-radius: var(--pill); padding: 1px 8px;
+}
 .share-preview {
   font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.6;
   background: var(--green-tint); border: 1px solid var(--line);

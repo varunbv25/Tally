@@ -1299,7 +1299,7 @@ function indirectPreviewHTML(lenderId, receiverIds, includeMe, amounts, meAmount
   const filled = shares.every(amt => Number.isFinite(amt) && amt > 0);
   if (!lender || !count || !filled) {
     return `<span class="muted">${
-      count && lender && indirectMode() === 'custom'
+      lender && count
         ? 'Enter an amount for everyone you ticked.'
         : 'Pick the lender, tick who they lent to, and enter an amount.'}</span>`;
   }
@@ -1344,52 +1344,135 @@ function indirectIncludesMe() {
   return !!(me && me.checked);
 }
 
-function indirectMode() {
-  return (ui.indirectDraft && ui.indirectDraft.mode) === 'custom' ? 'custom' : 'equal';
+/* How many people are ticked (real recipients plus "Me"). Reads the live
+   checklist; pass the draft to count from the snapshot instead, which is what
+   a render in progress has to go on. */
+function indirectPickCount(draft) {
+  if (draft) {
+    const picked = [...draft.selected].filter(id => id !== draft.lenderId && getPerson(id));
+    return picked.length + (draft.me ? 1 : 0);
+  }
+  return indirectSelectedIds().length + (indirectIncludesMe() ? 1 : 0);
 }
 
-/* What each ticked person was lent, straight off the live form. Split equally
-   means everyone gets the single "amount each" figure; in custom mode every
-   ticked person has their own box. Unfilled boxes come back as NaN, which the
-   preview reports and the store refuses. */
+/* Splitting only becomes a question once several people are ticked — with one
+   recipient there is nothing to divide, so the equal/custom choice collapses to
+   the single amount box no matter what the draft last had selected. */
+function indirectMode(draft) {
+  const d = draft || ui.indirectDraft;
+  if (!d || d.mode !== 'custom') return 'equal';
+  return indirectPickCount(draft) >= 2 ? 'custom' : 'equal';
+}
+
+/* Whether a ticked person is on their own figure rather than the shared one:
+   everybody in custom mode, and anyone long-pressed while splitting equally. */
+function indirectHasOwn(key, draft) {
+  const d = draft || ui.indirectDraft;
+  return indirectMode(draft) === 'custom' || !!(d && d.own && d.own.has(key));
+}
+
+/* What each ticked person was lent, straight off the live form. A visible box
+   beside a name means that person has an individual amount; everyone else gets
+   the shared figure. Unfilled boxes come back as NaN, which the preview reports
+   and the store refuses. */
 function indirectShares() {
   const form = document.querySelector('[data-form="add-transfer"]');
   const ids = indirectSelectedIds();
   const amounts = {};
   if (!form) return { amounts, meAmount: NaN };
-  if (indirectMode() === 'custom') {
-    ids.forEach(id => {
-      const box = document.querySelector(`[data-xfer-amount="${id}"]`);
-      amounts[id] = parseFloat(box ? box.value : '');
-    });
-    const mine = document.querySelector('[data-xfer-me-amount]');
-    return { amounts, meAmount: parseFloat(mine ? mine.value : '') };
-  }
   const each = parseFloat(form.amount ? form.amount.value : '');
-  ids.forEach(id => { amounts[id] = each; });
-  return { amounts, meAmount: each };
+  // updateTransferPreview keeps `hidden` in step with who has their own amount
+  const share = sel => {
+    const box = document.querySelector(sel);
+    return box && !box.hidden ? parseFloat(box.value) : each;
+  };
+  ids.forEach(id => { amounts[id] = share(`[data-xfer-amount="${id}"]`); });
+  return { amounts, meAmount: share('[data-xfer-me-amount]') };
 }
 
+/* Keeps the form in step with the live ticks without re-rendering (so typing
+   and scroll position survive): the equal/custom bar appears once several
+   people are ticked, each row's box is live only for people on an individual
+   amount, and the shared box stays as long as somebody still shares it. */
 function updateTransferPreview() {
   const form = document.querySelector('[data-form="add-transfer"]');
   const node = document.getElementById('xfer-preview');
   if (!form || !node) return;
-  // a per-person box only takes an amount while that person is ticked
-  document.querySelectorAll('[data-xfer-amount]').forEach(box => {
-    const cb = document.querySelector(`[data-xfer-receiver="${box.dataset.xferAmount}"]`);
-    box.disabled = !(cb && cb.checked);
+  const custom = indirectMode() === 'custom';
+  const count = indirectPickCount();
+
+  const modes = form.querySelector('[data-indirect-modes]');
+  if (modes) {
+    modes.hidden = count < 2;
+    // the bar is only ever shown where the effective mode is the chosen one
+    modes.querySelectorAll('.seg').forEach(seg => {
+      const on = (seg.dataset.mode === 'custom') === custom;
+      seg.classList.toggle('active', on);
+      seg.setAttribute('aria-pressed', String(on));
+    });
+  }
+
+  let sharing = 0;
+  form.querySelectorAll('.share-pick-row[data-pick-id]').forEach(row => {
+    const key = row.dataset.pickId;
+    const cb = row.querySelector('input[type="checkbox"]');
+    const box = row.querySelector('.pick-amt');
+    const tag = row.querySelector('[data-own-tag]');
+    const ticked = !!(cb && cb.checked);
+    const own = ticked && indirectHasOwn(key);
+    if (box) { box.hidden = !own; box.disabled = !own; }
+    if (tag) tag.hidden = !(own && !custom);   // in custom mode every row has one
+    row.classList.toggle('has-own', own);
+    if (ticked && !own) sharing++;
   });
-  const meBox = document.querySelector('[data-xfer-me-amount]');
-  if (meBox) meBox.disabled = !indirectIncludesMe();
+
+  // with everyone on their own figure the shared box has nothing left to fill
+  const shared = form.amount;
+  if (shared) {
+    const needed = sharing > 0 || !count;
+    shared.hidden = !needed;
+    shared.required = needed;
+    shared.placeholder = sharing > 1 ? 'amount each' : 'amount';
+  }
+
   const { amounts, meAmount } = indirectShares();
   node.innerHTML = indirectPreviewHTML(form.lenderId.value, indirectSelectedIds(), indirectIncludesMe(), amounts, meAmount);
+}
+
+/* Long-pressing someone in the picker hands them their own amount box, seeded
+   from the shared figure — a per-person override without leaving "split
+   equally". Pressing again gives them the shared figure back. Someone not yet
+   ticked is ticked first, since an amount only means anything for a recipient. */
+function setIndividualAmount(row) {
+  const draft = ui.indirectDraft;
+  if (!draft || !row) return;
+  const key = row.dataset.pickId;
+  const cb = row.querySelector('input[type="checkbox"]');
+  const box = row.querySelector('.pick-amt');
+  if (!key || !cb || !box) return;
+  if (!draft.own) draft.own = new Set();
+
+  cb.checked = true;
+  // in custom mode everyone already has a box — the press just jumps to it
+  if (indirectMode() !== 'custom') {
+    if (draft.own.has(key)) {
+      draft.own.delete(key);
+    } else {
+      draft.own.add(key);
+      const form = document.querySelector('[data-form="add-transfer"]');
+      if (!box.value && form && form.amount) box.value = form.amount.value;
+    }
+  }
+  syncIndirectDraft();
+  updateTransferPreview();
+  if (!box.hidden) { box.focus(); box.select(); }
 }
 
 function freshIndirectDraft() {
   return {
     lenderId: state.people[0] ? state.people[0].id : '',
     selected: new Set(), me: false, amount: '',
-    mode: 'equal', amounts: {}, meAmount: '',
+    mode: 'equal', amounts: {}, meAmount: '', own: new Set(),
     date: new Date().toISOString().slice(0, 10), note: '',
   };
 }
@@ -1421,50 +1504,54 @@ function renderIndirectModal() {
 
   const draft = ui.indirectDraft || (ui.indirectDraft = freshIndirectDraft());
   if (!getPerson(draft.lenderId)) draft.lenderId = state.people[0].id;
+  if (!draft.own) draft.own = new Set();
   const sel = draft.selected;
-  const custom = indirectMode() === 'custom';
+  const custom = indirectMode(draft) === 'custom';
+  const several = indirectPickCount(draft) >= 2;
 
   const lenderOpts = peopleByName().map(p =>
     `<option value="${p.id}" ${p.id === draft.lenderId ? 'selected' : ''}>${esc(p.name)}</option>`
   ).join('');
 
-  /* In custom mode each row carries its own amount box, so different people can
-     owe the lender different figures. The box is dead until that person is
-     ticked (updateTransferPreview keeps the disabled state in step). */
-  const amountBox = (attr, value, ticked) => custom
-    ? `<input class="pick-amt" type="number" inputmode="decimal" step="any" min="0.01"
-         placeholder="amount" ${attr} value="${esc(value || '')}" ${ticked ? '' : 'disabled'}>`
-    : '';
+  /* Every row carries its own amount box so different people can owe the lender
+     different figures. It's revealed for everyone in custom mode, and for just
+     the people you long-pressed while splitting equally — updateTransferPreview
+     decides which, so ticking a name never has to re-render the picker. */
+  const amountBox = (attr, value) =>
+    `<input class="pick-amt" type="number" inputmode="decimal" step="any" min="0.01"
+       placeholder="amount" ${attr} value="${esc(value || '')}" hidden disabled>`;
 
-  const meRow =
-    `<div class="share-pick-row">
+  const pickRow = (key, name, checkbox, box, chip) =>
+    `<div class="share-pick-row" data-pick-id="${key}" title="Long-press for an individual amount">
       <label class="share-pick-main">
-        <input type="checkbox" data-xfer-me ${draft.me ? 'checked' : ''}>
-        <span class="share-pick-name">Me</span>
+        ${checkbox}
+        <span class="share-pick-name">${name}</span>
+        <span class="pick-own-tag" data-own-tag hidden>own amount</span>
       </label>
-      ${amountBox('data-xfer-me-amount', draft.meAmount, draft.me)}
-      ${Chip(esc(state.settings.baseCurrency))}
+      ${box}
+      ${chip}
     </div>`;
 
-  const rows = peopleByName().filter(p => p.id !== draft.lenderId).map(p =>
-    `<div class="share-pick-row">
-      <label class="share-pick-main">
-        <input type="checkbox" data-xfer-receiver="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>
-        <span class="share-pick-name">${esc(p.name)}</span>
-      </label>
-      ${amountBox(`data-xfer-amount="${p.id}"`, draft.amounts[p.id], sel.has(p.id))}
-      ${Chip(p.currency)}
-    </div>`).join('');
+  const meRow = pickRow('me', 'Me',
+    `<input type="checkbox" data-xfer-me ${draft.me ? 'checked' : ''}>`,
+    amountBox('data-xfer-me-amount', draft.meAmount),
+    Chip(esc(state.settings.baseCurrency)));
 
+  const rows = peopleByName().filter(p => p.id !== draft.lenderId).map(p => pickRow(p.id, esc(p.name),
+    `<input type="checkbox" data-xfer-receiver="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>`,
+    amountBox(`data-xfer-amount="${p.id}"`, draft.amounts[p.id]),
+    Chip(p.currency))).join('');
+
+  /* Nothing to split until at least two people are ticked, so the choice only
+     appears then (updateTransferPreview shows and hides it as ticks change). */
   const modeBar = `
-    <div class="seg-control" role="group" aria-label="How much each person was lent">
+    <div class="seg-control" role="group" aria-label="How much each person was lent" data-indirect-modes ${several ? '' : 'hidden'}>
       <button type="button" class="seg${custom ? '' : ' active'}" data-action="set-indirect-mode" data-mode="equal" aria-pressed="${!custom}">Split equally</button>
       <button type="button" class="seg${custom ? ' active' : ''}" data-action="set-indirect-mode" data-mode="custom" aria-pressed="${custom}">Custom amounts</button>
     </div>`;
 
-  const amountField = custom
-    ? ''
-    : `<input name="amount" type="number" inputmode="decimal" step="any" min="0.01" placeholder="amount each" value="${esc(draft.amount || '')}" required>`;
+  const amountField =
+    `<input name="amount" type="number" inputmode="decimal" step="any" min="0.01" placeholder="amount" value="${esc(draft.amount || '')}" hidden>`;
 
   root.innerHTML = Modal({
     overlayId: 'indirect-overlay',
@@ -1472,7 +1559,7 @@ function renderIndirectModal() {
     title: 'Indirect payment',
     closeAction: 'close-indirect',
     body: `
-      <p class="section-sub split-intro">One person lent to several. Pick the lender and tick everyone they lent to — each gets their share added to what they owe you, and the lender's balance drops by the total. Split it equally, or switch to custom amounts to give each person their own figure.</p>
+      <p class="section-sub split-intro">One person lent to several. Pick the lender and tick everyone they lent to — each gets their share added to what they owe you, and the lender's balance drops by the total. Tick two or more names and you can split the amount equally or switch to custom amounts. Long-press anyone to give just them an individual amount.</p>
 
       <form data-form="add-transfer">
         <h3 class="subhead">Lender</h3>
@@ -2041,7 +2128,12 @@ function render() {
 /* ---------- event wiring (delegated) ---------- */
 
 document.addEventListener('click', e => {
-  if (lpFired) { lpFired = false; return; }   // swallow the click after a long-press
+  if (lpFired) {           // swallow the click after a long-press
+    lpFired = false;
+    // picker tiles are labels: without this the press would also flip the tick
+    if (e.target.closest('.share-pick-row')) e.preventDefault();
+    return;
+  }
 
   // in selection mode, tapping a history row toggles its selection
   if (ui.selectMode && !e.target.closest('.select-bar, .confirm-overlay')) {
@@ -2178,6 +2270,8 @@ document.addEventListener('click', e => {
         draft.selected.forEach(id => { if (!draft.amounts[id]) draft.amounts[id] = each; });
         if (draft.me && !draft.meAmount) draft.meAmount = each;
       }
+      // back to equal puts everyone on the shared figure, long-presses included
+      if (mode === 'equal' && draft.own) draft.own.clear();
       draft.mode = mode;
       render();
       break;
@@ -2474,16 +2568,16 @@ document.addEventListener('submit', e => {
 
     case 'add-transfer': {
       const dateStr = fd.get('date');
-      const custom = indirectMode() === 'custom';
+      // indirectShares already resolves the shared figure and every individual
+      // one, so the store is always handed a per-recipient map
       const { amounts, meAmount } = indirectShares();
       try {
         const { count } = addIndirectPayments({
           lenderId: fd.get('lenderId'),
           receiverIds: indirectSelectedIds(),
           includeMe: indirectIncludesMe(),
-          amount: custom ? null : parseFloat(fd.get('amount')),
-          amounts: custom ? amounts : null,
-          meAmount: custom ? meAmount : null,
+          amounts,
+          meAmount,
           note: fd.get('note') || '',
           date: entryDate(dateStr).toISOString(),
         });
@@ -2800,7 +2894,8 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && ui.drawerOpen) goBack();
 });
 
-/* ---------- long-press a history entry to delete it (touch + mouse) ---------- */
+/* ---------- long-press: delete a history entry, select people, or give
+   someone in the indirect picker their own amount (touch + mouse) ---------- */
 let lpTimer = null, lpStart = null, lpRow = null, lpFired = false;
 
 function lpClear() {
@@ -2812,12 +2907,14 @@ function lpClear() {
 document.addEventListener('pointerdown', e => {
   // Never hijack a press that starts inside a text field — let people type/select freely.
   if (e.target.closest('input, textarea, select')) return;
-  const histRow = e.target.closest('.history-table tr[data-txn-id]');
-  const memRow = histRow ? null : e.target.closest('.ledger-table tr[data-member-id]');
+  // A tile in the indirect-payment picker long-presses to an individual amount.
+  const pickRow = e.target.closest('#indirect-root .share-pick-row[data-pick-id]');
+  const histRow = pickRow ? null : e.target.closest('.history-table tr[data-txn-id]');
+  const memRow = (pickRow || histRow) ? null : e.target.closest('.ledger-table tr[data-member-id]');
   // Main-ledger person cells long-press to start a delete selection (group rows carry data-member-id).
-  const personCell = (histRow || memRow) ? null : e.target.closest('.ledger-table tr[data-person-id] .col-person');
+  const personCell = (pickRow || histRow || memRow) ? null : e.target.closest('.ledger-table tr[data-person-id] .col-person');
   const personRow = personCell ? personCell.closest('tr') : null;
-  const row = histRow || memRow || personRow;
+  const row = pickRow || histRow || memRow || personRow;
   if (!row) return;
   lpFired = false;
   lpStart = { x: e.clientX, y: e.clientY };
@@ -2828,7 +2925,8 @@ document.addEventListener('pointerdown', e => {
     if (lpRow) lpRow.classList.remove('lp-pressing');
     lpFired = true;
     if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
-    if (histRow) enterSelectMode(histRow.dataset.txnId);
+    if (pickRow) setIndividualAmount(pickRow);
+    else if (histRow) enterSelectMode(histRow.dataset.txnId);
     else if (memRow) enterMemberSelectMode(memRow.dataset.memberId);
     else enterPersonSelectMode(personRow.dataset.personId);
   }, 500);

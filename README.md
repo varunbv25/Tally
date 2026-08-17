@@ -97,11 +97,19 @@ exact before/after for both people, and each transfer is recorded as two
 linked entries (tagged **INDIRECT**, with a *via* label) so it shows in
 History and can be undone in one step, reverting both balances.
 
-One lender can be routed to several receivers at once. **Split equally**
+One lender can be routed to several receivers at once. Tick two or more
+names and the split choice appears — with a single recipient there's
+nothing to divide, so you just get the one amount box. **Split equally**
 (the default) gives everyone the same figure; switch to **Custom amounts**
 for a box beside each ticked name, so different people can owe the lender
 different sums. Switching over seeds each box with the equal figure, so an
 uneven split is edited from the even one rather than typed from scratch.
+
+For a one-off exception there's no need to leave the equal split at all:
+**long-press anyone in the list** to give just them their own amount box,
+seeded from the shared figure and tagged *own amount*. Everyone else stays
+on the shared figure; long-press again to put them back on it. Give every
+recipient an individual amount and the shared box drops away entirely.
 The preview totals whatever you enter, and nothing is recorded until every
 ticked person has an amount.
 
