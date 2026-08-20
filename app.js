@@ -489,8 +489,10 @@ function renderGroups() {
     </button>`;
   }).join('');
 
-  const memberChecks = peopleByName().map(p =>
-    `<label><input type="checkbox" name="member" value="${p.id}"> ${esc(p.name)}</label>`
+  /* Members are picked by tapping name tiles — the checkbox is hidden and the
+     tile shows the same tick circle the ledger's select mode uses. */
+  const memberTiles = peopleByName().map(p =>
+    `<label class="name-tile"><input type="checkbox" name="member" value="${p.id}"><span class="sel-check" aria-hidden="true"></span><span class="name-tile-name">${esc(p.name)}</span></label>`
   ).join('');
 
   /* A person can sit in several groups, and each group's net counts their full
@@ -513,7 +515,9 @@ function renderGroups() {
     body: `
       <form data-form="add-group">
         <div class="form-row"><input name="name" placeholder="Group name (e.g. Goa Trip)" required></div>
-        <div class="form-row">${memberChecks || '<span class="muted">Add people on the Ledger tab first.</span>'}</div>
+        <div class="form-row">${memberTiles
+          ? `<div class="name-tile-grid" role="group" aria-label="Tap names to pick members">${memberTiles}</div>`
+          : '<span class="muted">Add people on the Ledger tab first.</span>'}</div>
         <div class="form-row tight"><button class="btn" type="submit">Create group</button></div>
       </form>`,
   });
@@ -1540,6 +1544,7 @@ function renderIndirectModal() {
     `<div class="share-pick-row" data-pick-id="${key}" title="Long-press for an individual amount">
       <label class="share-pick-main">
         ${checkbox}
+        <span class="sel-check" aria-hidden="true"></span>
         <span class="share-pick-name">${name}</span>
         <span class="pick-own-tag" data-own-tag hidden>own amount</span>
       </label>
@@ -1574,7 +1579,7 @@ function renderIndirectModal() {
     title: 'Indirect payment',
     closeAction: 'close-indirect',
     body: `
-      <p class="section-sub split-intro">One person lent to several. Each ticked name's share is added to what they owe you, and the lender's balance drops by the total. Long-press anyone for an individual amount.</p>
+      <p class="section-sub split-intro">One person lent to several. Tap names to pick who was lent to — each picked name's share is added to what they owe you, and the lender's balance drops by the total. Long-press anyone for an individual amount.</p>
 
       <form data-form="add-transfer">
         <h3 class="subhead">Lender</h3>
@@ -1839,6 +1844,7 @@ function renderSplitModal() {
     `<div class="share-pick-row" data-pick-id="${key}" title="Long-press for an individual amount">
       <label class="share-pick-main">
         ${checkbox}
+        <span class="sel-check" aria-hidden="true"></span>
         <span class="share-pick-name">${name}</span>
         <span class="pick-own-tag" data-own-tag hidden>own amount</span>
       </label>
@@ -1921,6 +1927,7 @@ function renderSharePeopleModal(root) {
     const settled = Math.abs(total) <= 0.005;
     return `<label class="share-pick-row">
       <input type="checkbox" data-share-member="${p.id}">
+      <span class="sel-check" aria-hidden="true"></span>
       <span class="share-pick-name">${esc(p.name)}</span>
       ${settled
         ? '<span class="muted">settled</span>'
@@ -1935,7 +1942,7 @@ function renderSharePeopleModal(root) {
     title: 'Share balances',
     closeAction: 'close-share',
     body: `
-      <p class="section-sub" style="margin-bottom:14px">Tick who to include — only ticked people are shared.</p>
+      <p class="section-sub" style="margin-bottom:14px">Tap names to pick who to include — only picked people are shared.</p>
       ${people.length
         ? `<div class="share-pick-list share-scroll">${rows}</div>`
         : '<p class="muted">No people yet.</p>'}
@@ -1960,6 +1967,7 @@ function renderShareModal() {
     const settled = Math.abs(total) <= 0.005;
     return `<label class="share-pick-row">
       <input type="checkbox" data-share-member="${p.id}" checked>
+      <span class="sel-check" aria-hidden="true"></span>
       <span class="share-pick-name">${esc(p.name)}</span>
       ${settled
         ? '<span class="muted">settled</span>'
@@ -1974,7 +1982,7 @@ function renderShareModal() {
     title: `Share ${esc(g.name)}`,
     closeAction: 'close-share',
     body: `
-      <p class="section-sub" style="margin-bottom:14px">Tick who to include — unticked people are left out of the shared list.</p>
+      <p class="section-sub" style="margin-bottom:14px">Everyone starts picked — tap a name to leave them out of the shared list.</p>
       ${members.length
         ? `<div class="share-pick-list share-scroll">${rows}</div>`
         : '<p class="muted">This group has no members yet.</p>'}
