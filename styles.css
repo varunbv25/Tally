@@ -710,6 +710,19 @@ button { font-family: var(--body); cursor: pointer; }
 .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-2); }
 .panel-head h3 { margin-bottom: var(--sp-3); }
 
+/* create-group member picker: names are wrapping tiles you tap to pick, each
+   carrying the same tick circle as the ledger's select mode */
+.name-tile-grid { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.name-tile {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  padding: 8px 14px; border: 1px solid var(--line-strong); border-radius: var(--pill);
+  cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent;
+  font-size: var(--fs-sm); font-weight: 500; position: relative;
+  transition: background 0.15s, border-color 0.15s;
+}
+.name-tile-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12em; }
+.name-tile:has(input:checked) { background: var(--green-tint); border-color: var(--green); }
+
 .banner {
   font-size: var(--fs-sm); color: var(--green-deep);
   background: var(--green-tint); border: 1px solid var(--line);
@@ -868,16 +881,33 @@ button { font-family: var(--body); cursor: pointer; }
 }
 .modal-close:hover { color: var(--red); border-color: var(--red); }
 
-/* group share picker — member checklist, live preview (backdrop blur inherited from .modal-overlay) */
-.share-pick-list { display: flex; flex-direction: column; margin-bottom: var(--sp-5); }
+/* group share picker — member checklist, live preview (backdrop blur inherited from .modal-overlay)
+   Each name is its own bordered tile with air between rows — picking one turns
+   its border and fill green, so the choice reads at a glance instead of as a
+   joined checklist. */
+.share-pick-list { display: flex; flex-direction: column; gap: var(--sp-2); margin-bottom: var(--sp-5); }
 .share-pick-row {
   display: flex; align-items: center; gap: var(--sp-3);
-  padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer;
-  border-radius: var(--radius-sm); transition: background 0.2s;
-  -webkit-tap-highlight-color: transparent;
+  padding: 11px 14px; border: 1px solid var(--line); cursor: pointer;
+  border-radius: var(--radius); transition: background 0.2s, border-color 0.2s;
+  -webkit-tap-highlight-color: transparent; position: relative;
 }
-.share-pick-row:last-child { border-bottom: none; }
-.share-pick-row input[type="checkbox"] { width: auto; }
+/* Names are picked by tapping the tile, not a native checkbox: the input stays
+   in the DOM (it carries the state and keyboard focus) but is invisible, and
+   the sel-check tick circle beside it shows checked/unchecked instead. */
+.share-pick-row input[type="checkbox"],
+.name-tile input[type="checkbox"] {
+  position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none;
+}
+.share-pick-row .sel-check,
+.name-tile .sel-check { margin-right: 0; vertical-align: middle; }
+/* keyboard focus lands on the hidden input — surface it on the tick circle */
+.share-pick-row input:focus-visible + .sel-check,
+.name-tile input:focus-visible + .sel-check { outline: 2px solid var(--green); outline-offset: 2px; }
+/* a picked tile fills green, same language as the create-group name tiles */
+.share-pick-row:has(input[type="checkbox"]:checked) {
+  background: var(--green-tint); border-color: var(--green);
+}
 .share-pick-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* A row that carries its own amount box (indirect payment, custom amounts):
@@ -1054,14 +1084,18 @@ button { font-family: var(--body); cursor: pointer; }
 .ledger-table tr.selected { background: var(--row-tint) !important; box-shadow: inset 3px 0 0 var(--green); }
 .history-table tr[data-txn-id] { cursor: default; }
 .sel-check {
-  display: inline-block; width: 18px; height: 18px; border-radius: 50%;
+  display: inline-block; width: 20px; height: 20px; border-radius: 50%;
   border: 2px solid var(--line-strong); margin-right: 9px; vertical-align: -4px;
   position: relative; flex: 0 0 auto; transition: background 0.15s, border-color 0.15s;
 }
-.sel-check.on { background: var(--green); border-color: var(--green); }
-.sel-check.on::after {
-  content: ''; position: absolute; left: 5px; top: 1.5px;
-  width: 4px; height: 8px; border: solid var(--btn-ink); border-width: 0 2px 2px 0; transform: rotate(45deg);
+.sel-check.on,
+input:checked + .sel-check { background: var(--green); border-color: var(--green); }
+/* the tick, kept dead-centre of the circle whatever its size */
+.sel-check.on::after,
+input:checked + .sel-check::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 5px; height: 9px; border: solid var(--btn-ink); border-width: 0 2px 2px 0;
+  transform: translate(-50%, -62%) rotate(45deg);
 }
 
 /* selection top bar */
