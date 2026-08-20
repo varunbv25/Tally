@@ -11,6 +11,10 @@ function showToast(msg) {
     stack = document.createElement('div');
     stack.id = 'toast-stack';
     stack.className = 'toast-stack';
+    // announced politely by screen readers — toasts are the only confirmation
+    // some actions give
+    stack.setAttribute('role', 'status');
+    stack.setAttribute('aria-live', 'polite');
     document.body.appendChild(stack);
   }
   const t = document.createElement('div');

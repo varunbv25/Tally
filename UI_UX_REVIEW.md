@@ -2,6 +2,11 @@
 
 **Date:** 2026-08-20 · **Scope:** the whole web app (`index.html`, `styles.css`, `app.js`, `components/`)
 
+> **Status:** a follow-up commit on this branch implements H1, H2, H3, M1, M2,
+> M3, M5, M7, M8, L1, L2, L3 and the M9 layout rebalance, plus custom split
+> amounts and person-statement sharing. Still open: M4 (dormant-Google divider),
+> M6 (masthead currency qualifier), L4–L7.
+
 **Method:** code read-through plus a live pass — the app was run with seeded demo data
 (5 people across 2 groups, mixed currencies, an interest rule, a scheduled debt) and
 screenshotted at phone (390×844) and desktop (1280×900) sizes, in both light and dark

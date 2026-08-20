@@ -118,3 +118,32 @@ test('peopleShareText tags currency codes only when the selection mixes currenci
   assert.strictEqual(ctx.peopleShareText([a, b]), 'Alice  1200 INR\nBob  -50 USD');
   assert.strictEqual(ctx.peopleShareText([a]), 'Alice  1200'); // single currency → no suffix
 });
+
+test('personStatementText carries the headline balance, every entry, and the as-of line', () => {
+  const alice = person('a', 'Alice');
+  setState(baseState({
+    people: [alice],
+    transactions: [
+      { id: 't1', personId: 'a', groupId: null, amount: 1200, note: 'Deposit loan', date: '2026-01-02T12:00:00Z', isInterest: false },
+      { id: 't2', personId: 'a', groupId: null, amount: -200, note: '', date: '2026-02-03T12:00:00Z', isInterest: false },
+    ],
+  }));
+  const text = ctx.personStatementText(alice, new Date('2026-03-01T12:00:00Z').getTime());
+  const lines = text.split('\n');
+  assert.strictEqual(lines[0], 'Alice — owes you 1000 INR');
+  assert.strictEqual(lines[1], '');
+  assert.match(lines[2], /^\w+ \d+, 2026 {2}\+1200 {2}Deposit loan$/);
+  assert.match(lines[3], /^\w+ \d+, 2026 {2}-200 {2}repaid$/);
+  assert.match(lines[lines.length - 1], /^as of \w+ \d+, 2026$/);
+});
+
+test('personStatementText flips the headline when you owe them, and reads all square at zero', () => {
+  const bob = person('b', 'Bob', 'USD');
+  setState(baseState({
+    people: [bob],
+    transactions: [{ id: 't', personId: 'b', groupId: null, amount: -50, note: '', date: '2026-01-02T12:00:00Z', isInterest: false }],
+  }));
+  assert.match(ctx.personStatementText(bob), /^Bob — you owe them 50 USD/);
+  setState(baseState({ people: [bob], transactions: [] }));
+  assert.match(ctx.personStatementText(bob), /^Bob — all square/);
+});

@@ -6,21 +6,6 @@
 <meta name="color-scheme" content="light dark">
 <title>TALLY — the ledger that keeps score</title>
 <meta name="theme-color" content="#1e5b3f">
-<script>
-/* Apply the saved theme before first paint so there's no light-mode flash
-   when the user has chosen (or their device prefers) dark. Mirrors
-   applyTheme() in app.js; LS_KEY must match store.js. */
-(function () {
-  try {
-    var raw = localStorage.getItem('tally-ledger-v1');
-    var pref = raw ? (JSON.parse(raw).settings || {}).theme : null;
-    var dark = pref === 'dark' ||
-      ((!pref || pref === 'system') &&
-        window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
-    if (dark) document.documentElement.setAttribute('data-theme', 'dark');
-  } catch (e) { /* default light */ }
-})();
-</script>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -78,7 +63,7 @@
     <button class="drawer-close" id="menu-close" aria-label="Close menu">✕</button>
   </div>
   <nav class="drawer-nav" id="drawer-nav">
-    <div class="drawer-section drawer-section-end">
+    <div class="drawer-section">
       <button class="drawer-item" data-tab="settings">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.2A1.6 1.6 0 0 0 6.8 19l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 13H3a2 2 0 0 1 0-4h.2A1.6 1.6 0 0 0 4.6 6.3l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 0 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.4 1H21a2 2 0 0 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z"/></svg>
         <span>Settings</span>

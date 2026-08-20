@@ -407,7 +407,7 @@ function renderLedger() {
         </div>
       </div>
     </div>
-    <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ paid</em> or <em>− repaid</em>, just like a spreadsheet row. Tap <em>Settle</em> beside a name to zero their balance. Long-press a name to select people, then tap the bin to delete.</p>
+    <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− repaid</em>, like a spreadsheet row.</p>
 
     <form id="person-search" data-form="person-search" class="people-search" role="search">
       <span class="people-search-icon" aria-hidden="true">${Icons.search()}</span>
@@ -419,7 +419,10 @@ function renderLedger() {
     ${people.length ? `
     <div class="list-share">
       <span class="as-of" title="Interest accrues continuously, so totals are computed at this moment">Balances as of ${esc(fmtAsOf())}</span>
-      ${ShareButton({ cls: 'btn ghost head-action head-share', action: 'open-share-people', extra: state.people.length < 1 ? 'disabled title="Add someone first"' : '' })}
+      <span class="list-tools">
+        ${ui.personSelect ? '' : '<button class="btn small ghost" data-action="enter-person-select" title="Select people to delete">Select</button>'}
+        ${ShareButton({ cls: 'btn ghost head-action head-share', action: 'open-share-people', extra: state.people.length < 1 ? 'disabled title="Add someone first"' : '' })}
+      </span>
     </div>
     <table class="ledger-table">
       <thead><tr>
@@ -514,7 +517,7 @@ function renderGroups() {
       ${state.groups.length && !showCreate
         ? '<button class="btn ghost head-action" data-action="new-group">+ New group</button>' : ''}
     </div>
-    <p class="section-sub">People can live in many groups at once. Balances are global — record a payment in one group and it shows up in every other group instantly.</p>
+    <p class="section-sub">Balances are global — a payment recorded in one group shows up in every other group instantly.</p>
     ${overlapNote}
 
     ${showCreate ? createPanel : ''}
@@ -601,13 +604,15 @@ function renderGroupDetail() {
     ${groupDebtStrip(g)}
 
     <div class="list-share">
-      ${ShareButton({ cls: 'btn small ghost share-group-btn', action: 'share-group', dataId: g.id })}
+      <span class="list-tools">
+        ${members.length && !ui.memberSelect ? '<button class="btn small ghost" data-action="enter-member-select" title="Select members to remove from the group">Select</button>' : ''}
+        ${ShareButton({ cls: 'btn small ghost share-group-btn', action: 'share-group', dataId: g.id })}
+      </span>
     </div>
     <table class="ledger-table">
       <thead><tr><th>Member</th><th class="num">Total owed (global)</th><th>Quick entry (tagged to this group)</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="3" class="muted">No members yet.</td></tr>'}</tbody>
     </table>
-    ${members.length ? '<p class="muted" style="margin-top:8px">Long-press a member to start selecting, tap others to add, then tap the bin to remove them from the group.</p>' : ''}
 
     ${Panel({
       title: 'Add member',
@@ -962,8 +967,8 @@ function renderHistory() {
         </td>
         <td data-label="Date">${fmtDate(t.date)}</td>
         <td data-label="Type"><span class="interest-tag">INTEREST</span></td>
-        <td data-label="Group"><span class="muted">accrued</span></td>
-        <td data-label="Reason"><span class="muted">accrued, not yet capitalized</span></td>
+        <td data-label="Group"><span class="muted">—</span></td>
+        <td data-label="Reason"><span class="muted">not yet capitalized</span></td>
         <td class="num" data-label="Amount">${Money(t.amount, cur, { cls: 'pos', sign: true })}</td>
       </tr>`;
     }
@@ -975,7 +980,7 @@ function renderHistory() {
         ? '<span class="hist-tag indirect">indirect</span>'
         : t.split
           ? '<span class="hist-tag split">split</span>'
-          : (t.amount >= 0 ? '<span class="hist-tag lent">paid</span>' : '<span class="hist-tag paid">repaid</span>');
+          : (t.amount >= 0 ? '<span class="hist-tag lent">lent</span>' : '<span class="hist-tag paid">repaid</span>');
     const isSel = ui.selected.has(t.id);
     const selCls = ui.selectMode ? (isSel ? ' selected' : '') : '';
     const check = ui.selectMode ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
@@ -1026,7 +1031,7 @@ function renderHistory() {
     ${selectBar}
     ${confirmOverlay}
     <h2 class="section-title">History</h2>
-    <p class="section-sub">Every entry across everyone — lent, paid, and interest. Search by person, reason, amount, or date. Long-press an entry to start selecting, tap others to add, then tap the bin to delete.</p>
+    <p class="section-sub">Every entry across everyone — lent, repaid, and interest.</p>
 
     <div class="form-row">
       <input id="history-search" placeholder="Search person, reason, amount, date…" value="${esc(ui.historySearch)}" style="flex:1">
@@ -1036,7 +1041,10 @@ function renderHistory() {
 
     ${futureDay ? renderSchedulePanel(ui.historyDate)
       : (entries.length ? (matches.length ? `
-    <p class="muted history-count" style="margin-bottom:10px">${visible.length} ${visible.length === 1 ? 'entry' : 'entries'}${ui.historyDate ? ` on ${esc(fmtDayKey(ui.historyDate))}` : (q ? ' matching' : '')}</p>
+    <div class="list-share history-count">
+      <span class="muted">${visible.length} ${visible.length === 1 ? 'entry' : 'entries'}${ui.historyDate ? ` on ${esc(fmtDayKey(ui.historyDate))}` : (q ? ' matching' : '')}</span>
+      ${visible.length && !ui.selectMode ? '<button class="btn small ghost" data-action="enter-history-select" title="Select entries to delete">Select</button>' : ''}
+    </div>
     ${visible.length ? `
     <table class="ledger-table history-table">
       <thead><tr>
@@ -1183,11 +1191,11 @@ function shiftHistoryMonth(delta) {
 
 function enterSelectMode(txnId) {
   if (ui.selectMode) {
-    toggleSelected(txnId);
+    if (txnId) toggleSelected(txnId);
     return;
   }
   ui.selectMode = true;
-  ui.selected = new Set([txnId]);
+  ui.selected = new Set(txnId ? [txnId] : []);
   pushNav();
   render();
 }
@@ -1220,11 +1228,11 @@ function performDelete() {
 /* ---------- group-member multi-select removal ---------- */
 function enterMemberSelectMode(memberId) {
   if (ui.memberSelect) {
-    toggleMemberSelected(memberId);
+    if (memberId) toggleMemberSelected(memberId);
     return;
   }
   ui.memberSelect = true;
-  ui.selectedMembers = new Set([memberId]);
+  ui.selectedMembers = new Set(memberId ? [memberId] : []);
   pushNav();
   render();
 }
@@ -1251,11 +1259,11 @@ function performRemoveMembers() {
 /* ---------- ledger person multi-select deletion ---------- */
 function enterPersonSelectMode(personId) {
   if (ui.personSelect) {
-    togglePersonSelected(personId);
+    if (personId) togglePersonSelected(personId);
     return;
   }
   ui.personSelect = true;
-  ui.selectedPeople = new Set([personId]);
+  ui.selectedPeople = new Set(personId ? [personId] : []);
   pushNav();
   render();
 }
@@ -1559,7 +1567,7 @@ function renderIndirectModal() {
     title: 'Indirect payment',
     closeAction: 'close-indirect',
     body: `
-      <p class="section-sub split-intro">One person lent to several. Pick the lender and tick everyone they lent to — each gets their share added to what they owe you, and the lender's balance drops by the total. Tick two or more names and you can split the amount equally or switch to custom amounts. Long-press anyone to give just them an individual amount.</p>
+      <p class="section-sub split-intro">One person lent to several. Each ticked name's share is added to what they owe you, and the lender's balance drops by the total. Long-press anyone for an individual amount.</p>
 
       <form data-form="add-transfer">
         <h3 class="subhead">Lender</h3>
@@ -1605,37 +1613,52 @@ function splitSelectedIds() {
    appear in the picker, which is the order the preview shows, so the live preview
    matches what's recorded on submit. */
 
-function splitPreviewHTML(ids, amt, includeMe) {
+function splitPreviewHTML(ids, amt, includeMe, own) {
   const people = ids.map(getPerson).filter(Boolean);
-  if (!people.length || !Number.isFinite(amt) || amt <= 0) {
+  if (!people.length && !includeMe) {
     return '<span class="muted">Tick who is splitting and enter an amount to see each share.</span>';
   }
+  if (!Number.isFinite(amt) || amt <= 0) {
+    return '<span class="muted">Enter the total to see each share.</span>';
+  }
+  const ownMap = own || {};
+  const unfilled = Object.keys(ownMap).some(k => !Number.isFinite(ownMap[k]));
+  if (unfilled) return '<span class="muted">Enter an amount for everyone on their own figure.</span>';
+
   const baseCur = state.settings.baseCurrency;
-  /* You're the first participant when included, so your share is shares[0]
-     (and any leftover cent lands on you, the payer). */
+  /* Shares come from the same computation that records them, so this preview
+     is exactly what will land in the ledger. */
+  const { shares, remainder, sharerCount } = computeSplitShares({
+    personIds: people.map(p => p.id), amount: amt, includeMe, own: ownMap,
+  });
   const n = people.length + (includeMe ? 1 : 0);
-  const offset = includeMe ? 1 : 0;
-  const shares = splitShares(amt, n, { whole: roundingOn() });
   const currencies = people.map(p => p.currency);
   if (includeMe) currencies.push(baseCur);
   const multiCurrency = new Set(currencies).size > 1;
   const headCur = includeMe ? baseCur : people[0].currency;
   const head = `<div class="split-head">${n} ${n === 1 ? 'person' : 'people'}${
     multiCurrency ? '' : ` · ${fmtMoney(amt, headCur)} total`}</div>`;
+  const ownTag = k => Number.isFinite(ownMap[k]) ? ' <span class="pick-own-tag">own amount</span>' : '';
   const meLine = includeMe ? `
     <div class="xfer-line">
-      <span><b>Me</b> · your share</span>
-      <span class="xfer-delta">${fmtMoney(shares[0], baseCur)}</span>
+      <span><b>Me</b> · your share${ownTag('me')}</span>
+      <span class="xfer-delta">${fmtMoney(shares.me, baseCur)}</span>
     </div>` : '';
-  const lines = people.map((p, i) => `
+  const lines = people.map(p => `
     <div class="xfer-line">
-      <span><b>${esc(p.name)}</b> owes you</span>
-      <span class="xfer-delta pos">+${fmtMoney(shares[i + offset], p.currency)}</span>
+      <span><b>${esc(p.name)}</b> owes you${ownTag(p.id)}</span>
+      <span class="xfer-delta pos">+${fmtMoney(shares[p.id], p.currency)}</span>
     </div>`).join('');
+  /* Individual amounts must fit the total; with everyone on their own figure
+     they must reach it exactly, since nobody is left to absorb the remainder. */
+  const short = !sharerCount && remainder > 0.005
+    ? `<div class="xfer-warn">${fmtMoney(remainder, headCur)} of the total is still unassigned — raise an amount, or put someone back on the equal split.</div>` : '';
+  const over = remainder < -0.005
+    ? `<div class="xfer-warn">The individual amounts exceed the total by ${fmtMoney(-remainder, headCur)}.</div>` : '';
   const mismatch = multiCurrency
     ? `<div class="xfer-warn">Selected people use different currencies — each share is applied in that person's own currency, nothing is converted.</div>`
     : '';
-  return head + meLine + lines + mismatch;
+  return head + meLine + lines + short + over + mismatch;
 }
 
 /* whether "Me" is ticked in the split picker */
@@ -1644,11 +1667,116 @@ function splitIncludesMe() {
   return !!(me && me.checked);
 }
 
+/* How many people are ticked (real participants plus "Me"). Reads the live
+   checklist; pass the draft to count from the snapshot instead. */
+function splitPickCount(draft) {
+  if (draft) {
+    const picked = [...draft.selected].filter(getPerson);
+    return picked.length + (draft.me ? 1 : 0);
+  }
+  return splitSelectedIds().length + (splitIncludesMe() ? 1 : 0);
+}
+
+/* Custom amounts only mean anything once several people are ticked — with one
+   participant the whole total is theirs, so the choice collapses to equal. */
+function splitMode(draft) {
+  const d = draft || ui.splitDraft;
+  if (!d || d.mode !== 'custom') return 'equal';
+  return splitPickCount(draft) >= 2 ? 'custom' : 'equal';
+}
+
+/* Whether a ticked participant is on their own figure rather than the equal
+   division: everybody in custom mode, and anyone long-pressed while equal. */
+function splitHasOwn(key, draft) {
+  const d = draft || ui.splitDraft;
+  return splitMode(draft) === 'custom' || !!(d && d.own && d.own.has(key));
+}
+
+/* The individual amounts straight off the live form, keyed 'me'/personId —
+   only for participants whose box is visible. Unfilled boxes come back NaN,
+   which the preview reports and the store refuses. */
+function splitOwnMap() {
+  const own = {};
+  document.querySelectorAll('#split-root .pick-amt').forEach(box => {
+    if (box.hidden) return;
+    const key = box.dataset.splitAmount;
+    if (key) own[key] = parseFloat(box.value);
+  });
+  return own;
+}
+
+/* Keeps the form in step with the live ticks without re-rendering (so typing
+   and scroll position survive): the equal/custom bar appears once several
+   people are ticked, and each row's box is live only for people on an
+   individual amount. */
 function updateSplitPreview() {
   const form = document.querySelector('[data-form="add-split"]');
   const node = document.getElementById('split-preview');
   if (!form || !node) return;
-  node.innerHTML = splitPreviewHTML(splitSelectedIds(), parseFloat(form.amount.value), splitIncludesMe());
+  const custom = splitMode() === 'custom';
+  const count = splitPickCount();
+
+  const modes = form.querySelector('[data-split-modes]');
+  if (modes) {
+    modes.hidden = count < 2;
+    modes.querySelectorAll('.seg').forEach(seg => {
+      const on = (seg.dataset.mode === 'custom') === custom;
+      seg.classList.toggle('active', on);
+      seg.setAttribute('aria-pressed', String(on));
+    });
+  }
+
+  form.querySelectorAll('.share-pick-row[data-pick-id]').forEach(row => {
+    const key = row.dataset.pickId;
+    const cb = row.querySelector('input[type="checkbox"]');
+    const box = row.querySelector('.pick-amt');
+    const tag = row.querySelector('[data-own-tag]');
+    const ticked = !!(cb && cb.checked);
+    const own = ticked && splitHasOwn(key);
+    if (box) { box.hidden = !own; box.disabled = !own; }
+    if (tag) tag.hidden = !(own && !custom);   // in custom mode every row has one
+    row.classList.toggle('has-own', own);
+  });
+
+  node.innerHTML = splitPreviewHTML(splitSelectedIds(), parseFloat(form.amount.value), splitIncludesMe(), splitOwnMap());
+}
+
+/* Long-pressing someone in the split picker hands them their own amount box,
+   seeded from their current equal share — everyone else re-splits what's left
+   of the total. Pressing again puts them back on the equal division. */
+function setSplitIndividualAmount(row) {
+  const draft = ui.splitDraft;
+  if (!draft || !row) return;
+  const key = row.dataset.pickId;
+  const cb = row.querySelector('input[type="checkbox"]');
+  const box = row.querySelector('.pick-amt');
+  if (!key || !cb || !box) return;
+  if (!draft.own) draft.own = new Set();
+
+  cb.checked = true;
+  // in custom mode everyone already has a box — the press just jumps to it
+  if (splitMode() !== 'custom') {
+    if (draft.own.has(key)) {
+      draft.own.delete(key);
+    } else {
+      draft.own.add(key);
+      // seed with the share they hold right now on the equal division
+      if (!box.value) {
+        const form = document.querySelector('[data-form="add-split"]');
+        const amt = form ? parseFloat(form.amount.value) : NaN;
+        if (Number.isFinite(amt) && amt > 0) {
+          const { shares } = computeSplitShares({
+            personIds: splitSelectedIds(), amount: amt,
+            includeMe: splitIncludesMe(), own: splitOwnMap(),
+          });
+          if (Number.isFinite(shares[key])) box.value = String(shares[key]);
+        }
+      }
+    }
+  }
+  syncSplitDraft();
+  updateSplitPreview();
+  if (!box.hidden) { box.focus(); box.select(); }
 }
 
 /* The split picker is re-rendered when a person is added mid-flow, which would
@@ -1657,6 +1785,7 @@ function updateSplitPreview() {
 function freshSplitDraft() {
   return {
     selected: new Set(), me: false, amount: '',
+    mode: 'equal', amounts: {}, meAmount: '', own: new Set(),
     date: new Date().toISOString().slice(0, 10), note: '', newName: '',
   };
 }
@@ -1670,6 +1799,11 @@ function syncSplitDraft() {
     ui.splitDraft.note = form.note.value;
     ui.splitDraft.selected = new Set(splitSelectedIds());
     ui.splitDraft.me = splitIncludesMe();
+    // keep every typed per-person figure, ticked or not, so unticking isn't destructive
+    document.querySelectorAll('#split-root [data-split-amount]').forEach(box => {
+      if (box.dataset.splitAmount === 'me') ui.splitDraft.meAmount = box.value;
+      else ui.splitDraft.amounts[box.dataset.splitAmount] = box.value;
+    });
   }
   const ni = document.getElementById('split-new-name');
   if (ni) ui.splitDraft.newName = ni.value;
@@ -1680,23 +1814,50 @@ function renderSplitModal() {
   if (!ui.splitOpen) { root.innerHTML = ''; ui.splitDraft = null; return; }
 
   const draft = ui.splitDraft || (ui.splitDraft = freshSplitDraft());
+  if (!draft.own) draft.own = new Set();
   const sel = draft.selected;
+  const custom = splitMode(draft) === 'custom';
+  const several = splitPickCount(draft) >= 2;
+
+  /* Every row carries its own amount box so shares don't have to be equal:
+     it's revealed for everyone in custom mode, and for just the people you
+     long-pressed while splitting equally — everyone else re-splits what's left
+     of the total. updateSplitPreview decides which boxes are live, so ticking
+     a name never has to re-render the picker. */
+  const amountBox = (key, value) =>
+    `<input class="pick-amt" type="number" inputmode="decimal" step="any" min="0"
+       placeholder="share" data-split-amount="${key}" value="${esc(value || '')}" hidden disabled>`;
+
+  const pickRow = (key, name, checkbox, box, chip) =>
+    `<div class="share-pick-row" data-pick-id="${key}" title="Long-press for an individual amount">
+      <label class="share-pick-main">
+        ${checkbox}
+        <span class="share-pick-name">${name}</span>
+        <span class="pick-own-tag" data-own-tag hidden>own amount</span>
+      </label>
+      ${box}
+      ${chip}
+    </div>`;
 
   /* "Me" — you can be one of the people sharing the cost. You pay your own
      share, so it only shrinks everyone else's; no debt is recorded for you. */
-  const meRow =
-    `<label class="share-pick-row">
-      <input type="checkbox" data-split-me ${draft.me ? 'checked' : ''}>
-      <span class="share-pick-name">Me</span>
-      ${Chip(esc(state.settings.baseCurrency))}
-    </label>`;
+  const meRow = pickRow('me', 'Me',
+    `<input type="checkbox" data-split-me ${draft.me ? 'checked' : ''}>`,
+    amountBox('me', draft.meAmount),
+    Chip(esc(state.settings.baseCurrency)));
 
-  const rows = peopleByName().map(p =>
-    `<label class="share-pick-row">
-      <input type="checkbox" data-split-member="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>
-      <span class="share-pick-name">${esc(p.name)}</span>
-      ${Chip(p.currency)}
-    </label>`).join('');
+  const rows = peopleByName().map(p => pickRow(p.id, esc(p.name),
+    `<input type="checkbox" data-split-member="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>`,
+    amountBox(p.id, draft.amounts[p.id]),
+    Chip(p.currency))).join('');
+
+  /* Nothing to divide until at least two people are ticked, so the equal/custom
+     choice only appears then (updateSplitPreview shows and hides it live). */
+  const modeBar = `
+    <div class="seg-control" role="group" aria-label="How the total is divided" data-split-modes ${several ? '' : 'hidden'}>
+      <button type="button" class="seg${custom ? '' : ' active'}" data-action="set-split-mode" data-mode="equal" aria-pressed="${!custom}">Split equally</button>
+      <button type="button" class="seg${custom ? ' active' : ''}" data-action="set-split-mode" data-mode="custom" aria-pressed="${custom}">Custom amounts</button>
+    </div>`;
 
   /* Add a brand-new person without leaving the split: typing a name and
      hitting + Add creates them, ticks them, and clears the field to repeat. */
@@ -1712,10 +1873,11 @@ function renderSplitModal() {
     title: 'Split an expense',
     closeAction: 'close-split',
     body: `
-      <p class="section-sub split-intro">Pick who shares the cost and enter the total. Tally divides it equally and records each person's share as money they owe you.</p>
+      <p class="section-sub split-intro">Pick who shares the cost and enter the total — each share is recorded as money they owe you. Long-press anyone for their own amount; the rest re-split what's left.</p>
 
       <form data-form="add-split">
         <h3 class="subhead">Split between</h3>
+        ${modeBar}
         <div class="share-pick-list split-scroll">${meRow}${rows}${addRow}</div>
 
         <div class="split-fixed">
@@ -1832,16 +1994,40 @@ function shareIncludedPeople() {
     .filter(Boolean);
 }
 
+/* The shared text = a dated title line, the "Name  amount" body, and a
+   per-currency total — the context the bare lines lose the moment they leave
+   the app. "All square." (or a single line) stays alone under the title, since
+   a total there would just repeat it. */
+function composedShareText(title, body, people) {
+  const out = [`${title} · ${fmtDate(new Date().toISOString())}`, '', body];
+  if (body !== 'All square.' && body.includes('\n')) {
+    const per = {};
+    people.forEach(p => {
+      const t = totalOf(p);
+      if (Math.abs(t) > 0.005) per[p.currency] = (per[p.currency] || 0) + t;
+    });
+    const totals = Object.entries(per);
+    if (totals.length) {
+      out.push('', ...totals.map(([code, t]) =>
+        `total  ${shareAmount(t)}${totals.length > 1 ? ' ' + code : ''}`));
+    }
+  }
+  return out.join('\n');
+}
+
 function updateSharePreview() {
   const node = document.getElementById('share-preview');
   if (!node) return;
   if (ui.sharePeopleOpen) {
-    node.textContent = peopleShareText(shareIncludedPeople());
+    const chosen = shareIncludedPeople();
+    node.textContent = composedShareText('Balances', peopleShareText(chosen), chosen);
     return;
   }
   const g = ui.shareGroupId ? getGroup(ui.shareGroupId) : null;
   if (!g) return;
-  node.textContent = groupShareText(g, Date.now(), shareExcludedIds());
+  const excluded = new Set(shareExcludedIds());
+  const included = g.memberIds.map(getPerson).filter(Boolean).filter(p => !excluded.has(p.id));
+  node.textContent = composedShareText(g.name, groupShareText(g, Date.now(), [...excluded]), included);
 }
 
 /* ---------- appearance / theme ---------- */
@@ -1988,7 +2174,7 @@ function renderModal() {
         return `<tr class="virtual-interest">
           <td>${fmtDate(t.date)}</td>
           <td><span class="muted">—</span></td>
-          <td>Interest accrued <span class="interest-tag">INTEREST</span> <span class="muted">(not yet capitalized)</span></td>
+          <td><span class="interest-tag">INTEREST</span> <span class="muted">not yet capitalized</span></td>
           <td class="num">${Money(t.amount, p.currency, { cls: 'pos', sign: true })}</td>
           <td></td>
         </tr>`;
@@ -2077,6 +2263,7 @@ function renderModal() {
       <div class="form-row">
         <button class="btn ghost" data-action="capitalize" data-id="${p.id}" ${detail.total > 0.005 ? '' : 'disabled'}>Capitalize interest</button>
         <button class="btn" data-action="settle" data-id="${p.id}" ${Math.abs(total) > 0.005 ? '' : 'disabled'}>Settle up</button>
+        <button class="btn ghost head-action" data-action="share-statement" data-id="${p.id}" title="Share ${esc(p.name)}'s statement — balance and entries, as text">${Icons.share()} Statement</button>
         <button class="btn quiet-danger" data-action="delete-person" data-id="${p.id}">Delete person</button>
       </div>
 
@@ -2096,8 +2283,12 @@ function render() {
   renderStamps();
   updateConnectivity();
 
-  document.querySelectorAll('.drawer-item, .tab-btn').forEach(t =>
-    t.classList.toggle('active', t.dataset.tab === ui.tab));
+  document.querySelectorAll('.drawer-item, .tab-btn').forEach(t => {
+    const on = t.dataset.tab === ui.tab;
+    t.classList.toggle('active', on);
+    if (on) t.setAttribute('aria-current', 'page');
+    else t.removeAttribute('aria-current');
+  });
 
   const view = document.getElementById('view');
   switch (ui.tab) {
@@ -2123,6 +2314,20 @@ function render() {
   // freeze the page behind any popup so scrolling stays inside the overlay
   const popupOpen = !!document.querySelector('.modal-overlay, .confirm-overlay');
   document.body.classList.toggle('modal-open', popupOpen);
+
+  // a popup just opened → move focus into it (keyboard/screen-reader parity
+  // with the visual overlay; Tab is kept inside by the trap below)
+  if (popupOpen && !ui.popupWasOpen) {
+    const dlg = topDialog();
+    if (dlg) dlg.focus();
+  }
+  ui.popupWasOpen = popupOpen;
+}
+
+/* The dialog that owns the keyboard right now: a confirm card sits above any
+   modal (z-index 200 vs 50), so it wins while both are open. */
+function topDialog() {
+  return document.querySelector('.confirm-card') || document.querySelector('.modal-overlay .modal');
 }
 
 /* ---------- event wiring (delegated) ---------- */
@@ -2184,9 +2389,14 @@ document.addEventListener('click', e => {
     case 'do-share-people': {
       const chosen = shareIncludedPeople();
       if (!chosen.length) { showToast('Pick at least one person to share'); break; }
-      const text = peopleShareText(chosen);
+      const text = composedShareText('Balances', peopleShareText(chosen), chosen);
       goBack();                   // pop the nav entry the popup pushed, clearing sharePeopleOpen
       shareText('Balances', text);
+      break;
+    }
+    case 'share-statement': {
+      const p = getPerson(id);
+      if (p) shareText(`${p.name} — Tally statement`, personStatementText(p));
       break;
     }
     case 'share-group': {
@@ -2198,7 +2408,9 @@ document.addEventListener('click', e => {
     case 'do-share-group': {
       const g = getGroup(id);
       if (g) {
-        const text = groupShareText(g, Date.now(), shareExcludedIds());
+        const excluded = new Set(shareExcludedIds());
+        const included = g.memberIds.map(getPerson).filter(Boolean).filter(p => !excluded.has(p.id));
+        const text = composedShareText(g.name, groupShareText(g, Date.now(), [...excluded]), included);
         goBack();                 // pop the nav entry the popup pushed, clearing shareGroupId
         shareText(g.name, text);
       }
@@ -2276,6 +2488,32 @@ document.addEventListener('click', e => {
       render();
       break;
     }
+    case 'set-split-mode': {
+      syncSplitDraft();
+      const draft = ui.splitDraft || (ui.splitDraft = freshSplitDraft());
+      const mode = btn.dataset.mode === 'custom' ? 'custom' : 'equal';
+      if (mode === 'custom' && draft.mode !== 'custom') {
+        // seed every empty box with the share that person holds right now,
+        // so an uneven split is edited from the even one, not typed from scratch
+        const amt = parseFloat(draft.amount);
+        if (Number.isFinite(amt) && amt > 0) {
+          const ids = peopleByName().filter(p => draft.selected.has(p.id)).map(p => p.id);
+          const own = {};
+          draft.own.forEach(k => {
+            const v = parseFloat(k === 'me' ? draft.meAmount : draft.amounts[k]);
+            if (Number.isFinite(v)) own[k] = v;
+          });
+          const { shares } = computeSplitShares({ personIds: ids, amount: amt, includeMe: draft.me, own });
+          ids.forEach(id => { if (!draft.amounts[id] && Number.isFinite(shares[id])) draft.amounts[id] = String(shares[id]); });
+          if (draft.me && !draft.meAmount && Number.isFinite(shares.me)) draft.meAmount = String(shares.me);
+        }
+      }
+      // back to equal puts everyone on the equal division, long-presses included
+      if (mode === 'equal' && draft.own) draft.own.clear();
+      draft.mode = mode;
+      render();
+      break;
+    }
     case 'open-split': ui.splitOpen = true; ui.splitDraft = freshSplitDraft(); pushNav(); render(); break;
     case 'close-split': goBack(); break;
     case 'split-add-person': {
@@ -2341,6 +2579,9 @@ document.addEventListener('click', e => {
     case 'cancel-delete-people': goBack(); break;
     case 'confirm-delete-people': performDeletePeople(); break;
     case 'exit-person-select': goBack(); break;
+    case 'enter-person-select': enterPersonSelectMode(); break;
+    case 'enter-history-select': enterSelectMode(); break;
+    case 'enter-member-select': enterMemberSelectMode(); break;
 
     case 'delete-group':
       if (confirm('Delete this group? People and their balances are kept.')) {
@@ -2601,6 +2842,7 @@ document.addEventListener('submit', e => {
           personIds: ids,
           amount: parseFloat(fd.get('amount')),
           includeMe,
+          own: splitOwnMap(),
           note: fd.get('note') || '',
           date: entryDate(dateStr).toISOString(),
         });
@@ -2890,8 +3132,38 @@ homeLink.addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigateTab('ledger'); }
 });
 
+/* Escape dismisses whatever is on top — the drawer or any popup — exactly the
+   way tapping its scrim does (so the scheduled-debt reminder snoozes and the
+   cloud prompt records its dismissal rather than reappearing). */
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && ui.drawerOpen) goBack();
+  if (e.key !== 'Escape') return;
+  if (ui.drawerOpen) { goBack(); return; }
+  const sched = document.getElementById('scheduled-overlay');
+  if (sched) {
+    const id = sched.querySelector('[data-action="snooze-scheduled"]')?.dataset.id;
+    if (id) ui.scheduledSnoozed.add(id);
+    render();
+    return;
+  }
+  if (document.getElementById('cloud-prompt-overlay')) { dismissCloudPrompt(); return; }
+  if (document.querySelector('.modal-overlay, .confirm-overlay')) goBack();
+});
+
+/* Keep Tab inside the open popup: the page behind it is visually inert, so the
+   keyboard shouldn't wander into it either. */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Tab') return;
+  const dlg = topDialog();
+  if (!dlg) return;
+  const focusables = [...dlg.querySelectorAll(
+    'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])'
+  )].filter(el => !el.disabled && !el.hidden && el.offsetParent !== null);
+  if (!focusables.length) { e.preventDefault(); return; }
+  const first = focusables[0], last = focusables[focusables.length - 1];
+  const inside = dlg.contains(document.activeElement);
+  if (!inside) { e.preventDefault(); first.focus(); return; }
+  if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
 });
 
 /* ---------- long-press: delete a history entry, select people, or give
@@ -2907,8 +3179,8 @@ function lpClear() {
 document.addEventListener('pointerdown', e => {
   // Never hijack a press that starts inside a text field — let people type/select freely.
   if (e.target.closest('input, textarea, select')) return;
-  // A tile in the indirect-payment picker long-presses to an individual amount.
-  const pickRow = e.target.closest('#indirect-root .share-pick-row[data-pick-id]');
+  // A tile in the indirect-payment or split picker long-presses to an individual amount.
+  const pickRow = e.target.closest('#indirect-root .share-pick-row[data-pick-id], #split-root .share-pick-row[data-pick-id]');
   const histRow = pickRow ? null : e.target.closest('.history-table tr[data-txn-id]');
   const memRow = (pickRow || histRow) ? null : e.target.closest('.ledger-table tr[data-member-id]');
   // Main-ledger person cells long-press to start a delete selection (group rows carry data-member-id).
@@ -2925,7 +3197,7 @@ document.addEventListener('pointerdown', e => {
     if (lpRow) lpRow.classList.remove('lp-pressing');
     lpFired = true;
     if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
-    if (pickRow) setIndividualAmount(pickRow);
+    if (pickRow) (pickRow.closest('#split-root') ? setSplitIndividualAmount : setIndividualAmount)(pickRow);
     else if (histRow) enterSelectMode(histRow.dataset.txnId);
     else if (memRow) enterMemberSelectMode(memRow.dataset.memberId);
     else enterPersonSelectMode(personRow.dataset.personId);

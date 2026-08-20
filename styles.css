@@ -298,11 +298,6 @@ input, textarea, select, [contenteditable="true"] {
 
 .drawer-nav { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .drawer-section { display: flex; flex-direction: column; gap: 2px; }
-/* Pins Settings/Account to the bottom of the drawer. */
-.drawer-section-end {
-  margin-top: auto; padding-top: var(--sp-3);
-  border-top: 1px solid var(--line);
-}
 
 .drawer-item {
   display: flex; align-items: center; gap: var(--sp-3);
@@ -560,6 +555,12 @@ button { font-family: var(--body); cursor: pointer; }
   background: none; border: none; border-radius: 0; overflow: visible;
 }
 @media (min-width: 681px) {
+  /* Column rhythm: names and chips get what they need, not half the table —
+     so the money columns sit closer to the names they describe. */
+  .ledger-table:not(.history-table) th:first-child { width: 24%; }
+  .ledger-table:not(.history-table) th.col-groups { width: 13%; }
+  .ledger-table:not(.history-table) th.num { width: 11%; }
+
   .ledger-table:not(.history-table) th { background: none; border-bottom: none; }
   .ledger-table:not(.history-table) tbody td {
     background: var(--card);
@@ -582,7 +583,8 @@ button { font-family: var(--body); cursor: pointer; }
   .ledger-table:not(.history-table) tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--green); }
 }
 
-.money { font-family: var(--mono); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+/* a money figure never breaks internally — "+₹1,302.50" is one word */
+.money { font-family: var(--mono); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .money.pos { color: var(--green); }
 .money.neg { color: var(--red); }
 .money.zero { color: var(--ink-soft); }
@@ -600,6 +602,7 @@ button { font-family: var(--body); cursor: pointer; }
   padding: 2px 8px; margin: 1px 2px; border-radius: var(--pill);
   background: var(--bg); color: var(--ink-soft);
   border: 1px solid var(--line);
+  white-space: nowrap;   /* a chip is one word-like object — never broken mid-name */
 }
 
 .chip.exempt { color: var(--blue); border-color: var(--blue); }
@@ -609,6 +612,16 @@ button { font-family: var(--body); cursor: pointer; }
 .quick-add-main { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .quick-add input[type="number"] { width: 90px; }
 .quick-add .qa-reason { width: 100%; }
+
+/* On wide screens quick entry reads as one spreadsheet line — amount, the two
+   actions and the reason side by side. The stacked layout is for phones, where
+   width is the scarce dimension; here it just made every row three controls
+   tall. (Sits after the base rules above so it wins at equal specificity.) */
+@media (min-width: 681px) {
+  .quick-add { flex-direction: row; align-items: center; }
+  .quick-add-main { flex-wrap: nowrap; }
+  .quick-add .qa-reason { width: auto; flex: 1 1 90px; min-width: 80px; }
+}
 
 /* the amount is a defined box so it reads as a real field; the +paid/−repaid
    buttons sit in a muted ghost state and only light up once an amount is typed
@@ -819,6 +832,14 @@ button { font-family: var(--body); cursor: pointer; }
   flex: 1; min-height: 0; overflow-y: auto;
   margin-bottom: var(--sp-4); padding-right: 4px;
 }
+/* More names can be below the fold: fade the bottom edge of a scrollable pick
+   list so a clean cut never reads as the end of the list. The padding keeps
+   the last row clear of the fade once you're scrolled all the way down. */
+.split-scroll, .share-scroll {
+  padding-bottom: 26px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+}
 .modal-split .split-fixed { flex: none; }
 .modal-split .split-fixed #split-preview { max-height: 28vh; overflow-y: auto; }
 
@@ -937,6 +958,9 @@ button { font-family: var(--body); cursor: pointer; }
   background: var(--card); border: 1px solid var(--line);
   border-radius: var(--radius); padding: var(--sp-3) var(--sp-3) var(--sp-2);
   margin-bottom: var(--sp-4); box-shadow: 0 1px 2px var(--shadow-card);
+  /* a month is a compact object: capped so desktop day-cells (aspect-ratio 1:1)
+     don't balloon into a screen-tall grid that pushes the register away */
+  max-width: 460px;
 }
 .cal-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -1130,6 +1154,9 @@ button { font-family: var(--body); cursor: pointer; }
 /* Share action sitting just above the list of names (ledger people / group
    members) rather than pinned in the header's top-right corner. */
 .list-share { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.list-share:has(.list-tools:only-child) { justify-content: flex-end; }
+.list-tools { display: inline-flex; align-items: center; gap: var(--sp-2); margin-left: auto; }
+.history-count { margin-bottom: 10px; }
 .as-of { font-family: var(--mono); font-size: var(--fs-cap); color: var(--ink-soft); }
 
 .empty-state {
@@ -1201,6 +1228,17 @@ button { font-family: var(--body); cursor: pointer; }
 .colophon {
   text-align: center; padding: var(--sp-5); font-size: var(--fs-cap); color: var(--ink-soft);
   border-top: 1px solid var(--line);
+}
+
+/* ---------- reduced motion ----------
+   The tokens drive most transitions; the blanket rule catches the hard-coded
+   durations (drawer slide, modal rise, toast) without changing any end state. */
+@media (prefers-reduced-motion: reduce) {
+  :root { --duration-fast: 0ms; --duration-normal: 0ms; }
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
 
 /* ---------- responsive ---------- */
