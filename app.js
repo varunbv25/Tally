@@ -353,15 +353,18 @@ function renderLedger() {
     const selCls = ui.personSelect ? (isSel ? ' selected' : '') : '';
     const check = ui.personSelect ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
 
+    /* In select mode the tile is stripped to its text details — the Settle
+       button and the quick-entry boxes disappear; share/delete live in the
+       top bar. */
     return `<tr class="row${selCls}" data-person-id="${p.id}">
-      <td class="col-person">${check}${PersonName(p.id, p.name, 'Tap to open · long-press to select &amp; delete')} ${exempt} ${rowActions(p.name, p.id, total)}</td>
+      <td class="col-person${ui.personSelect ? ' selecting' : ''}">${check}${PersonName(p.id, p.name, 'Tap to open · long-press to select, then share or delete')} ${exempt} ${ui.personSelect ? '' : rowActions(p.name, p.id, total)}</td>
       <td class="col-groups">${groups}</td>
       <td class="num" data-label="Principal">${Money(principal, p.currency)}</td>
       <td class="num" data-label="Interest"><span class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</span></td>
       <td class="num" data-label="Total">${Money(total, p.currency)}</td>
-      <td class="col-quick">
+      ${ui.personSelect ? '' : `<td class="col-quick">
         ${QuickAdd({ idSuffix: p.id, action: 'quick-add', dataId: p.id, titles: true })}
-      </td>
+      </td>`}
     </tr>`;
   }).join('');
 
@@ -371,6 +374,8 @@ function renderLedger() {
     cancelAction: 'exit-person-select',
     deleteAction: 'open-delete-people-confirm',
     deleteLabel: 'Delete selected people',
+    shareAction: 'share-selected-people',
+    shareLabel: 'Share selected balances',
   }) : '';
 
   const confirmOverlay = ui.confirmDeletePeople ? ConfirmOverlay({
@@ -400,13 +405,15 @@ function renderLedger() {
     ${clearOverlay}
     <div class="detail-head">
       <h2 class="section-title">The Ledger</h2>
-      <div class="head-side">
+      ${ui.personSelect ? '' : `<div class="head-side">
         <div class="head-actions">
           <button class="btn ghost head-action" data-action="open-split" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>÷ Split expense</button>
           <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 1 ? 'disabled title="Add a person first"' : ''}>⇄ Indirect payment</button>
         </div>
-      </div>
+      </div>`}
     </div>
+    ${ui.personSelect ? `
+    <p class="section-sub">Tap tiles to pick people, then share or delete them from the top bar.</p>` : `
     <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− repaid</em>, like a spreadsheet row.</p>
 
     <form id="person-search" data-form="person-search" class="people-search" role="search">
@@ -414,25 +421,25 @@ function renderLedger() {
       <input id="search-box" name="q" placeholder="Search people, or type a new name to add…" value="${esc(ui.search)}" autocomplete="off">
       ${query ? `<button type="button" class="people-search-clear" data-action="clear-search" aria-label="Clear search">×</button>` : ''}
     </form>
-    ${people.length ? '' : addPersonBlock}
+    ${people.length ? '' : addPersonBlock}`}
 
     ${people.length ? `
     <div class="list-share">
       <span class="as-of" title="Interest accrues continuously, so totals are computed at this moment">Balances as of ${esc(fmtAsOf())}</span>
-      <span class="list-tools">
-        ${ui.personSelect ? '' : '<button class="btn small ghost" data-action="enter-person-select" title="Select people to delete">Select</button>'}
+      ${ui.personSelect ? '' : `<span class="list-tools">
+        <button class="btn small ghost" data-action="enter-person-select" title="Select people to share or delete">Select</button>
         ${ShareButton({ cls: 'btn ghost head-action head-share', action: 'open-share-people', extra: state.people.length < 1 ? 'disabled title="Add someone first"' : '' })}
-      </span>
+      </span>`}
     </div>
     <table class="ledger-table">
       <thead><tr>
         <th>Person</th><th class="col-groups">Groups</th>
         <th class="num">Principal</th><th class="num">Interest</th><th class="num">Total</th>
-        <th>Quick entry</th>
+        ${ui.personSelect ? '' : '<th>Quick entry</th>'}
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    ${addPersonBlock}` : (state.people.length === 0
+    ${ui.personSelect ? '' : addPersonBlock}` : (state.people.length === 0
       ? EmptyState(`
           <div class="empty-mark" aria-hidden="true">${Icons.ledgerMark()}</div>
           <h3 class="empty-title">Your ledger is empty</h3>
@@ -2394,6 +2401,12 @@ document.addEventListener('click', e => {
       shareText('Balances', text);
       break;
     }
+    case 'share-selected-people': {   // select-mode top bar: share whoever's ticked
+      const chosen = peopleByName().filter(p => ui.selectedPeople.has(p.id));
+      if (!chosen.length) { showToast('Pick at least one person to share'); break; }
+      shareText('Balances', composedShareText('Balances', peopleShareText(chosen), chosen));
+      break;
+    }
     case 'share-statement': {
       const p = getPerson(id);
       if (p) shareText(`${p.name} — Tally statement`, personStatementText(p));
@@ -3177,6 +3190,11 @@ function lpClear() {
 }
 
 document.addEventListener('pointerdown', e => {
+  /* A new press voids any pending swallow: the swallowed click always arrives
+     between the long-press's pointerup and the next pointerdown. Without this,
+     a long-press whose render replaced the pressed row (so its click never
+     fired) leaves lpFired stuck true — and silently eats the next tap. */
+  lpFired = false;
   // Never hijack a press that starts inside a text field — let people type/select freely.
   if (e.target.closest('input, textarea, select')) return;
   // A tile in the indirect-payment or split picker long-presses to an individual amount.
@@ -3188,7 +3206,6 @@ document.addEventListener('pointerdown', e => {
   const personRow = personCell ? personCell.closest('tr') : null;
   const row = pickRow || histRow || memRow || personRow;
   if (!row) return;
-  lpFired = false;
   lpStart = { x: e.clientX, y: e.clientY };
   lpRow = row;
   row.classList.add('lp-pressing');

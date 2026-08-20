@@ -1088,6 +1088,18 @@ button { font-family: var(--body); cursor: pointer; }
 .select-bin:active { transform: scale(0.94); }
 .select-bin:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* share sits beside the bin — same shape, the app's green instead of danger red */
+.select-share {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 42px; height: 42px; border-radius: var(--radius-lg);
+  background: var(--green); color: var(--btn-ink); border: none; cursor: pointer;
+  transition: transform 0.1s, filter 0.15s, opacity 0.15s;
+}
+.select-share:hover { filter: brightness(1.08); }
+.select-share:active { transform: scale(0.94); }
+.select-share:disabled { opacity: 0.4; cursor: not-allowed; }
+.select-share svg { width: 20px; height: 20px; }
+
 /* delete confirmation with blurred backdrop */
 .confirm-overlay {
   position: fixed; inset: 0; z-index: 200;
@@ -1321,6 +1333,8 @@ button { font-family: var(--body); cursor: pointer; }
   .ledger-table:not(.history-table) tr:last-child { margin-bottom: 0; }
   .ledger-table td.num { text-align: left; }
   .ledger-table td.col-person { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+  /* select mode: no Settle button on the right, so keep [check][name] together on the left */
+  .ledger-table td.col-person.selecting { justify-content: flex-start; }
   .ledger-table td[data-label] { display: flex; justify-content: space-between; align-items: baseline; }
   .ledger-table td[data-label]::before {
     content: attr(data-label);
