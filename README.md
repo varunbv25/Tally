@@ -19,7 +19,7 @@ Either:
 ## Features
 
 ### The Ledger (Excel-like)
-- One row per person; type an amount and hit **+ paid** / **− repaid** to
+- One row per person; type an amount and hit **+ lent** / **− repaid** to
   append entries, exactly like adding to a running spreadsheet column.
 - Positive balance = they owe you. Negative = you owe them.
 - Tap **Clear** beside any name to settle their balance to zero once
@@ -79,6 +79,20 @@ others' shares clean. Either way the shares always sum back to the exact total. 
 will owe before you commit; mixed currencies are applied in each person's own
 currency, never converted.
 
+Shares don't have to be equal. With two or more people ticked, a **Split
+equally / Custom amounts** choice appears — custom gives everyone an amount
+box seeded from their equal share, and the boxes must add back up to the
+total (the preview shows exactly what's still unassigned or over). For a
+one-off exception, **long-press anyone** to give just them their own amount:
+everyone else automatically re-splits what's left of the total, so adjusting
+one share never means retyping the rest. It's the same interaction language
+as indirect payments — long-press means "their own figure".
+
+Every list that shares (the Ledger picker, a group) now sends a dated,
+totalled summary, and each person's profile has a **Statement** button that
+shares their full record — headline balance, every entry, accrued interest —
+as plain text ready to paste into a chat.
+
 ### Round amounts to whole numbers
 Prefer clean figures over paise and cents? In **Settings → Currency**, tick
 **Round amounts to whole numbers**. Every amount then shows as a whole number
@@ -114,7 +128,7 @@ The preview totals whatever you enter, and nothing is recorded until every
 ticked person has an amount.
 
 ### History
-A dedicated tab listing every entry across everyone — paid, repaid, and
+A dedicated tab listing every entry across everyone — lent, repaid, and
 interest — newest first. Search filters by person, reason, amount, or
 date in one box. Tap a name to open that person's full record. The
 date-filter calendar tucks behind a toggle so the register leads.

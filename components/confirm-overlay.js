@@ -9,7 +9,7 @@
 function ConfirmOverlay({ id, closeAction, inner }) {
   return `
     <div class="confirm-overlay" id="${id}">
-      <div class="confirm-card">
+      <div class="confirm-card" role="alertdialog" aria-modal="true" tabindex="-1">
         <button class="modal-close confirm-close" data-action="${closeAction}" aria-label="Close">✕</button>
         ${inner}
       </div>

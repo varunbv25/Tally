@@ -12,10 +12,10 @@
 function Modal({ overlayId, overlayCls = '', modalCls = '', title, closeAction, body }) {
   return `
   <div class="modal-overlay${overlayCls ? ' ' + overlayCls : ''}" id="${overlayId}">
-    <div class="modal${modalCls ? ' ' + modalCls : ''}">
+    <div class="modal${modalCls ? ' ' + modalCls : ''}" role="dialog" aria-modal="true" aria-labelledby="${overlayId}-title" tabindex="-1">
       <div class="modal-head">
-        <h2>${title}</h2>
-        <button class="modal-close" data-action="${closeAction}">✕</button>
+        <h2 id="${overlayId}-title">${title}</h2>
+        <button class="modal-close" data-action="${closeAction}" aria-label="Close">✕</button>
       </div>
       ${body}
     </div>

@@ -305,26 +305,70 @@ function splitShares(amount, n, opts = {}) {
   return out;
 }
 
-function addSplitExpense({ personIds, amount, groupId = null, note = '', date = null, includeMe = false, order = null }) {
+/* Everyone's share of a split, as one map keyed by participant ('me' or a
+   person id). `own` carries the individual amounts (same keys) for anyone
+   taken off the equal division — everyone else splits the remainder equally,
+   in participant order, with the leftover minor units handed out by the
+   splitShares rule (first listed — you, the payer, when you're in it).
+
+   Both the live preview and addSplitExpense compute shares through here, so
+   what the preview shows is exactly what gets recorded. Returns
+   { shares, remainder, sharerCount }; `remainder` is what's left of the total
+   after the individual amounts (negative = they exceed it, and with nobody on
+   the equal division a nonzero remainder means the amounts don't reach the
+   total). */
+function computeSplitShares({ personIds, amount, includeMe = false, own = null, order = null }) {
+  const amt = Number(amount);
+  const keys = (includeMe ? ['me'] : []).concat(personIds);
+  const ownMap = own || {};
+  const has = k => Number.isFinite(ownMap[k]);
+  const ownSum = keys.filter(has).reduce((s, k) => s + ownMap[k], 0);
+  const sharers = keys.filter(k => !has(k));
+  const remainder = Math.round((amt - ownSum) * 100) / 100;
+  const equal = sharers.length
+    ? splitShares(Math.max(remainder, 0), sharers.length, {
+        whole: roundingOn(),
+        order: order && order.length === sharers.length ? order : null,
+      })
+    : [];
+  const shares = {};
+  keys.forEach(k => { shares[k] = has(k) ? ownMap[k] : equal[sharers.indexOf(k)]; });
+  return { shares, remainder, sharerCount: sharers.length };
+}
+
+function addSplitExpense({ personIds, amount, groupId = null, note = '', date = null, includeMe = false, order = null, own = null }) {
   const amt = Number(amount);
   if (!Number.isFinite(amt) || amt <= 0) throw new Error('Enter an amount greater than zero.');
   const ids = [...new Set(personIds)].filter(id => getPerson(id));
   if (ids.length < 1) throw new Error('Pick at least one person to split with.');
+  if (own) {
+    for (const k of Object.keys(own)) {
+      if (own[k] != null && (!Number.isFinite(own[k]) || own[k] < 0)) {
+        throw new Error('Enter an amount for everyone on their own figure.');
+      }
+    }
+  }
 
-  const splitId = uid();
-  const when = date || new Date().toISOString();
   /* If you're also splitting, you count toward the divisor but pay your own
      share — only the others' shares become debts. Your share is the first one,
      so any leftover cent lands on you (the payer), keeping the others' shares
      clean. */
-  const n = ids.length + (includeMe ? 1 : 0);
-  const offset = includeMe ? 1 : 0;
-  const shares = splitShares(amt, n, {
-    whole: roundingOn(),
-    order: order && order.length === n ? order : null,
+  const { shares: shareMap, remainder, sharerCount } = computeSplitShares({
+    personIds: ids, amount: amt, includeMe, own, order,
   });
-  const txns = ids.map((id, i) => {
-    const t = addTransaction({ personId: id, groupId, amount: shares[i + offset], note, date: when });
+  if (remainder < -0.005) {
+    throw new Error('The individual amounts add up to more than the total.');
+  }
+  if (!sharerCount && Math.abs(remainder) > 0.005) {
+    throw new Error('The amounts must add up to the total — adjust one, or the total itself.');
+  }
+
+  const splitId = uid();
+  const when = date || new Date().toISOString();
+  /* A zero share (someone explicitly given 0) is real in the preview but
+     pointless as a ledger row, so it isn't recorded. */
+  const txns = ids.filter(id => shareMap[id] > 0.005).map(id => {
+    const t = addTransaction({ personId: id, groupId, amount: shareMap[id], note, date: when });
     t.split = true;
     t.splitId = splitId;
     return t;
@@ -334,13 +378,14 @@ function addSplitExpense({ personIds, amount, groupId = null, note = '', date = 
      never counts toward anyone's balance — it's a record of what you paid for
      yourself, not a debt owed to or by you. */
   let myTxn = null;
-  if (includeMe) {
-    myTxn = addTransaction({ personId: null, groupId, amount: shares[0], note, date: when });
+  if (includeMe && shareMap.me > 0.005) {
+    myTxn = addTransaction({ personId: null, groupId, amount: shareMap.me, note, date: when });
     myTxn.split = true;
     myTxn.splitId = splitId;
     myTxn.self = true;
   }
-  return { splitId, txns, myTxn, shares, myShare: includeMe ? shares[0] : 0 };
+  const shares = (includeMe ? ['me'] : []).concat(ids).map(k => shareMap[k]);
+  return { splitId, txns, myTxn, shares, myShare: includeMe ? shareMap.me : 0 };
 }
 
 function personTxns(personId) {
@@ -727,6 +772,30 @@ function shareAmount(n) {
 /* "Name  amount" — a single line for one person. */
 function personShareText(person, now = Date.now()) {
   return `${person.name}  ${shareAmount(totalOf(person, now))}`;
+}
+
+/* A person's full statement — the headline balance, every entry that produced
+   it (oldest first, so it reads as a running account), and any interest
+   accrued since the last capitalization. Plain text, made to be pasted into a
+   chat with the person it's about. */
+function personStatementText(person, now = Date.now()) {
+  const shareDate = iso =>
+    new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const total = totalOf(person, now);
+  const cur = person.currency;
+  const head =
+    total > 0.005 ? `${person.name} — owes you ${shareAmount(total)} ${cur}`
+    : total < -0.005 ? `${person.name} — you owe them ${shareAmount(-total)} ${cur}`
+    : `${person.name} — all square`;
+  const lines = personTxns(person.id).map(t => {
+    const what = t.isInterest ? 'interest' : (t.note || (t.amount >= 0 ? 'lent' : 'repaid'));
+    const sign = t.amount >= 0 ? '+' : '-';
+    return `${shareDate(t.date)}  ${sign}${shareAmount(Math.abs(t.amount))}  ${what}`;
+  });
+  const accrued = round2(total - principalOf(person.id));
+  const accruedLine = accrued > 0.005 ? [`accrued interest  +${shareAmount(accrued)}`] : [];
+  const foot = `as of ${shareDate(new Date(now).toISOString())}`;
+  return [head, '', ...lines, ...accruedLine, '', foot].join('\n');
 }
 
 /* One line per member with a non-zero balance. Settled members are

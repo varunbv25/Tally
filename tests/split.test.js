@@ -207,3 +207,75 @@ test('addSplitExpense leaves cents intact when roundWhole is off', () => {
   assert.strictEqual(round2(ctx.principalOf('b')), 33.33);
   assert.strictEqual(round2(ctx.principalOf('c')), 33.33);
 });
+
+/* ---------- individual (own) amounts ---------- */
+
+test('computeSplitShares: an own amount is honoured and the rest re-split the remainder', () => {
+  setState(freshState());
+  const { shares, remainder, sharerCount } = ctx.computeSplitShares({
+    personIds: ['a', 'b', 'c'], amount: 100, own: { a: 50 },
+  });
+  assert.strictEqual(shares.a, 50);
+  assert.strictEqual(shares.b, 25);
+  assert.strictEqual(shares.c, 25);
+  assert.strictEqual(remainder, 50);
+  assert.strictEqual(sharerCount, 2);
+});
+
+test('computeSplitShares: with everyone on own amounts the remainder reports the mismatch', () => {
+  setState(freshState());
+  const short = ctx.computeSplitShares({ personIds: ['a', 'b'], amount: 100, own: { a: 40, b: 40 } });
+  assert.strictEqual(short.remainder, 20);
+  assert.strictEqual(short.sharerCount, 0);
+  const exact = ctx.computeSplitShares({ personIds: ['a', 'b'], amount: 100, own: { a: 60, b: 40 } });
+  assert.strictEqual(exact.remainder, 0);
+});
+
+test('computeSplitShares: "me" takes an own amount and the leftover cent lands on the first sharer', () => {
+  setState(freshState());
+  const { shares } = ctx.computeSplitShares({
+    personIds: ['a', 'b'], amount: 100, includeMe: true, own: { me: 20 },
+  });
+  assert.strictEqual(shares.me, 20);
+  // 80 across a,b → 40/40
+  assert.strictEqual(shares.a, 40);
+  assert.strictEqual(shares.b, 40);
+});
+
+test('addSplitExpense with own amounts records exactly the previewed shares', () => {
+  setState(freshState());
+  const { txns } = ctx.addSplitExpense({ personIds: ['a', 'b', 'c'], amount: 120, own: { b: 70 } });
+  assert.strictEqual(round2(ctx.principalOf('b')), 70);
+  assert.strictEqual(round2(ctx.principalOf('a')), 25);
+  assert.strictEqual(round2(ctx.principalOf('c')), 25);
+  assert.strictEqual(sum(txns.map(t => t.amount)), 120);
+});
+
+test('addSplitExpense rejects own amounts that exceed the total', () => {
+  setState(freshState());
+  assert.throws(
+    () => ctx.addSplitExpense({ personIds: ['a', 'b'], amount: 100, own: { a: 80, b: 40 } }),
+    /more than the total/);
+});
+
+test('addSplitExpense rejects all-own amounts that fall short of the total', () => {
+  setState(freshState());
+  assert.throws(
+    () => ctx.addSplitExpense({ personIds: ['a', 'b'], amount: 100, own: { a: 40, b: 40 } }),
+    /add up to the total/);
+});
+
+test('addSplitExpense skips recording a zero own share but keeps the rest', () => {
+  setState(freshState());
+  const { txns } = ctx.addSplitExpense({ personIds: ['a', 'b'], amount: 100, own: { a: 0, b: 100 } });
+  assert.strictEqual(txns.length, 1);
+  assert.strictEqual(round2(ctx.principalOf('a')), 0);
+  assert.strictEqual(round2(ctx.principalOf('b')), 100);
+});
+
+test('addSplitExpense with an unfilled own amount (NaN) is refused', () => {
+  setState(freshState());
+  assert.throws(
+    () => ctx.addSplitExpense({ personIds: ['a', 'b'], amount: 100, own: { a: NaN } }),
+    /everyone on their own figure/);
+});
