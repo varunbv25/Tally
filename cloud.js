@@ -443,14 +443,26 @@ async function cloudSyncNow() {
 }
 
 /* Called from store.js saveState() on every local change. Bumps the local
-   version and debounces an upload. No-ops unless signed in. */
+   version and uploads near-immediately — the short debounce only coalesces a
+   burst of saves from one action into a single request, so every edit reaches
+   the cloud (and other devices polling it) in real time. No-ops unless signed in. */
 function cloudOnSave() {
   if (cloudApplying || !cloudSignedIn()) return;
   setCloudLocalUpdated(Date.now());
   clearTimeout(cloudPushTimer);
   cloudPushTimer = setTimeout(() => {
+    cloudPushTimer = null;
     cloudPush().catch(() => {});
-  }, 3000);
+  }, 400);
+}
+
+/* An upload is waiting on the debounce and the page is going to the background —
+   send it now rather than gambling on the browser keeping the timer alive. */
+function cloudFlushPush() {
+  if (!cloudPushTimer) return;
+  clearTimeout(cloudPushTimer);
+  cloudPushTimer = null;
+  cloudPush().catch(() => {});
 }
 
 /* ---------- boot ---------- */
@@ -465,13 +477,37 @@ function cloudInit() {
   /* Installed as a PWA, the other device is usually resumed from the background
      rather than reloaded — no boot, no 'online' event — so without this it would
      sit on a stale ledger until the user hit "Sync now". Reconciling whenever the
-     app comes back to the foreground is what makes two devices agree in practice.
-     ponytail: foreground-triggered, not a live socket. If two devices ever need
-     to agree while BOTH are on screen, add a poll or SSE here. */
+     app comes back to the foreground is what makes two devices agree in practice. */
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") cloudOnForeground();
+    else cloudFlushPush(); // going to the background: don't leave an edit un-mirrored
   });
   window.addEventListener("pageshow", cloudOnForeground);
+  window.addEventListener("pagehide", cloudFlushPush);
+  /* Live sync while on screen: poll the cloud every few seconds so a change
+     made on another device shows up here without waiting for a foreground
+     event — this is what lets two open devices agree in near real time. */
+  setInterval(cloudPollTick, CLOUD_POLL_MS);
+}
+
+/* One polling heartbeat. Skips whenever a round-trip would be wasted or could
+   race a local edit: not signed in, tab hidden, offline, a sync already in
+   flight, or an upload still sitting in the save debounce (pulling then could
+   overwrite the newer local copy before it uploads). */
+const CLOUD_POLL_MS = 10_000;
+let cloudPollBusy = false;
+
+function cloudPollTick() {
+  if (!cloudSignedIn() || cloudAuth.busy || cloudPollBusy) return;
+  if (document.visibilityState !== "visible") return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  if (cloudPushTimer) return;
+  cloudPollBusy = true;
+  cloudReconcile()
+    .catch(() => {})
+    .finally(() => {
+      cloudPollBusy = false;
+    });
 }
 
 /* Pull on resume, throttled so a burst of focus/visibility events (they fire

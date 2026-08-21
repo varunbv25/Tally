@@ -205,8 +205,6 @@ input, textarea, select, [contenteditable="true"] {
 
 .tagline { display: none; }
 
-.net-stamps { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; }
-
 /* ---------- top tab bar ----------
    Primary navigation for the everyday views. Sits along the bottom edge of
    the masthead; the active tab's underline lines up with the masthead border. */
@@ -234,6 +232,7 @@ input, textarea, select, [contenteditable="true"] {
    on the locally-stored data, so this reassures rather than alarms. */
 .offline-flag {
   display: inline-flex; align-items: center; gap: 6px;
+  margin-left: auto;   /* right edge of the masthead */
   font-family: var(--mono); font-size: var(--fs-cap); font-weight: 500;
   color: var(--ink-soft); padding: 5px 11px; border-radius: var(--pill);
   border: 1px solid var(--line-strong); background: var(--bg);
@@ -243,16 +242,6 @@ input, textarea, select, [contenteditable="true"] {
   width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto;
   background: #c08a2d; box-shadow: 0 0 0 2px color-mix(in srgb, #c08a2d 22%, transparent);
 }
-
-.stamp {
-  font-family: var(--mono); font-size: var(--fs-cap); font-weight: 500;
-  padding: 6px 12px; border-radius: var(--pill);
-  border: 1px solid var(--line-strong);
-  background: var(--bg);
-}
-.stamp.owed-to-you { color: var(--green); }
-.stamp.you-owe { color: var(--red); }
-.stamp.grand { color: var(--ink-soft); }
 
 /* ---------- total-balance hero ----------
    The dashboard's headline card: net position big and color-coded, with
@@ -302,10 +291,10 @@ input, textarea, select, [contenteditable="true"] {
 .hero-pill.owe .hero-v { color: var(--red); }
 .balance-hero-more { margin-top: var(--sp-3); font-size: var(--fs-cap); color: var(--ink-soft); }
 
-/* ---------- bottom navigation + FAB (phone) ----------
+/* ---------- bottom navigation (phone) ----------
    On small screens the primary views move into a thumb-reach glass bar along
-   the bottom edge, with a raised emerald "+" (add an expense) at its centre —
-   the top tab bar hides. Desktop keeps the top tabs and hides this bar. */
+   the bottom edge — the top tab bar hides. Desktop keeps the top tabs and
+   hides this bar. Splitting an expense lives in the Ledger header. */
 .bottom-nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
   display: none;
@@ -330,21 +319,6 @@ input, textarea, select, [contenteditable="true"] {
 .bnav-item svg { width: 22px; height: 22px; flex: none; }
 .bnav-item.active { color: var(--green); }
 .bnav-item:active { color: var(--ink); }
-.fab {
-  flex: 0 0 auto; align-self: flex-start;
-  width: 56px; height: 56px; margin: -24px 8px 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none; border-radius: 50%; cursor: pointer;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--green) 82%, #ffffff), var(--green));
-  color: var(--btn-ink);
-  box-shadow:
-    0 8px 22px color-mix(in srgb, var(--green) 45%, transparent),
-    0 2px 6px rgba(0,0,0,0.18);
-  transition: transform 0.12s var(--ease-out-expo), box-shadow var(--duration-fast);
-}
-.fab svg { width: 26px; height: 26px; }
-.fab:active { transform: scale(0.92); }
-
 /* ---------- hamburger + navigation drawer ---------- */
 
 .hamburger {
@@ -679,10 +653,12 @@ button { font-family: var(--body); cursor: pointer; }
   }
   /* the box border must persist on the final row too (base rule strips it) */
   .ledger-table:not(.history-table) tr:last-child td { border-bottom: 1px solid var(--line); }
-  /* row states paint the cells, not the (hidden-behind-cells) tr background */
+  /* row states paint the cells, not the (hidden-behind-cells) tr background;
+     a selected row's box outlines in emerald (no edge stripe — the tick and
+     the tinted, outlined tile carry the state) */
   .ledger-table:not(.history-table) tr.lp-pressing td,
   .ledger-table:not(.history-table) tr.selected td { background: var(--row-tint); }
-  .ledger-table:not(.history-table) tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+  .ledger-table:not(.history-table) tr.selected td { border-color: var(--green); }
 }
 
 /* a money figure never breaks internally — "+₹1,302.50" is one word */
@@ -1178,12 +1154,22 @@ button { font-family: var(--body); cursor: pointer; }
 .history-table tr[data-txn-id],
 .ledger-table tr[data-member-id],
 .ledger-table tr[data-person-id] { transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
+/* the whole ledger tile is tappable (opens the person), not just the name */
+.ledger-table:not(.history-table) tr[data-person-id] { cursor: pointer; }
+/* select mode keeps the page's full layout so nothing jumps; the tile's own
+   controls and the header actions just go inert + dim while picking */
+.selecting-people .head-actions,
+.selecting-people .list-tools,
+.selecting-people .col-quick,
+.selecting-people .row-actions { pointer-events: none; opacity: 0.45; }
 .history-table tr.lp-pressing,
 .ledger-table tr.lp-pressing { background: var(--row-tint) !important; }
 
 /* multi-select mode */
-.history-table tr.selected,
-.ledger-table tr.selected { background: var(--row-tint) !important; box-shadow: inset 3px 0 0 var(--green); }
+.history-table tr.selected { background: var(--row-tint) !important; box-shadow: inset 3px 0 0 var(--green); }
+/* ledger tiles show selection as a tinted, emerald-outlined card + the tick —
+   no stripe down the left edge */
+.ledger-table:not(.history-table) tr.selected { background: var(--row-tint) !important; border-color: var(--green); }
 .history-table tr[data-txn-id] { cursor: default; }
 .sel-check {
   display: inline-block; width: 20px; height: 20px; border-radius: 50%;
@@ -1381,7 +1367,7 @@ input:checked + .sel-check::after {
 /* ---------- keyboard focus ----------
    One consistent emerald ring on every control reached by keyboard. */
 .btn:focus-visible, .tab-btn:focus-visible, .bnav-item:focus-visible,
-.fab:focus-visible, .drawer-item:focus-visible, .seg:focus-visible,
+.drawer-item:focus-visible, .seg:focus-visible,
 .group-card:focus-visible, .person-name:focus-visible, .hamburger:focus-visible {
   outline: 2px solid var(--green); outline-offset: 2px;
 }
@@ -1449,9 +1435,7 @@ input:checked + .sel-check::after {
   .tabbar { display: none; }
   .hamburger { display: none; }
   .bottom-nav { display: flex; }
-  .net-stamps { margin-left: auto; justify-content: flex-end; }
-  .stamp { font-size: var(--fs-tag); padding: 4px 10px; }
-  /* bottom padding clears the fixed nav bar + raised FAB */
+  /* bottom padding clears the fixed nav bar */
   .view { padding: 18px 14px calc(104px + env(safe-area-inset-bottom, 0px)); }
   .colophon { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
   .panel { padding: 14px; }
@@ -1481,6 +1465,8 @@ input:checked + .sel-check::after {
     border-radius: var(--radius);
     margin-bottom: var(--sp-2);
   }
+  /* selected tile: the card's own border turns emerald */
+  .ledger-table:not(.history-table) tr.row.selected { border-color: var(--green); }
   .ledger-table:not(.history-table) tr:last-child { margin-bottom: 0; }
   .ledger-table td.num { text-align: left; }
   .ledger-table td.col-person { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }

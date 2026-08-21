@@ -289,7 +289,7 @@ async function registerPeriodicSync() {
   } catch { /* iOS / desktop tab: foreground path covers it */ }
 }
 
-/* ---------- masthead stamps ---------- */
+/* ---------- masthead status ---------- */
 
 /* Connectivity indicator. Tally is local-first — every view always renders from
    localStorage and never blocks on the network — so "offline" never hides data;
@@ -304,21 +304,6 @@ function connectionDown() {
 function updateConnectivity() {
   const el = document.getElementById('offline-flag');
   if (el) el.hidden = !connectionDown();
-}
-
-/* The header shows a single net stamp, in the currency preferred in Settings.
-   Other currencies are never converted — their nets live per-person on the
-   Ledger and in History — so the masthead stays one clean figure. */
-function renderStamps() {
-  const { perCurrency } = netSummary();
-  const code = state.settings.baseCurrency;
-  const amt = perCurrency[code] || 0;
-  const el = document.getElementById('net-stamps');
-  el.innerHTML = Math.abs(amt) < 0.005
-    ? '<span class="stamp grand">All square</span>'
-    : (amt > 0
-        ? `<span class="stamp owed-to-you">Owed to you · ${fmtMoney(amt, code)}</span>`
-        : `<span class="stamp you-owe">You owe · ${fmtMoney(-amt, code)}</span>`);
 }
 
 /* ---------- ledger view ---------- */
@@ -395,18 +380,18 @@ function renderLedger() {
     const selCls = ui.personSelect ? (isSel ? ' selected' : '') : '';
     const check = ui.personSelect ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
 
-    /* In select mode the tile is stripped to its text details — the Settle
-       button and the quick-entry boxes disappear; share/delete live in the
-       top bar. */
+    /* In select mode the tile keeps its full layout — Settle and the
+       quick-entry boxes stay put (inert, dimmed via CSS) so entering
+       selection never shifts the page; share/delete live in the top bar. */
     return `<tr class="row${selCls}" data-person-id="${p.id}">
-      <td class="col-person${ui.personSelect ? ' selecting' : ''}">${check}${PersonName(p.id, p.name, 'Tap to open · long-press to select, then share or delete')} ${exempt} ${ui.personSelect ? '' : rowActions(p.name, p.id, total)}</td>
+      <td class="col-person${ui.personSelect ? ' selecting' : ''}">${check}${PersonName(p.id, p.name, 'Tap to open · long-press or right-click to select, then share or delete')} ${exempt} ${rowActions(p.name, p.id, total)}</td>
       <td class="col-groups">${groups}</td>
       <td class="num" data-label="Principal">${Money(principal, p.currency)}</td>
       <td class="num" data-label="Interest"><span class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</span></td>
       <td class="num" data-label="Total">${Money(total, p.currency)}</td>
-      ${ui.personSelect ? '' : `<td class="col-quick">
+      <td class="col-quick">
         ${QuickAdd({ idSuffix: p.id, action: 'quick-add', dataId: p.id, titles: true })}
-      </td>`}
+      </td>
     </tr>`;
   }).join('');
 
@@ -445,18 +430,16 @@ function renderLedger() {
     ${selectBar}
     ${confirmOverlay}
     ${clearOverlay}
-    ${!ui.personSelect && state.people.length ? balanceHeroHTML() : ''}
+    ${state.people.length ? balanceHeroHTML() : ''}
     <div class="detail-head">
       <h2 class="section-title">The Ledger</h2>
-      ${ui.personSelect ? '' : `<div class="head-side">
+      <div class="head-side">
         <div class="head-actions">
           <button class="btn ghost head-action" data-action="open-split" ${state.people.length < 2 ? 'disabled title="Add at least two people first"' : ''}>÷ Split expense</button>
           <button class="btn ghost head-action" data-action="open-indirect" ${state.people.length < 1 ? 'disabled title="Add a person first"' : ''}>⇄ Indirect payment</button>
         </div>
-      </div>`}
+      </div>
     </div>
-    ${ui.personSelect ? `
-    <p class="section-sub">Tap tiles to pick people, then share or delete them from the top bar.</p>` : `
     <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− repaid</em>, like a spreadsheet row.</p>
 
     <form id="person-search" data-form="person-search" class="people-search" role="search">
@@ -464,21 +447,21 @@ function renderLedger() {
       <input id="search-box" name="q" placeholder="Search people, or type a new name to add…" value="${esc(ui.search)}" autocomplete="off">
       ${query ? `<button type="button" class="people-search-clear" data-action="clear-search" aria-label="Clear search">×</button>` : ''}
     </form>
-    ${people.length ? '' : addPersonBlock}`}
+    ${people.length ? '' : addPersonBlock}
 
     ${people.length ? `
     <div class="list-share">
       <span class="as-of" title="Interest accrues continuously, so totals are computed at this moment">Balances as of ${esc(fmtAsOf())}</span>
-      ${ui.personSelect ? '' : `<span class="list-tools">
+      <span class="list-tools">
         <button class="btn small ghost" data-action="enter-person-select" title="Select people to share or delete">Select</button>
         ${ShareButton({ cls: 'btn ghost head-action head-share', action: 'open-share-people', extra: state.people.length < 1 ? 'disabled title="Add someone first"' : '' })}
-      </span>`}
+      </span>
     </div>
     <table class="ledger-table">
       <thead><tr>
         <th>Person</th><th class="col-groups">Groups</th>
         <th class="num">Principal</th><th class="num">Interest</th><th class="num">Total</th>
-        ${ui.personSelect ? '' : '<th>Quick entry</th>'}
+        <th>Quick entry</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -2338,7 +2321,6 @@ function renderModal() {
 /* ---------- render root ---------- */
 
 function render() {
-  renderStamps();
   updateConnectivity();
 
   document.querySelectorAll('.drawer-item, .tab-btn, .bnav-item').forEach(t => {
@@ -2349,6 +2331,9 @@ function render() {
   });
 
   const view = document.getElementById('view');
+  // Select mode keeps the full ledger layout in place (so nothing jumps) and
+  // instead marks the view; CSS dims + disarms the per-row controls.
+  view.classList.toggle('selecting-people', ui.tab === 'ledger' && ui.personSelect);
   switch (ui.tab) {
     case 'ledger':   view.innerHTML = renderLedger(); break;
     case 'groups':   view.innerHTML = renderGroups(); break;
@@ -2433,7 +2418,18 @@ document.addEventListener('click', e => {
     return;
   }
   if (e.target.id === 'cloud-prompt-overlay') { dismissCloudPrompt(); return; }
-  if (!btn) return;
+  if (!btn) {
+    /* The whole ledger tile opens the person, not just the name. Clicks on the
+       tile's own controls (quick entry, Settle) keep their behaviour via the
+       data-action path above; anything else on the card counts as "open". */
+    const tile = e.target.closest('.ledger-table tr[data-person-id]');
+    if (tile && !e.target.closest('button, input, select, label, a, .col-quick, .row-actions')) {
+      ui.modalPersonId = tile.dataset.personId;
+      pushNav();
+      render();
+    }
+    return;
+  }
 
   const { action, id, sign, group } = btn.dataset;
 
@@ -3254,7 +3250,12 @@ function lpClear() {
   lpStart = null;
 }
 
+/* Remembered so the contextmenu handler can tell a real mouse right-click from
+   the synthetic contextmenu some platforms fire on a touch long-press. */
+let lastPointerType = '';
+
 document.addEventListener('pointerdown', e => {
+  lastPointerType = e.pointerType || '';
   /* A new press voids any pending swallow: the swallowed click always arrives
      between the long-press's pointerup and the next pointerdown. Without this,
      a long-press whose render replaced the pressed row (so its click never
@@ -3301,6 +3302,18 @@ document.addEventListener('scroll', lpClear, true);
    Text fields keep their native menu (paste!) via the same guard as above. */
 document.addEventListener('contextmenu', e => {
   if (e.target.closest('input, textarea, select')) return;
+  /* With a mouse connected, right-clicking a ledger person tile starts (or
+     toggles within) selection — the desktop counterpart of the touch
+     long-press. The lastPointerType guard keeps the synthetic contextmenu some
+     platforms fire during a touch long-press from double-toggling the row the
+     long-press just selected. */
+  const personRow = e.target.closest('.ledger-table tr[data-person-id]');
+  if (personRow && lastPointerType === 'mouse') {
+    e.preventDefault();
+    lpClear();                       // cancel any pending long-press on this row
+    enterPersonSelectMode(personRow.dataset.personId);
+    return;
+  }
   if (e.target.closest(
     '.share-pick-row[data-pick-id], .history-table tr[data-txn-id], ' +
     '.ledger-table tr[data-member-id], .ledger-table tr[data-person-id]'

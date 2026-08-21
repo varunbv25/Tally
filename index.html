@@ -44,7 +44,6 @@
     <span class="offline-flag" id="offline-flag" role="status" hidden>
       <span class="offline-dot" aria-hidden="true"></span>Offline · showing saved data
     </span>
-    <div class="net-stamps" id="net-stamps"></div>
   </div>
   <!-- Primary navigation: the day-to-day views switch from these top tabs.
        Settings and Account live in the hamburger drawer instead. -->
@@ -80,9 +79,9 @@
 
 <main id="view" class="view"></main>
 
-<!-- Phone-only bottom navigation: the everyday views within thumb reach and a
-     raised emerald "+" (split an expense) at the centre. Hidden on wide
-     screens, where the top tab bar takes over. -->
+<!-- Phone-only bottom navigation: the everyday views within thumb reach.
+     Hidden on wide screens, where the top tab bar takes over. Splitting an
+     expense lives in the Ledger header, not down here. -->
 <nav class="bottom-nav" id="bottom-nav" aria-label="Primary">
   <button class="bnav-item" data-tab="ledger">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-3-2-3 2-3-2-3 2-3-2V5z"/><path d="M8 8h8M8 12h8"/></svg>
@@ -91,9 +90,6 @@
   <button class="bnav-item" data-tab="groups">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M2.8 19a6.2 6.2 0 0 1 12.4 0"/><circle cx="17" cy="9" r="2.6"/><path d="M15.4 13.6a5.4 5.4 0 0 1 5.8 5.4"/></svg>
     <span>Groups</span>
-  </button>
-  <button class="fab" data-action="open-split" aria-label="Split an expense">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
   </button>
   <button class="bnav-item" data-tab="history">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
