@@ -99,7 +99,7 @@ function peopleByName() {
    (styles.css overrides the palette tokens for "dark"), and keep the
    address-bar/status-bar colour in step. On "device" we follow the OS
    and update live when it flips. */
-const THEME_BAR_COLOR = { light: '#1e5b3f', dark: '#1e1e1e' };
+const THEME_BAR_COLOR = { light: '#ffffff', dark: '#121212' };
 
 function prefersDark() {
   return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -323,6 +323,48 @@ function renderStamps() {
 
 /* ---------- ledger view ---------- */
 
+/* Dashboard hero: the headline net position, split into "you are owed"
+   (emerald) and "you owe" (coral). Figures are summed in the base currency
+   only — other currencies are never converted, so they get a one-line note
+   with their own nets instead of being silently folded in. */
+function balanceHeroHTML() {
+  const code = state.settings.baseCurrency;
+  const now = Date.now();
+  let owed = 0, owe = 0;
+  state.people.forEach(p => {
+    if (p.currency !== code) return;
+    const t = totalOf(p, now);
+    if (t > 0.005) owed += t;
+    else if (t < -0.005) owe += -t;
+  });
+  const net = owed - owe;
+  const netCls = Math.abs(net) < 0.005 ? 'zero' : (net > 0 ? 'pos' : 'neg');
+  const netLabel = netCls === 'zero' ? 'All square'
+    : (net > 0 ? `+${fmtMoney(net, code)}` : `−${fmtMoney(-net, code)}`);
+
+  const { perCurrency } = netSummary(now);
+  const others = Object.entries(perCurrency)
+    .filter(([c, amt]) => c !== code && Math.abs(amt) > 0.005)
+    .map(([c, amt]) => `${c} ${amt > 0 ? '+' : '−'}${fmtMoney(Math.abs(amt), c)}`);
+
+  return `
+    <section class="balance-hero" aria-label="Total balance">
+      <span class="balance-hero-label">Total balance</span>
+      <div class="balance-hero-total ${netCls}">${netLabel}</div>
+      <div class="balance-hero-split">
+        <div class="hero-pill owed">
+          <span class="hero-k">You are owed</span>
+          <span class="hero-v">${fmtMoney(owed, code)}</span>
+        </div>
+        <div class="hero-pill owe">
+          <span class="hero-k">You owe</span>
+          <span class="hero-v">${fmtMoney(owe, code)}</span>
+        </div>
+      </div>
+      ${others.length ? `<div class="balance-hero-more">Also on the books: ${others.map(esc).join(' · ')}</div>` : ''}
+    </section>`;
+}
+
 function renderLedger() {
   const q = ui.search.trim().toLowerCase();
   const query = ui.search.trim();
@@ -403,6 +445,7 @@ function renderLedger() {
     ${selectBar}
     ${confirmOverlay}
     ${clearOverlay}
+    ${!ui.personSelect && state.people.length ? balanceHeroHTML() : ''}
     <div class="detail-head">
       <h2 class="section-title">The Ledger</h2>
       ${ui.personSelect ? '' : `<div class="head-side">
@@ -2298,7 +2341,7 @@ function render() {
   renderStamps();
   updateConnectivity();
 
-  document.querySelectorAll('.drawer-item, .tab-btn').forEach(t => {
+  document.querySelectorAll('.drawer-item, .tab-btn, .bnav-item').forEach(t => {
     const on = t.dataset.tab === ui.tab;
     t.classList.toggle('active', on);
     if (on) t.setAttribute('aria-current', 'page');
@@ -3146,6 +3189,20 @@ document.getElementById('tabbar').addEventListener('click', e => {
   navigateTab(btn.dataset.tab);
 });
 
+// Phone bottom bar: same views within thumb reach; the Menu item opens the
+// drawer (mirrors the hamburger), and the centre FAB carries data-action
+// ("open-split") so the delegated click handler picks it up.
+document.getElementById('bottom-nav').addEventListener('click', e => {
+  if (e.target.closest('#bnav-menu')) {
+    ui.drawerOpen = true;
+    openDrawer();
+    pushNav();
+    return;
+  }
+  const btn = e.target.closest('.bnav-item[data-tab]');
+  if (btn) navigateTab(btn.dataset.tab);
+});
+
 // Tapping the wordmark returns home to the ledger.
 const homeLink = document.getElementById('home-link');
 homeLink.addEventListener('click', () => navigateTab('ledger'));
@@ -3209,9 +3266,11 @@ document.addEventListener('pointerdown', e => {
   const pickRow = e.target.closest('#indirect-root .share-pick-row[data-pick-id], #split-root .share-pick-row[data-pick-id]');
   const histRow = pickRow ? null : e.target.closest('.history-table tr[data-txn-id]');
   const memRow = (pickRow || histRow) ? null : e.target.closest('.ledger-table tr[data-member-id]');
-  // Main-ledger person cells long-press to start a delete selection (group rows carry data-member-id).
-  const personCell = (pickRow || histRow || memRow) ? null : e.target.closest('.ledger-table tr[data-person-id] .col-person');
-  const personRow = personCell ? personCell.closest('tr') : null;
+  /* Main-ledger person tiles long-press to start a selection (group rows carry
+     data-member-id). The WHOLE tile is the press target — not just the name —
+     so holding anywhere on the card works; presses starting in the quick-entry
+     fields were already excluded by the input guard above. */
+  const personRow = (pickRow || histRow || memRow) ? null : e.target.closest('.ledger-table tr[data-person-id]');
   const row = pickRow || histRow || memRow || personRow;
   if (!row) return;
   lpStart = { x: e.clientX, y: e.clientY };
@@ -3234,6 +3293,19 @@ document.addEventListener('pointermove', e => {
 document.addEventListener('pointerup', lpClear);
 document.addEventListener('pointercancel', lpClear);
 document.addEventListener('scroll', lpClear, true);
+
+/* One long-press = ONE buzz. Android fires its own haptic when the native
+   long-press action (context menu / text selection) kicks in, which stacked a
+   second vibration on top of ours. Suppressing contextmenu on the rows we
+   handle ourselves leaves just the single navigator.vibrate(15) above.
+   Text fields keep their native menu (paste!) via the same guard as above. */
+document.addEventListener('contextmenu', e => {
+  if (e.target.closest('input, textarea, select')) return;
+  if (e.target.closest(
+    '.share-pick-row[data-pick-id], .history-table tr[data-txn-id], ' +
+    '.ledger-table tr[data-member-id], .ledger-table tr[data-person-id]'
+  )) e.preventDefault();
+});
 
 /* interest accrues with time — refresh the numbers every minute */
 setInterval(render, 60_000);
