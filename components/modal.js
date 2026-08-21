@@ -1,7 +1,7 @@
 /* =========================================================
    Modal — the full-screen popup scaffold: a dimmed overlay, a
    card, and a head with the title and a ✕ close button. Reused
-   by the person, indirect-payment, split and share popups;
+   by the person, split and share popups;
    `body` is each popup's content.
      overlayId   — id on the overlay (drives click-to-close)
      overlayCls  — extra overlay class (e.g. 'share-overlay')
