@@ -13,38 +13,42 @@
      of the OS default. */
   color-scheme: light;
 
-  /* palette — light */
-  --bg: #faf8f2;
+  /* palette — light. Emerald-teal is the "owed to you" accent, coral-orange is
+     "you owe" — the same color language in both themes, tuned per theme for
+     AA contrast. */
+  --bg: #f4f7f6;
   --card: #ffffff;
-  --ink: #232a23;
-  --ink-soft: #5f6459;     /* darkened for AA contrast on cream (was #6b7268, ~4.4:1) */
-  --green: #1e5b3f;
-  --green-deep: #143d2b;
-  --green-tint: rgba(30,91,63,0.10);
-  --red: #b23a26;
+  --ink: #1b2420;
+  --ink-soft: #56645e;     /* AA on white and on --bg (~5:1) */
+  --green: #058a68;        /* emerald accent — AA for small money text on white */
+  --green-deep: #04543f;
+  --green-tint: rgba(5,138,104,0.10);
+  --red: #c2410c;          /* coral-orange "you owe" — AA on white (~4.7:1) */
   --amber: #8a5500;        /* darkened for AA contrast (was #a06410) */
   --blue: #2b5b8a;
   --gold: #836a2a;         /* the interest figure — darkened to clear AA on white/cream (was #a3823a) */
-  --line: #e4ded0;
-  --line-strong: #cfc7b2;
+  --line: #e3e9e6;
+  --line-strong: #c6d1cc;
 
   /* semantic tokens — let each theme tune contrast independently */
   --btn-ink: #ffffff;                  /* text on solid green / ink-soft fills */
-  --danger: #b23a26;                   /* danger button fill (always white text) */
-  --danger-hover: #8c2d1d;
-  --focus-ring: rgba(30,91,63,0.12);
-  --overlay: rgba(20,61,43,0.48);      /* modal / confirm scrim — opaque enough that page content behind reads as inert, not a live control */
-  --row-tint: rgba(30,91,63,0.11);     /* pressed / selected table rows */
+  --danger: #c2410c;                   /* danger button fill (always white text) */
+  --danger-hover: #9a3412;
+  --focus-ring: rgba(5,138,104,0.16);
+  --overlay: rgba(7,32,25,0.5);        /* modal / confirm scrim — opaque enough that page content behind reads as inert, not a live control */
+  --row-tint: rgba(5,138,104,0.10);    /* pressed / selected table rows */
   --tag-neutral: rgba(0,0,0,0.05);     /* neutral chip background */
-  --shadow-card: rgba(20,61,43,0.06);
-  --shadow-bar: rgba(20,61,43,0.08);
-  --shadow-modal: rgba(20,61,43,0.35);
-  --shadow-toast: rgba(20,61,43,0.28);
-  --toast-bg: var(--green-deep);
+  --shadow-card: rgba(9,45,35,0.07);
+  --shadow-bar: rgba(9,45,35,0.09);
+  --shadow-modal: rgba(9,45,35,0.35);
+  --shadow-toast: rgba(9,45,35,0.28);
+  --toast-bg: #06422f;
   --toast-ink: #ffffff;
+  /* translucent chrome for the sticky header / bottom nav (glass effect) */
+  --nav-bg: rgba(255,255,255,0.82);
 
   /* fonts */
-  --display: 'Fraunces', Georgia, serif;
+  --display: 'Manrope', 'IBM Plex Sans', -apple-system, sans-serif;
   --body: 'IBM Plex Sans', -apple-system, sans-serif;
   --mono: 'IBM Plex Mono', 'SF Mono', monospace;
 
@@ -66,11 +70,11 @@
   --sp-5: 20px;
   --sp-6: 24px;
 
-  /* radii */
-  --radius-sm: 8px;    /* controls, small surfaces */
-  --radius: 10px;      /* cards, panels, tables */
-  --radius-lg: 14px;   /* modals, confirmation cards */
-  --pill: 20px;        /* chips, stamps, tags */
+  /* radii — generous, smooth corners for a soft premium feel */
+  --radius-sm: 10px;   /* controls, small surfaces */
+  --radius: 14px;      /* cards, panels, tables */
+  --radius-lg: 20px;   /* modals, confirmation cards, hero card */
+  --pill: 999px;       /* chips, stamps, tags */
 
   /* motion */
   --duration-fast: 150ms;
@@ -90,33 +94,34 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #121212;
-  --card: #1e1e1e;
-  --ink: #f4efe4;          /* crisp near-white body text (~14:1 on card) */
-  --ink-soft: #bcb6a4;     /* brighter secondary text so captions/labels stay legible */
-  --green: #5cb487;
-  --green-deep: #93d7b1;
-  --green-tint: rgba(92,180,135,0.15);
-  --red: #e98368;
-  --amber: #d6a548;
-  --blue: #7aa6d4;
-  --gold: #c9a85f;
-  --line: #2e2e2e;
-  --line-strong: #404040;
+  --bg: #121212;           /* slate black, per the design spec */
+  --card: #1c1f1e;         /* quiet charcoal surface */
+  --ink: #eef2f0;          /* crisp near-white body text (~14:1 on card) */
+  --ink-soft: #a2aeaa;     /* brighter secondary text so captions/labels stay legible */
+  --green: #2fd6a0;        /* vibrant emerald — the "owed to you" accent */
+  --green-deep: #7fe8c6;
+  --green-tint: rgba(47,214,160,0.13);
+  --red: #ff9b7a;          /* soft pastel coral — the "you owe" accent */
+  --amber: #e3b95e;
+  --blue: #85b8ea;
+  --gold: #d8bc7d;
+  --line: #272b2a;
+  --line-strong: #3c4341;
 
-  --btn-ink: #121212;
-  --danger: #c8432c;
-  --danger-hover: #a8351f;
-  --focus-ring: rgba(92,180,135,0.22);
-  --overlay: rgba(0,0,0,0.6);
-  --row-tint: rgba(92,180,135,0.14);
+  --btn-ink: #08211a;      /* dark ink on the emerald fills */
+  --danger: #e14b2e;
+  --danger-hover: #c03a20;
+  --focus-ring: rgba(47,214,160,0.25);
+  --overlay: rgba(0,0,0,0.65);
+  --row-tint: rgba(47,214,160,0.12);
   --tag-neutral: rgba(255,255,255,0.07);
   --shadow-card: rgba(0,0,0,0.45);
   --shadow-bar: rgba(0,0,0,0.5);
   --shadow-modal: rgba(0,0,0,0.6);
   --shadow-toast: rgba(0,0,0,0.5);
-  --toast-bg: #21674a;
-  --toast-ink: #f2f4ea;
+  --toast-bg: #10453a;
+  --toast-ink: #e9f5ef;
+  --nav-bg: rgba(18,18,18,0.78);
 }
 
 /* Thin text renders lighter on dark backgrounds — give the small, muted
@@ -175,8 +180,13 @@ input, textarea, select, [contenteditable="true"] {
 /* ---------- header ---------- */
 
 .masthead {
-  border-bottom: 1px solid var(--line-strong);
-  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  /* frosted glass over the scrolling content — the header stays put on every
+     screen size so navigation and the net figure never scroll away */
+  background: var(--nav-bg);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(16px) saturate(1.4);
+  position: sticky; top: 0; z-index: 40; /* below the modal overlay (50) so modals cover it */
 }
 
 .masthead-inner {
@@ -243,6 +253,97 @@ input, textarea, select, [contenteditable="true"] {
 .stamp.owed-to-you { color: var(--green); }
 .stamp.you-owe { color: var(--red); }
 .stamp.grand { color: var(--ink-soft); }
+
+/* ---------- total-balance hero ----------
+   The dashboard's headline card: net position big and color-coded, with
+   "you are owed" (emerald) and "you owe" (coral) stat pills beneath it.
+   A soft emerald radial wash keeps it premium without shouting. */
+.balance-hero {
+  position: relative; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--green) 22%, var(--line));
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(130% 170% at 100% 0%, color-mix(in srgb, var(--green) 14%, transparent), transparent 55%),
+    var(--card);
+  padding: var(--sp-5);
+  margin-bottom: var(--sp-5);
+  box-shadow: 0 12px 32px var(--shadow-card);
+}
+.balance-hero-label {
+  font-size: var(--fs-tag); font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-soft);
+}
+.balance-hero-total {
+  font-family: var(--display); font-weight: 800; letter-spacing: -0.02em;
+  font-size: 34px; line-height: 1.15; margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.balance-hero-total.pos { color: var(--green); }
+.balance-hero-total.neg { color: var(--red); }
+.balance-hero-total.zero { color: var(--ink); }
+.balance-hero-split { display: flex; gap: var(--sp-3); margin-top: var(--sp-4); flex-wrap: wrap; }
+.hero-pill {
+  flex: 1 1 150px; min-width: 0;
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--card) 55%, var(--bg));
+}
+.hero-pill .hero-k {
+  display: block; font-size: var(--fs-cap); color: var(--ink-soft); margin-bottom: 1px;
+}
+.hero-pill .hero-v {
+  font-family: var(--mono); font-size: var(--fs-lead); font-weight: 600;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.hero-pill.owed { border-color: color-mix(in srgb, var(--green) 35%, var(--line)); }
+.hero-pill.owed .hero-v { color: var(--green); }
+.hero-pill.owe { border-color: color-mix(in srgb, var(--red) 35%, var(--line)); }
+.hero-pill.owe .hero-v { color: var(--red); }
+.balance-hero-more { margin-top: var(--sp-3); font-size: var(--fs-cap); color: var(--ink-soft); }
+
+/* ---------- bottom navigation + FAB (phone) ----------
+   On small screens the primary views move into a thumb-reach glass bar along
+   the bottom edge, with a raised emerald "+" (add an expense) at its centre —
+   the top tab bar hides. Desktop keeps the top tabs and hides this bar. */
+.bottom-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+  display: none;
+  align-items: stretch;
+  padding: 6px 10px calc(env(safe-area-inset-bottom, 0px) + 6px);
+  background: var(--nav-bg);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -6px 24px var(--shadow-bar);
+}
+.bnav-item {
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 7px 2px 5px;
+  background: none; border: none; cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-family: var(--body); font-size: var(--fs-tag); font-weight: 600;
+  color: var(--ink-soft);
+  transition: color var(--duration-fast);
+}
+.bnav-item svg { width: 22px; height: 22px; flex: none; }
+.bnav-item.active { color: var(--green); }
+.bnav-item:active { color: var(--ink); }
+.fab {
+  flex: 0 0 auto; align-self: flex-start;
+  width: 56px; height: 56px; margin: -24px 8px 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%; cursor: pointer;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--green) 82%, #ffffff), var(--green));
+  color: var(--btn-ink);
+  box-shadow:
+    0 8px 22px color-mix(in srgb, var(--green) 45%, transparent),
+    0 2px 6px rgba(0,0,0,0.18);
+  transition: transform 0.12s var(--ease-out-expo), box-shadow var(--duration-fast);
+}
+.fab svg { width: 26px; height: 26px; }
+.fab:active { transform: scale(0.92); }
 
 /* ---------- hamburger + navigation drawer ---------- */
 
@@ -335,6 +436,7 @@ body.menu-open { overflow: hidden; }
   background: var(--card);
   border: 1px solid var(--line); border-radius: var(--radius);
   padding: 18px; margin-bottom: var(--sp-5);
+  box-shadow: 0 1px 3px var(--shadow-card);
 }
 
 /* Settings is split into labelled sections (Preferences, Alerts, …) rendered as
@@ -496,7 +598,7 @@ button { font-family: var(--body); cursor: pointer; }
   color: var(--green-deep); font-size: var(--fs-base);
   transition: background var(--duration-fast);
 }
-.add-suggestion:hover { background: rgba(30,91,63,0.16); }
+.add-suggestion:hover { background: color-mix(in srgb, var(--green) 16%, transparent); }
 .add-suggestion b { font-weight: 700; }
 .add-suggestion-plus {
   display: inline-flex; align-items: center; justify-content: center;
@@ -674,7 +776,7 @@ button { font-family: var(--body); cursor: pointer; }
   background: transparent; color: var(--red);
   border-color: transparent; margin-left: auto;
 }
-.btn.quiet-danger:hover { background: rgba(178,58,38,0.08); border-color: var(--red); }
+.btn.quiet-danger:hover { background: color-mix(in srgb, var(--red) 10%, transparent); border-color: var(--red); }
 
 /* ---------- groups ---------- */
 
@@ -960,12 +1062,12 @@ button { font-family: var(--body); cursor: pointer; }
 .hist-tag { padding: 2px 7px; border-radius: var(--pill); }
 .hist-tag.lent { color: var(--green); background: var(--green-tint); }
 .hist-tag.paid { color: var(--ink-soft); background: var(--tag-neutral); }
-.hist-tag.indirect { color: var(--blue); background: rgba(43,91,138,0.10); margin-left: var(--sp-1); }
-.hist-tag.split { color: var(--gold); background: rgba(163,130,58,0.12); margin-left: var(--sp-1); }
+.hist-tag.indirect { color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, transparent); margin-left: var(--sp-1); }
+.hist-tag.split { color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); margin-left: var(--sp-1); }
 .interest-tag { color: var(--gold); }
 /* virtual interest charges: accrued day-by-day, not yet capitalized — shown
    tinted and italic so they read as projections, not committed ledger entries */
-.virtual-interest { background: rgba(163,130,58,0.06); }
+.virtual-interest { background: color-mix(in srgb, var(--gold) 7%, transparent); }
 .virtual-interest td { font-style: italic; }
 .hist-amount { display: none; }   /* shown only on mobile cards */
 
@@ -1276,6 +1378,14 @@ input:checked + .sel-check::after {
   border-top: 1px solid var(--line);
 }
 
+/* ---------- keyboard focus ----------
+   One consistent emerald ring on every control reached by keyboard. */
+.btn:focus-visible, .tab-btn:focus-visible, .bnav-item:focus-visible,
+.fab:focus-visible, .drawer-item:focus-visible, .seg:focus-visible,
+.group-card:focus-visible, .person-name:focus-visible, .hamburger:focus-visible {
+  outline: 2px solid var(--green); outline-offset: 2px;
+}
+
 /* ---------- reduced motion ----------
    The tokens drive most transitions; the blanket rule catches the hard-coded
    durations (drawer slide, modal rise, toast) without changing any end state. */
@@ -1331,15 +1441,22 @@ input:checked + .sel-check::after {
   }
 
   .masthead-inner {
-    padding: 14px var(--sp-4) var(--sp-1);
+    padding: 12px var(--sp-4) 10px;
     align-items: center; gap: var(--sp-2);
   }
   .wordmark { font-size: var(--fs-h1); }
-  .tabbar { padding: 0 var(--sp-4); }
+  /* primary navigation lives in the bottom bar on the phone */
+  .tabbar { display: none; }
+  .hamburger { display: none; }
+  .bottom-nav { display: flex; }
   .net-stamps { margin-left: auto; justify-content: flex-end; }
   .stamp { font-size: var(--fs-tag); padding: 4px 10px; }
-  .view { padding: 18px 14px 60px; }
+  /* bottom padding clears the fixed nav bar + raised FAB */
+  .view { padding: 18px 14px calc(104px + env(safe-area-inset-bottom, 0px)); }
+  .colophon { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
   .panel { padding: 14px; }
+  .balance-hero { padding: var(--sp-4); }
+  .balance-hero-total { font-size: 30px; }
 
   /* Onboarding/intro prose is heavy on a phone — the ledger and History intros
      each ate roughly a third of the first screen before any data. Drop them to
