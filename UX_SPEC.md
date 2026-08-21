@@ -28,9 +28,8 @@ a top tab bar with header actions.
   - Group detail: members, group history, share, rename, add/remove members
   - Note that per-group nets overlap and are not additive (one payment shows in every group)
 - **Add Expense (the centre FAB — a flow, not a place)**
-  - Split an expense (equal or custom shares, add a new person mid-flow)
+  - Split an expense (paid by you or anyone else, equal or custom shares, add a new person mid-flow; a payer other than Me records the shares as indirect payments)
   - Quick entry on any person tile (the one-line "spreadsheet row" path)
-  - Indirect payment (A pays B's debt to you, etc.)
 - **Activity (History)**
   - Reverse-chronological register across everyone: lent / repaid / interest / split / indirect
   - Search (person, reason, amount, date) + collapsible calendar filter with entry-dot markers

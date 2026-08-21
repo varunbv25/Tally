@@ -1161,7 +1161,14 @@ button { font-family: var(--body); cursor: pointer; }
 .selecting-people .head-actions,
 .selecting-people .list-tools,
 .selecting-people .col-quick,
-.selecting-people .row-actions { pointer-events: none; opacity: 0.45; }
+.selecting-people .row-actions { pointer-events: none; }
+/* dim only the controls, never the cell itself — opacity on the <td> would
+   fade its background too, painting a visible seam down the tile where the
+   dimmed cells begin */
+.selecting-people .head-actions,
+.selecting-people .list-tools,
+.selecting-people .col-quick > *,
+.selecting-people .row-actions { opacity: 0.45; }
 .history-table tr.lp-pressing,
 .ledger-table tr.lp-pressing { background: var(--row-tint) !important; }
 
@@ -1431,6 +1438,29 @@ input:checked + .sel-check::after {
     align-items: center; gap: var(--sp-2);
   }
   .wordmark { font-size: var(--fs-h1); }
+
+  /* The menu opens as a bottom sheet on the phone — it's triggered from the
+     bottom nav, so it rises from the same edge the thumb is already on,
+     instead of sliding in from the left like the desktop drawer. */
+  .drawer {
+    top: auto; left: 0; right: 0; bottom: 0;
+    width: 100%; max-width: none;
+    max-height: 80vh; max-height: 80dvh;
+    padding-top: var(--sp-5);
+    padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
+    border-right: none; border-top: 1px solid var(--line-strong);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: 0 -10px 30px var(--shadow-bar);
+    transform: translateY(100%);
+  }
+  .drawer.open { transform: translateY(0); }
+  /* grab handle — signals "this is a sheet you can dismiss downward" */
+  .drawer::before {
+    content: ""; position: absolute; top: 8px; left: 50%;
+    transform: translateX(-50%);
+    width: 36px; height: 4px; border-radius: 2px;
+    background: var(--line-strong);
+  }
   /* primary navigation lives in the bottom bar on the phone */
   .tabbar { display: none; }
   .hamburger { display: none; }

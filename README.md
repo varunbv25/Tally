@@ -63,10 +63,12 @@ and the column goes blank — so the next time the balance crosses a
 condition, fresh interest accrues on that larger principal.
 
 ### Split an expense
-Paid for something shared? From the **Ledger**, hit **÷ Split expense**,
+Someone paid for something shared? From the **Ledger**, hit **÷ Split
+expense**, pick who paid (**Me** by default, or anyone in your ledger),
 tick everyone who's in on it, and enter the total (with an optional reason
-and date). Tick **Me** to count yourself as one of the sharers — your share
-shrinks everyone else's but is never recorded as a debt. Need someone who
+and date). Tick **Me** to count yourself as one of the sharers — when you
+paid, your share shrinks everyone else's but is never recorded as a debt;
+when someone else paid, your share is added to what you owe them. Need someone who
 isn't in your list yet? Type their name under the people and hit **+ Add**
 to create them, already ticked, without leaving the popup. Tally divides the
 total equally and records each other person's share as money they owe you —
@@ -85,8 +87,8 @@ box seeded from their equal share, and the boxes must add back up to the
 total (the preview shows exactly what's still unassigned or over). For a
 one-off exception, **long-press anyone** to give just them their own amount:
 everyone else automatically re-splits what's left of the total, so adjusting
-one share never means retyping the rest. It's the same interaction language
-as indirect payments — long-press means "their own figure".
+one share never means retyping the rest — long-press means "their own
+figure" everywhere in the picker.
 
 Every list that shares (the Ledger picker, a group) now sends a dated,
 totalled summary, and each person's profile has a **Statement** button that
@@ -101,31 +103,18 @@ retroactively (your ledger is never rewritten; only how it's rounded for
 display changes, so untick it any time to bring the decimals back). New splits
 divide into whole units too, with the remainder going to the first person listed.
 
-### Indirect payments
-When someone who owes you (the **lender**) is themselves owed by a third
-person (the **receiver**), route the debt onto your ledger from the
-**Indirect** tab: the lender's balance with you drops, and the receiver
-who owed them now owes you instead. Your overall position is unchanged —
-the debt just moves to whoever can actually pay. A live preview shows the
-exact before/after for both people, and each transfer is recorded as two
-linked entries (tagged **INDIRECT**, with a *via* label) so it shows in
-History and can be undone in one step, reverting both balances.
-
-One lender can be routed to several receivers at once. Tick two or more
-names and the split choice appears — with a single recipient there's
-nothing to divide, so you just get the one amount box. **Split equally**
-(the default) gives everyone the same figure; switch to **Custom amounts**
-for a box beside each ticked name, so different people can owe the lender
-different sums. Switching over seeds each box with the equal figure, so an
-uneven split is edited from the even one rather than typed from scratch.
-
-For a one-off exception there's no need to leave the equal split at all:
-**long-press anyone in the list** to give just them their own amount box,
-seeded from the shared figure and tagged *own amount*. Everyone else stays
-on the shared figure; long-press again to put them back on it. Give every
-recipient an individual amount and the shared box drops away entirely.
-The preview totals whatever you enter, and nothing is recorded until every
-ticked person has an amount.
+### When someone else paid (indirect payments)
+Splitting and routing a debt used to be two separate options; they're now
+one flow. Choose a payer other than **Me** in the split popup and Tally
+records the split as **indirect payments**: each ticked person's share is
+added to what they owe *you*, and the payer's balance with you drops by
+everything they covered for others — so a debt to the payer becomes a debt
+to you, routed through your ledger, and your overall position is unchanged.
+If the payer is ticked as one of the sharers, their own share counts toward
+the division but is nobody's debt. A live preview shows the exact
+before/after for the payer, and each routed share is recorded as two linked
+entries (tagged **INDIRECT**, with a *via* label) so it shows in History
+and can be undone in one step, reverting both balances.
 
 ### History
 A dedicated tab listing every entry across everyone — lent, repaid, and
@@ -242,7 +231,7 @@ markup change lives in one place and propagates everywhere it's used.
 | `ConfirmOverlay` | `components/confirm-overlay.js` | every destructive confirmation |
 | `QuickAdd` | `components/quick-add.js` | ledger, group rows, add-person shortcut |
 | `ShareButton` | `components/share-button.js` | ledger header + group detail |
-| `Modal` | `components/modal.js` | person, indirect, split, share popups |
+| `Modal` | `components/modal.js` | person, split, share popups |
 | `Panel` | `components/panel.js` | Settings, group detail, person modal sections |
 | `BackLink` | `components/back-link.js` | drill-in back navigation |
 | `EmptyState` | `components/empty-state.js` | empty lists and no-match searches |
