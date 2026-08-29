@@ -98,7 +98,29 @@ function peopleByName() {
    (styles.css overrides the palette tokens for "dark"), and keep the
    address-bar/status-bar colour in step. On "device" we follow the OS
    and update live when it flips. */
-const THEME_BAR_COLOR = { light: '#ffffff', dark: '#121212' };
+
+/* The flat colour the translucent masthead composites to, mirroring the
+   --bar-bg token in styles.css (read from there when it's available, so the
+   two can't drift). Chrome paints the status bar of the installed app with
+   this via the theme-color meta. */
+const THEME_BAR_COLOR = { light: '#fdfefd', dark: '#121212' };
+
+/* iOS ignores theme-color entirely and offers only these three status-bar
+   styles. 'default' is a white bar with black symbols, which matches the light
+   masthead; 'black-translucent' hands the strip to the page, so the masthead's
+   safe-area padding paints it #121212 and the symbols turn white. Safari reads
+   the meta at load — the boot script in index.html sets it before first paint,
+   and writing it here keeps a mid-session theme switch right for the next
+   launch. */
+const IOS_BAR_STYLE = { light: 'default', dark: 'black-translucent' };
+
+function barColor(theme) {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue('--bar-bg').trim();
+    if (v) return v;
+  } catch (e) {}
+  return THEME_BAR_COLOR[theme];
+}
 
 function prefersDark() {
   return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -113,8 +135,11 @@ function resolvedTheme() {
 function applyTheme() {
   const theme = resolvedTheme();
   document.documentElement.setAttribute('data-theme', theme);
+  // data-theme has to land first: barColor() reads the token it selects.
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', THEME_BAR_COLOR[theme]);
+  if (meta) meta.setAttribute('content', barColor(theme));
+  const iosBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if (iosBar) iosBar.setAttribute('content', IOS_BAR_STYLE[theme]);
 }
 
 if (window.matchMedia) {

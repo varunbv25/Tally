@@ -5,10 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>TALLY — the ledger that keeps score</title>
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#fdfefd">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<!-- iOS ignores theme-color; this is the only status-bar lever it offers, and
+     the boot script below swaps it per theme before the first paint. -->
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Tally">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,9 +18,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500..800&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <script>
-/* Stamp the theme before first paint to avoid a flash of the wrong palette.
-   app.js re-applies this once state is loaded; keep the storage key and the
-   resolution logic in sync with applyTheme() there. */
+/* Stamp the theme before first paint to avoid a flash of the wrong palette,
+   and colour the OS status bar to match it — Safari reads the Apple
+   status-bar meta once at load, so it has to be right before we paint.
+   app.js re-applies all of this once state is loaded; keep the storage key,
+   the resolution logic and the two bar values in sync with applyTheme(). */
 (function () {
   try {
     var pref = 'device';
@@ -28,7 +32,9 @@
       window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', dark ? '#121212' : '#ffffff');
+    if (meta) meta.setAttribute('content', dark ? '#121212' : '#fdfefd');
+    var iosBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    if (iosBar) iosBar.setAttribute('content', dark ? 'black-translucent' : 'default');
   } catch (e) {}
 })();
 </script>
