@@ -46,6 +46,11 @@
   --toast-ink: #ffffff;
   /* translucent chrome for the sticky header / bottom nav (glass effect) */
   --nav-bg: rgba(255,255,255,0.82);
+  /* The OS status bar can't be translucent, so it needs the flat colour the
+     masthead composites to: --nav-bg over --bg. app.js copies this into the
+     theme-color meta, which is what paints the status bar in the installed
+     app — keep the two in step or the bar stops matching the header. */
+  --bar-bg: #fdfefd;
 
   /* fonts */
   --display: 'Manrope', 'IBM Plex Sans', -apple-system, sans-serif;
@@ -122,6 +127,7 @@
   --toast-bg: #10453a;
   --toast-ink: #e9f5ef;
   --nav-bg: rgba(18,18,18,0.78);
+  --bar-bg: #121212;       /* --nav-bg over --bg resolves to the same slate black */
 }
 
 /* Thin text renders lighter on dark backgrounds — give the small, muted
@@ -184,6 +190,11 @@ input, textarea, select, [contenteditable="true"] {
   /* frosted glass over the scrolling content — the header stays put on every
      screen size so navigation and the net figure never scroll away */
   background: var(--nav-bg);
+  /* Clears the notch, and on iOS — where the status bar is translucent in the
+     dark theme — this is the padding whose background paints the strip behind
+     the clock and battery, so the bar matches the header instead of the OS
+     default white. Zero everywhere the inset doesn't exist. */
+  padding-top: env(safe-area-inset-top, 0px);
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
   backdrop-filter: blur(16px) saturate(1.4);
   position: sticky; top: 0; z-index: 40; /* below the modal overlay (50) so modals cover it */
@@ -898,7 +909,7 @@ button { font-family: var(--body); cursor: pointer; }
   -webkit-backdrop-filter: blur(9px);
   backdrop-filter: blur(9px);
   display: flex; align-items: flex-start; justify-content: center;
-  padding: 40px var(--sp-4); overflow-y: auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 40px) var(--sp-4) 40px; overflow-y: auto;
 }
 
 .modal {
@@ -1426,10 +1437,9 @@ input:checked + .sel-check::after {
      handful of people, so a static masthead means Ledger/Groups/History and
      the net-position chips scroll out of reach the instant the user moves —
      and switching those three views is the core loop. Keep them on screen.
-     padding-top clears the notch now that viewport-fit=cover is set. */
+     (The notch/status-bar padding lives on the base .masthead rule.) */
   .masthead {
     position: sticky; top: 0; z-index: 40; /* below the modal overlay (50) so modals cover it */
-    padding-top: env(safe-area-inset-top, 0px);
     box-shadow: 0 2px 10px var(--shadow-bar);
   }
 
