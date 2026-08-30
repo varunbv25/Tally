@@ -45,7 +45,7 @@ a top tab bar with header actions.
 Goal: from **+** to a recorded bill in under 10 seconds, with at most one
 required number.
 
-1. **Tap the emerald + FAB** (bottom-centre, phone) or *÷ Split expense* (header, desktop). The modal opens with focus managed and the page behind frozen and blurred.
+1. **Tap *÷ Split expense*** in the Ledger header. The modal opens with focus managed, on an opaque backdrop — the page behind is frozen and out of sight, not showing through.
 2. **Pick who shared the bill.** Everyone is a large tappable tile with a tick circle — the whole tile is the target, not the checkbox. "Me" is pinned first.
 3. **No account, no problem.** An inline *add a new person…* field sits under the list, so an outsider joins the split without leaving the flow (see edge cases).
 4. **Enter the total** — one number field, numeric keypad on mobile (16px input so iOS never zoom-jumps). Date defaults to today; reason is optional.
@@ -62,7 +62,7 @@ you, no confirmation screen — the preview *was* the confirmation.
 - **Settling up offline.** Tally is local-first: every view renders from local storage and every action (settle included) commits locally and instantly. A quiet "Offline · showing saved data" pill appears in the header — reassurance, not an alarm — and cloud sync (if enabled) reconciles when connectivity returns. The user is never blocked from recording money because of the network.
 - **Adding a non-group member to a group bill.** The split flow accepts anyone: an *add a new person* field lives inside the picker, so the visiting friend is created, ticked, and included in one step — without polluting the group's membership. The debt lands on their personal ledger; the group's own history stays scoped to members.
 - **Empty states as onboarding.** A new account never sees a blank screen: the ledger shows a friendly card ("Your ledger is empty") with a single primary action, and explains the privacy model ("everything stays in this browser"). A search with no matches points at the **+** beside the box instead of a dead end.
-- **Destructive actions.** Deletes and settlements always pass through a blurred confirmation card stating the consequence ("removed along with ALL of their transactions… cannot be undone"), with the safe action available and the OS back gesture as a cancel.
+- **Destructive actions.** Deletes and settlements always pass through a confirmation card stating the consequence ("removed along with ALL of their transactions… cannot be undone"), with the safe action available and the OS back gesture as a cancel.
 - **Accidental gestures.** A long-press that moves >10px is cancelled (it was a scroll); a completed long-press swallows the ghost click behind it; one long-press produces exactly one haptic pulse.
 
 ## 4. Accessibility (a11y) Guidelines
@@ -85,8 +85,8 @@ you, no confirmation screen — the preview *was* the confirmation.
 
 | Aspect | Phone (≤680px) | Desktop |
 |---|---|---|
-| Navigation | Bottom glass bar (Settings in its last slot) + Account button in the header | Top tabs + Account button in the header + floating Settings gear, bottom-right |
+| Navigation | Bottom bar (Settings in its last slot) + Account button in the header | Top tabs + Account top-right of the header, Settings gear at its bottom-right |
 | Ledger | Stacked cards, one per person | True table with aligned money columns |
-| Header | Sticky, frosted, safe-area aware | Sticky, frosted, max-width 1000px |
+| Header | Sticky, opaque, safe-area aware | Sticky, opaque, max-width 1000px |
 | Add expense | FAB → full-height modal, keypad-friendly | Header button → centered 700px modal |
 | Touch | 44px minimum targets, 16px inputs (no iOS zoom) | Hover states, keyboard focus rings |

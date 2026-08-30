@@ -100,11 +100,11 @@ function peopleByName() {
    it on <html data-theme> (styles.css overrides the palette tokens for
    "dark") and keep the address-bar/status-bar colour in step. */
 
-/* The flat colour the translucent masthead composites to, mirroring the
-   --bar-bg token in styles.css (read from there when it's available, so the
-   two can't drift). Chrome paints the status bar of the installed app with
-   this via the theme-color meta. */
-const THEME_BAR_COLOR = { light: '#fdfefd', dark: '#121212' };
+/* The masthead's flat colour, mirroring the --bar-bg token in styles.css
+   (read from there when it's available, so the two can't drift). Chrome
+   paints the status bar of the installed app with this via the theme-color
+   meta. */
+const THEME_BAR_COLOR = { light: '#ffffff', dark: '#171917' };
 
 /* iOS ignores theme-color entirely and offers only these three status-bar
    styles. 'default' is a white bar with black symbols, which matches the light
@@ -1324,15 +1324,8 @@ function performDeletePeople() {
   showToast(`${n} ${n === 1 ? 'person' : 'people'} deleted`);
 }
 
-/* Reads a balance as a phrase for the split preview's before/after lines. */
-function balancePhrase(n, currency) {
-  if (n > 0.005) return `owes you ${fmtMoney(n, currency)}`;
-  if (n < -0.005) return `you owe ${fmtMoney(-n, currency)}`;
-  return 'settled';
-}
-
 /* ---------- split expense ----------
-   A popup over a blurred page: pick who paid, tick who shares the cost, enter
+   A popup over the page: pick who paid, tick who shares the cost, enter
    the total, and a live preview shows each person's exact share before it's
    recorded. Paid by Me: each share becomes its own "they owe you" entry
    (tagged SPLIT). Paid by someone else: each share is routed through you as a
@@ -1385,67 +1378,53 @@ function splitPreviewHTML(payerId, ids, amt, includeMe, own) {
   const head = `<div class="split-head">${n} ${n === 1 ? 'person' : 'people'}${
     multiCurrency ? '' : ` · ${fmtMoney(amt, headCur)} total`} · paid by ${
     payer ? esc(payer.name) : 'you'}</div>`;
-  const ownTag = k => Number.isFinite(ownMap[k]) ? ' <span class="pick-own-tag">own amount</span>' : '';
+  const ownTag = k => Number.isFinite(ownMap[k]) ? '<span class="pick-own-tag">own amount</span>' : '';
 
   /* What the person who paid is out of pocket for everyone else: the shares
      that actually become debts (their own ticked share is nobody's debt). */
   const covered = people.filter(p => !payer || p.id !== payer.id)
     .reduce((s, p) => s + shares[p.id], 0) + (includeMe && payer ? shares.me : 0);
 
-  /* The lender line leads the preview: who put the money in, and what it does
-     to their balance with you. Paid by someone else, their balance drops by
-     everything they covered — shown before → after. Paid by you, there is no
-     single balance to move, so it reads as the total you laid out and the part
-     of it coming back to you. Cover nobody but yourself and there is no
-     movement to report, so the figure is left off rather than shown as zero. */
+  /* One row per person, and the row is a name and a signed figure — nothing
+     else. The sign carries the whole meaning: + is money moving towards you,
+     − is money moving away, and an unsigned figure is your own share, which
+     is a cost rather than a balance change. Spelling that out as sentences
+     ("Bob owes you ₹0.00 → owes you ₹25.00") only buried the number. */
+  const line = (name, tag, delta, cls) => `
+    <div class="xfer-line">
+      <span class="xfer-who"><b>${name}</b>${tag ? ' ' + tag : ''}</span>
+      <span class="xfer-delta${cls ? ' ' + cls : ''}">${delta}</span>
+    </div>`;
+
+  /* The payer leads, and gets the one row that isn't a share: the sum of what
+     they covered for everybody else, which is what their balance with you
+     moves by. If they're in the split themselves their own share rides along
+     as a note — it counts towards the division but is nobody's debt, so it
+     never belongs in the signed column. Covering nobody but yourself moves
+     nothing, so that figure is left off rather than printed as zero. */
   const covers = covered > 0.005;
-  const lenderLine = payer ? (() => {
-    const before = totalOf(payer);
-    return `
-    <div class="xfer-line">
-      <span><b>${esc(payer.name)}</b> ${multiCurrency ? '' : `paid ${fmtMoney(amt, payerCur)}`}${
-        covers ? `${multiCurrency ? '' : ' · '}${balancePhrase(before, payerCur)}
-      <span class="xfer-arrow">→</span> ${balancePhrase(before - covered, payerCur)}` : ''}</span>
-      ${covers ? `<span class="xfer-delta neg">−${fmtMoney(covered, payerCur)}</span>` : ''}
-    </div>`;
-  })() : `
-    <div class="xfer-line">
-      <span><b>Me</b> · you paid ${fmtMoney(amt, baseCur)}</span>
-      ${covers ? `<span class="xfer-delta pos">+${fmtMoney(covered, baseCur)} owed to you</span>` : ''}
-    </div>`;
+  const payerKey = payer ? payer.id : 'me';
+  const payerShare = payer
+    ? (people.some(p => p.id === payer.id) ? shares[payer.id] : null)
+    : (includeMe ? shares.me : null);
+  const payerNote = payerShare == null ? ''
+    : `<span class="xfer-note">share ${fmtMoney(payerShare, payerCur)}</span> ${ownTag(payerKey)}`;
+  const payerLine = line(payer ? esc(payer.name) : 'Me', payerNote,
+    covers ? `${payer ? '−' : '+'}${fmtMoney(covered, payerCur)}` : '—',
+    covers ? (payer ? 'neg' : 'pos') : 'muted');
 
-  /* Everyone else's share lands as "they owe you" — either directly (you
-     paid) or routed through you (someone else paid) — so each recipient reads
-     as their balance before → after. The payer's own ticked share counts
-     toward the division but is nobody's debt. */
-  const lines = people.map(p => {
-    if (payer && p.id === payer.id) {
-      return `
-    <div class="xfer-line">
-      <span><b>${esc(p.name)}</b> · their own share${ownTag(p.id)}</span>
-      <span class="xfer-delta">${fmtMoney(shares[p.id], p.currency)}</span>
-    </div>`;
-    }
-    const before = totalOf(p);
-    return `
-    <div class="xfer-line">
-      <span><b>${esc(p.name)}</b> ${balancePhrase(before, p.currency)}
-      <span class="xfer-arrow">→</span> ${balancePhrase(before + shares[p.id], p.currency)}${ownTag(p.id)}</span>
-      <span class="xfer-delta pos">+${fmtMoney(shares[p.id], p.currency)}</span>
-    </div>`;
-  }).join('');
+  /* Everyone else's share becomes money they owe you — directly (you paid) or
+     routed through you (someone else paid). */
+  const lines = people.filter(p => !payer || p.id !== payer.id)
+    .map(p => line(esc(p.name), ownTag(p.id), `+${fmtMoney(shares[p.id], p.currency)}`, 'pos'))
+    .join('');
 
-  /* Your own line. Paid by Me: your share is just what you covered for
-     yourself. Paid by someone else: your share is new debt to the payer. */
-  const meLine = includeMe ? (payer ? `
-    <div class="xfer-line">
-      <span><b>Me</b> · ${esc(payer.name)} covered your share${ownTag('me')}</span>
-      <span class="xfer-delta neg">you owe +${fmtMoney(shares.me, payerCur)}</span>
-    </div>` : `
-    <div class="xfer-line">
-      <span><b>Me</b> · your share${ownTag('me')}</span>
-      <span class="xfer-delta">${fmtMoney(shares.me, baseCur)}</span>
-    </div>`) : '';
+  /* Your own row, only when you're sharing but didn't pay: the payer covered
+     your share, so it's added to what you owe them. When you did pay, your
+     share is the note on the payer row above. */
+  const meLine = includeMe && payer
+    ? line('Me', ownTag('me'), `−${fmtMoney(shares.me, payerCur)}`, 'neg')
+    : '';
 
   /* Individual amounts must fit the total; with everyone on their own figure
      they must reach it exactly, since nobody is left to absorb the remainder. */
@@ -1456,7 +1435,7 @@ function splitPreviewHTML(payerId, ids, amt, includeMe, own) {
   const mismatch = multiCurrency
     ? `<div class="xfer-warn">Selected people use different currencies — each share is applied in that person's own currency, nothing is converted.</div>`
     : '';
-  return head + lenderLine + lines + meLine + short + over + mismatch;
+  return head + payerLine + lines + meLine + short + over + mismatch;
 }
 
 /* whether "Me" is ticked in the split picker */
@@ -1730,7 +1709,7 @@ function renderSplitModal() {
         <span class="pick-drop-value" data-${key}-summary>${summary}</span>
         <svg class="pick-drop-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
       </summary>
-      ${body}
+      <div class="pick-drop-body">${body}</div>
     </details>`;
 
   /* "Me" — you can be one of the people sharing the cost. You pay your own
@@ -1802,7 +1781,7 @@ function renderSplitModal() {
 }
 
 /* ---------- share pickers ----------
-   A popup over a blurred page: a checklist of people with a live preview of
+   A popup over the page: a checklist of people with a live preview of
    exactly what will be shared. Nothing is persisted — the choice is made
    fresh each time. The group picker (below) starts with every member ticked
    and excludes unticked ones; the Ledger picker starts with nobody ticked

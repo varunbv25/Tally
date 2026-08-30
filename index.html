@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>TALLY — the ledger that keeps score</title>
-<meta name="theme-color" content="#fdfefd">
+<meta name="theme-color" content="#ffffff">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -31,7 +31,7 @@
     var dark = !!(s && s.settings && s.settings.theme === 'dark');
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', dark ? '#121212' : '#fdfefd');
+    if (meta) meta.setAttribute('content', dark ? '#171917' : '#ffffff');
     var iosBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
     if (iosBar) iosBar.setAttribute('content', dark ? 'black-translucent' : 'default');
   } catch (e) {}
@@ -56,12 +56,19 @@
     </div>
   </div>
   <!-- Primary navigation: the day-to-day views switch from these top tabs.
-       Account sits in the corner above; Settings in the corner below. -->
-  <nav class="tabbar" id="tabbar" aria-label="Primary">
-    <button class="tab-btn" data-tab="ledger">Ledger</button>
-    <button class="tab-btn" data-tab="groups">Groups</button>
-    <button class="tab-btn" data-tab="history">History</button>
-  </nav>
+       Account sits at the top-right of the row above; Settings at the
+       bottom-right of this one. Both are part of the header's own layout, so
+       neither ever sits on top of the page's content. -->
+  <div class="tabbar-row">
+    <nav class="tabbar" id="tabbar" aria-label="Primary">
+      <button class="tab-btn" data-tab="ledger">Ledger</button>
+      <button class="tab-btn" data-tab="groups">Groups</button>
+      <button class="tab-btn" data-tab="history">History</button>
+    </nav>
+    <button class="nav-icon-btn settings-corner" id="settings-btn" data-tab="settings" aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.2A1.6 1.6 0 0 0 6.8 19l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 13H3a2 2 0 0 1 0-4h.2A1.6 1.6 0 0 0 4.6 6.3l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 0 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.4 1H21a2 2 0 0 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z"/></svg>
+    </button>
+  </div>
 </header>
 
 <main id="view" class="view"></main>
@@ -90,12 +97,6 @@
     <span>Settings</span>
   </button>
 </nav>
-
-<!-- Wide screens have no bottom bar, so Settings gets its own gear button in
-     the same bottom-right corner it occupies on the phone. -->
-<button class="nav-icon-btn settings-corner" id="settings-btn" data-tab="settings" aria-label="Settings" title="Settings">
-  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.2A1.6 1.6 0 0 0 6.8 19l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 13H3a2 2 0 0 1 0-4h.2A1.6 1.6 0 0 0 4.6 6.3l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 0 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.4 1H21a2 2 0 0 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z"/></svg>
-</button>
 
 <div id="modal-root"></div>
 <div id="split-root"></div>
