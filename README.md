@@ -19,6 +19,8 @@ Either:
 ## Features
 
 ### The Ledger (Excel-like)
+- The search box filters the list; the **+** beside it opens the add-a-person
+  panel — a name, plus an optional opening amount and reason in one step.
 - One row per person; type an amount and hit **+ lent** / **− repaid** to
   append entries, exactly like adding to a running spreadsheet column.
 - Positive balance = they owe you. Negative = you owe them.
@@ -64,9 +66,11 @@ condition, fresh interest accrues on that larger principal.
 
 ### Split an expense
 Someone paid for something shared? From the **Ledger**, hit **÷ Split
-expense**, pick who paid (**Me** by default, or anyone in your ledger),
-tick everyone who's in on it, and enter the total (with an optional reason
-and date). Tick **Me** to count yourself as one of the sharers — when you
+expense**. *Paid by* and *Split between* are the same list of name tiles,
+each folded into a dropdown that shows its current choice when closed — pick
+the one person who paid (**Me** by default, or anyone in your ledger), tick
+everyone who's in on it, and enter the total (with an optional reason and
+date). Tick **Me** to count yourself as one of the sharers — when you
 paid, your share shrinks everyone else's but is never recorded as a debt;
 when someone else paid, your share is added to what you owe them. Need someone who
 isn't in your list yet? Type their name under the people and hit **+ Add**
@@ -146,7 +150,7 @@ interest rules and settings stay on the device. Nothing ever leaves the
 browser unless you export it — **or** unless you opt in to cloud sync.
 
 ### Cloud sync (optional)
-Under **Account** (in the hamburger menu) you can sign in to mirror your
+Under **Account** (the user button in the top-right corner) you can sign in to mirror your
 ledger to the cloud. Two ways in, both keyed to your email address so they
 resolve to the same ledger:
 

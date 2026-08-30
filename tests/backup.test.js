@@ -74,7 +74,7 @@ test('importJSON fills missing settings keys from defaults', () => {
   ctx.importJSON(JSON.stringify(partial));
   const s = getState();
   assert.strictEqual(s.settings.baseCurrency, 'EUR');
-  assert.strictEqual(s.settings.theme, 'device');   // default backfilled
+  assert.strictEqual(s.settings.theme, 'light');    // default backfilled
   assert.strictEqual(s.settings.roundWhole, false); // default backfilled
 });
 

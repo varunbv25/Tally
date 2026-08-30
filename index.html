@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>TALLY — the ledger that keeps score</title>
-<meta name="theme-color" content="#fdfefd">
+<meta name="theme-color" content="#ffffff">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,18 +21,17 @@
 /* Stamp the theme before first paint to avoid a flash of the wrong palette,
    and colour the OS status bar to match it — Safari reads the Apple
    status-bar meta once at load, so it has to be right before we paint.
-   app.js re-applies all of this once state is loaded; keep the storage key,
-   the resolution logic and the two bar values in sync with applyTheme(). */
+   Light unless the saved setting says 'dark'; app.js re-applies all of this
+   once state is loaded. Keep the storage key, the resolution logic and the
+   two bar values in sync with applyTheme(). */
 (function () {
   try {
-    var pref = 'device';
     var raw = localStorage.getItem('tally-ledger-v1');
-    if (raw) { var s = JSON.parse(raw); if (s && s.settings && s.settings.theme) pref = s.settings.theme; }
-    var dark = pref === 'dark' || (pref === 'device' &&
-      window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var s = raw ? JSON.parse(raw) : null;
+    var dark = !!(s && s.settings && s.settings.theme === 'dark');
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', dark ? '#121212' : '#fdfefd');
+    if (meta) meta.setAttribute('content', dark ? '#171917' : '#ffffff');
     var iosBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
     if (iosBar) iosBar.setAttribute('content', dark ? 'black-translucent' : 'default');
   } catch (e) {}
@@ -43,51 +42,41 @@
 
 <header class="masthead">
   <div class="masthead-inner">
-    <button class="hamburger" id="menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="drawer">
-      <span></span><span></span><span></span>
-    </button>
     <h1 class="wordmark" id="home-link" role="button" tabindex="0" title="Back to the ledger">Tally<span class="wordmark-dot">.</span></h1>
-    <span class="offline-flag" id="offline-flag" role="status" hidden>
-      <span class="offline-dot" aria-hidden="true"></span>Offline · showing saved data
-    </span>
-  </div>
-  <!-- Primary navigation: the day-to-day views switch from these top tabs.
-       Settings and Account live in the hamburger drawer instead. -->
-  <nav class="tabbar" id="tabbar" aria-label="Primary">
-    <button class="tab-btn" data-tab="ledger">Ledger</button>
-    <button class="tab-btn" data-tab="groups">Groups</button>
-    <button class="tab-btn" data-tab="history">History</button>
-  </nav>
-</header>
-
-<!-- Off-canvas drawer, opened by the hamburger. Holds Settings and Account,
-     pinned to the bottom; the everyday views (Ledger/Groups/History) live in
-     the top tab bar. -->
-<div class="drawer-scrim" id="drawer-scrim" hidden></div>
-<aside class="drawer" id="drawer" aria-hidden="true" aria-label="Main menu">
-  <div class="drawer-head">
-    <span class="drawer-brand">Tally<span class="wordmark-dot">.</span></span>
-    <button class="drawer-close" id="menu-close" aria-label="Close menu">✕</button>
-  </div>
-  <nav class="drawer-nav" id="drawer-nav">
-    <div class="drawer-section">
-      <button class="drawer-item" data-tab="settings">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.2A1.6 1.6 0 0 0 6.8 19l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 13H3a2 2 0 0 1 0-4h.2A1.6 1.6 0 0 0 4.6 6.3l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 0 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.4 1H21a2 2 0 0 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z"/></svg>
-        <span>Settings</span>
-      </button>
-      <button class="drawer-item" data-tab="account">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3"/><path d="M6.2 18.5a6 6 0 0 1 11.6 0"/></svg>
-        <span>Account</span>
+    <div class="masthead-actions">
+      <span class="offline-flag" id="offline-flag" role="status" hidden>
+        <span class="offline-dot" aria-hidden="true"></span>Offline · showing saved data
+      </span>
+      <!-- Account keeps the top-right corner on every screen size: who you are
+           and the cloud sync that follows from it, one tap from anywhere.
+           Settings is a separate menu, pinned to the bottom-right corner. -->
+      <button class="nav-icon-btn" id="account-btn" data-tab="account" aria-label="Account" title="Account">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3"/><path d="M6.2 18.5a6 6 0 0 1 11.6 0"/></svg>
       </button>
     </div>
-  </nav>
-</aside>
+  </div>
+  <!-- Primary navigation: the day-to-day views switch from these top tabs.
+       Account sits at the top-right of the row above; Settings at the
+       bottom-right of this one. Both are part of the header's own layout, so
+       neither ever sits on top of the page's content. -->
+  <div class="tabbar-row">
+    <nav class="tabbar" id="tabbar" aria-label="Primary">
+      <button class="tab-btn" data-tab="ledger">Ledger</button>
+      <button class="tab-btn" data-tab="groups">Groups</button>
+      <button class="tab-btn" data-tab="history">History</button>
+    </nav>
+    <button class="nav-icon-btn settings-corner" id="settings-btn" data-tab="settings" aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.2A1.6 1.6 0 0 0 6.8 19l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 13H3a2 2 0 0 1 0-4h.2A1.6 1.6 0 0 0 4.6 6.3l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 0 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.4 1H21a2 2 0 0 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z"/></svg>
+    </button>
+  </div>
+</header>
 
 <main id="view" class="view"></main>
 
-<!-- Phone-only bottom navigation: the everyday views within thumb reach.
-     Hidden on wide screens, where the top tab bar takes over. Splitting an
-     expense lives in the Ledger header, not down here. -->
+<!-- Phone-only bottom navigation: the everyday views within thumb reach,
+     with Settings in the last (bottom-right) slot. Hidden on wide screens,
+     where the top tab bar and the corner gear take over. Splitting an expense
+     lives in the Ledger header, not down here. -->
 <nav class="bottom-nav" id="bottom-nav" aria-label="Primary">
   <button class="bnav-item" data-tab="ledger">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-3-2-3 2-3-2-3 2-3-2V5z"/><path d="M8 8h8M8 12h8"/></svg>
@@ -101,9 +90,11 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
     <span>Activity</span>
   </button>
-  <button class="bnav-item" id="bnav-menu" aria-label="Open menu" aria-haspopup="true">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-    <span>Menu</span>
+  <!-- Settings owns the bottom-right corner: last slot of the bar on the
+       phone, the gear button below on wider screens. -->
+  <button class="bnav-item" data-tab="settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.2A1.6 1.6 0 0 0 6.8 19l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 13H3a2 2 0 0 1 0-4h.2A1.6 1.6 0 0 0 4.6 6.3l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 0 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.4 1H21a2 2 0 0 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z"/></svg>
+    <span>Settings</span>
   </button>
 </nav>
 

@@ -14,43 +14,49 @@
   color-scheme: light;
 
   /* palette — light. Emerald-teal is the "owed to you" accent, coral-orange is
-     "you owe" — the same color language in both themes, tuned per theme for
-     AA contrast. */
-  --bg: #f4f7f6;
+     "you owe" — the same color language in both themes. Every surface is
+     opaque: nothing in the app is see-through, so text always sits on a known
+     background and its contrast is a fixed, checkable number.
+
+     The page is a definite grey and cards are white, so a tile reads as a
+     tile without needing a shadow to prove it. Ink and the accents are the
+     most saturated versions that still clear AA 4.5:1 on a white card. */
+  --bg: #e7ecea;           /* page — grey enough that white tiles separate from it */
   --card: #ffffff;
-  --ink: #1b2420;
-  --ink-soft: #56645e;     /* AA on white and on --bg (~5:1) */
-  --green: #058a68;        /* emerald accent — AA for small money text on white */
-  --green-deep: #04543f;
-  --green-tint: rgba(5,138,104,0.10);
-  --red: #c2410c;          /* coral-orange "you owe" — AA on white (~4.7:1) */
-  --amber: #8a5500;        /* darkened for AA contrast (was #a06410) */
-  --blue: #2b5b8a;
-  --gold: #836a2a;         /* the interest figure — darkened to clear AA on white/cream (was #a3823a) */
-  --line: #e3e9e6;
-  --line-strong: #c6d1cc;
+  --ink: #121a17;          /* 17.7:1 on a card */
+  --ink-soft: #3f4c47;     /* 9.0:1 on a card, 7.7:1 on the page */
+  --green: #00875e;        /* emerald accent — 4.5:1 on white, poppier than the old muted teal */
+  --green-deep: #00553d;
+  --green-tint: #e3f2ed;   /* opaque green wash — the same colour a 10% green over white resolves to */
+  --red: #cf3f00;          /* coral-orange "you owe" — 4.8:1 on white */
+  --red-tint: #fdeae1;
+  --amber: #8a5500;
+  --blue: #15589c;
+  --gold: #8a6a15;         /* the interest figure */
+  --line: #d8e0dd;
+  --line-strong: #adbcb6;  /* borders you can actually see on a white card */
 
   /* semantic tokens — let each theme tune contrast independently */
   --btn-ink: #ffffff;                  /* text on solid green / ink-soft fills */
   --danger: #c2410c;                   /* danger button fill (always white text) */
   --danger-hover: #9a3412;
-  --focus-ring: rgba(5,138,104,0.16);
-  --overlay: rgba(7,32,25,0.5);        /* modal / confirm scrim — opaque enough that page content behind reads as inert, not a live control */
-  --row-tint: rgba(5,138,104,0.10);    /* pressed / selected table rows */
-  --tag-neutral: rgba(0,0,0,0.05);     /* neutral chip background */
+  --focus-ring: #b9e2d3;
+  --overlay: #cdd7d3;                  /* modal / confirm backdrop — a flat surface, not a veil over live content */
+  --row-tint: #e3f2ed;                 /* pressed / selected table rows */
+  --tag-neutral: #eaefed;              /* neutral chip background */
   --shadow-card: rgba(9,45,35,0.07);
   --shadow-bar: rgba(9,45,35,0.09);
   --shadow-modal: rgba(9,45,35,0.35);
   --shadow-toast: rgba(9,45,35,0.28);
   --toast-bg: #06422f;
   --toast-ink: #ffffff;
-  /* translucent chrome for the sticky header / bottom nav (glass effect) */
-  --nav-bg: rgba(255,255,255,0.82);
-  /* The OS status bar can't be translucent, so it needs the flat colour the
-     masthead composites to: --nav-bg over --bg. app.js copies this into the
-     theme-color meta, which is what paints the status bar in the installed
-     app — keep the two in step or the bar stops matching the header. */
-  --bar-bg: #fdfefd;
+  /* Chrome for the sticky header / bottom nav. Opaque, so content scrolling
+     underneath disappears cleanly instead of ghosting through. */
+  --nav-bg: #ffffff;
+  /* The OS status bar takes a flat colour, and it has to be the one the
+     masthead actually paints. app.js copies this into the theme-color meta —
+     keep the two in step or the bar stops matching the header. */
+  --bar-bg: #ffffff;
 
   /* fonts */
   --display: 'Manrope', 'IBM Plex Sans', -apple-system, sans-serif;
@@ -81,9 +87,14 @@
   --radius-lg: 20px;   /* modals, confirmation cards, hero card */
   --pill: 999px;       /* chips, stamps, tags */
 
-  /* motion */
-  --duration-fast: 150ms;
-  --duration-normal: 300ms;
+  /* motion — one vocabulary for the whole app, so nothing moves at a speed or
+     on a curve the rest of the UI doesn't also use. --ease is a standard
+     decelerate: quick to start, settling gently, never linear (a linear move
+     is the one thing that always reads as mechanical). */
+  --duration-fast: 140ms;    /* hovers, ticks, colour changes */
+  --duration-normal: 240ms;  /* things that change size or slide in */
+  --duration-slow: 320ms;    /* full-surface arrivals: modals, sheets */
+  --ease: cubic-bezier(0.32, 0.08, 0.24, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -105,8 +116,9 @@
   --ink-soft: #a2aeaa;     /* brighter secondary text so captions/labels stay legible */
   --green: #2fd6a0;        /* vibrant emerald — the "owed to you" accent */
   --green-deep: #7fe8c6;
-  --green-tint: rgba(47,214,160,0.13);
+  --green-tint: #16302a;   /* opaque green wash over the charcoal surface */
   --red: #ff9b7a;          /* soft pastel coral — the "you owe" accent */
+  --red-tint: #38231c;
   --amber: #e3b95e;
   --blue: #85b8ea;
   --gold: #d8bc7d;
@@ -116,28 +128,65 @@
   --btn-ink: #08211a;      /* dark ink on the emerald fills */
   --danger: #e14b2e;
   --danger-hover: #c03a20;
-  --focus-ring: rgba(47,214,160,0.25);
-  --overlay: rgba(0,0,0,0.65);
-  --row-tint: rgba(47,214,160,0.12);
-  --tag-neutral: rgba(255,255,255,0.07);
+  --focus-ring: #1d4a3c;
+  --overlay: #0a0a0a;
+  --row-tint: #16302a;
+  --tag-neutral: #292d2c;
   --shadow-card: rgba(0,0,0,0.45);
   --shadow-bar: rgba(0,0,0,0.5);
   --shadow-modal: rgba(0,0,0,0.6);
   --shadow-toast: rgba(0,0,0,0.5);
   --toast-bg: #10453a;
   --toast-ink: #e9f5ef;
-  --nav-bg: rgba(18,18,18,0.78);
-  --bar-bg: #121212;       /* --nav-bg over --bg resolves to the same slate black */
+  --nav-bg: #171917;
+  --bar-bg: #171917;
 }
 
-/* Thin text renders lighter on dark backgrounds — give the small, muted
-   secondary text a touch more weight so it reads clearly. */
+/* Secondary text is set in a lighter colour than body copy, which costs it
+   apparent weight — so it gets some back. Dark theme has always done this;
+   light theme needs it more, since its muted grey sits on a bright surface
+   where thin strokes wash out, so it goes a step further to semi-bold. */
 :root[data-theme="dark"] .section-sub,
 :root[data-theme="dark"] .muted,
 :root[data-theme="dark"] label,
 :root[data-theme="dark"] .notif-value,
 :root[data-theme="dark"] .settings-group-desc,
 :root[data-theme="dark"] .chip { font-weight: 500; }
+
+:root:not([data-theme="dark"]) .section-sub,
+:root:not([data-theme="dark"]) .muted,
+:root:not([data-theme="dark"]) label,
+:root:not([data-theme="dark"]) .notif-value,
+:root:not([data-theme="dark"]) .settings-group-desc,
+:root:not([data-theme="dark"]) .chip,
+:root:not([data-theme="dark"]) .as-of,
+:root:not([data-theme="dark"]) .hero-k,
+:root:not([data-theme="dark"]) .balance-hero-more,
+:root:not([data-theme="dark"]) .add-person-quick-hint,
+:root:not([data-theme="dark"]) .empty-state,
+:root:not([data-theme="dark"]) .empty-copy,
+:root:not([data-theme="dark"]) .colophon,
+:root:not([data-theme="dark"]) .group-card .members,
+:root:not([data-theme="dark"]) .group-card .group-net,
+:root:not([data-theme="dark"]) .hist-meta,
+:root:not([data-theme="dark"]) .pick-drop-value,
+:root:not([data-theme="dark"]) .xfer-note,
+:root:not([data-theme="dark"]) .confirm-hint,
+:root:not([data-theme="dark"]) .rule-ear,
+:root:not([data-theme="dark"]) .seg,
+:root:not([data-theme="dark"]) .ledger-table td[data-label]::before,
+:root:not([data-theme="dark"]) ::placeholder { font-weight: 600; }
+
+/* The coloured figures carry meaning, not just decoration — in the light
+   theme they are darker than their dark-theme counterparts (contrast on a
+   white card demands it), so weight is what keeps them looking vivid. */
+:root:not([data-theme="dark"]) .money,
+:root:not([data-theme="dark"]) .hero-v,
+:root:not([data-theme="dark"]) .xfer-delta,
+:root:not([data-theme="dark"]) .hist-tag,
+:root:not([data-theme="dark"]) .interest-tag,
+:root:not([data-theme="dark"]) .pick-own-tag,
+:root:not([data-theme="dark"]) .balance-hero-total { font-weight: 700; }
 
 * {
   box-sizing: border-box; margin: 0; padding: 0;
@@ -186,17 +235,16 @@ input, textarea, select, [contenteditable="true"] {
 /* ---------- header ---------- */
 
 .masthead {
-  border-bottom: 1px solid var(--line);
-  /* frosted glass over the scrolling content — the header stays put on every
-     screen size so navigation and the net figure never scroll away */
+  border-bottom: 1px solid var(--line-strong);
+  /* Opaque, so the ledger scrolling underneath vanishes behind it cleanly —
+     the header stays put on every screen size so navigation and the net
+     figure never scroll away. */
   background: var(--nav-bg);
   /* Clears the notch, and on iOS — where the status bar is translucent in the
      dark theme — this is the padding whose background paints the strip behind
      the clock and battery, so the bar matches the header instead of the OS
      default white. Zero everywhere the inset doesn't exist. */
   padding-top: env(safe-area-inset-top, 0px);
-  -webkit-backdrop-filter: blur(16px) saturate(1.4);
-  backdrop-filter: blur(16px) saturate(1.4);
   position: sticky; top: 0; z-index: 40; /* below the modal overlay (50) so modals cover it */
 }
 
@@ -204,6 +252,13 @@ input, textarea, select, [contenteditable="true"] {
   max-width: 1000px; margin: 0 auto; padding: var(--sp-6) var(--sp-6) var(--sp-2);
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--sp-4); flex-wrap: wrap;
+}
+
+/* Right-hand cluster of the masthead: the offline flag and the Account
+   button, which owns the top-right corner on every screen size. */
+.masthead-actions {
+  margin-left: auto;
+  display: flex; align-items: center; gap: var(--sp-3);
 }
 
 .wordmark {
@@ -219,11 +274,7 @@ input, textarea, select, [contenteditable="true"] {
 /* ---------- top tab bar ----------
    Primary navigation for the everyday views. Sits along the bottom edge of
    the masthead; the active tab's underline lines up with the masthead border. */
-.tabbar {
-  max-width: 1000px; margin: 0 auto;
-  padding: 0 var(--sp-6);
-  display: flex; gap: var(--sp-2);
-}
+.tabbar { display: flex; gap: var(--sp-2); }
 .tab-btn {
   padding: 9px var(--sp-3) 11px;
   background: none; border: none; cursor: pointer;
@@ -231,7 +282,7 @@ input, textarea, select, [contenteditable="true"] {
   color: var(--ink-soft);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px; /* overlap the masthead's 1px bottom border */
-  transition: color var(--duration-fast), border-color var(--duration-fast);
+  transition: color var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
 }
 .tab-btn:hover { color: var(--ink); }
 .tab-btn.active {
@@ -243,7 +294,6 @@ input, textarea, select, [contenteditable="true"] {
    on the locally-stored data, so this reassures rather than alarms. */
 .offline-flag {
   display: inline-flex; align-items: center; gap: 6px;
-  margin-left: auto;   /* right edge of the masthead */
   font-family: var(--mono); font-size: var(--fs-cap); font-weight: 500;
   color: var(--ink-soft); padding: 5px 11px; border-radius: var(--pill);
   border: 1px solid var(--line-strong); background: var(--bg);
@@ -251,7 +301,7 @@ input, textarea, select, [contenteditable="true"] {
 .offline-flag[hidden] { display: none; }
 .offline-dot {
   width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto;
-  background: #c08a2d; box-shadow: 0 0 0 2px color-mix(in srgb, #c08a2d 22%, transparent);
+  background: #c08a2d;
 }
 
 /* ---------- total-balance hero ----------
@@ -260,11 +310,11 @@ input, textarea, select, [contenteditable="true"] {
    A soft emerald radial wash keeps it premium without shouting. */
 .balance-hero {
   position: relative; overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--green) 22%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--green) 30%, var(--line-strong));
   border-radius: var(--radius-lg);
-  background:
-    radial-gradient(130% 170% at 100% 0%, color-mix(in srgb, var(--green) 14%, transparent), transparent 55%),
-    var(--card);
+  /* An opaque emerald wash across an opaque card — a gradient between two
+     solid colours, so there is nothing to see through. */
+  background: linear-gradient(135deg, var(--green-tint), var(--card) 62%);
   padding: var(--sp-5);
   margin-bottom: var(--sp-5);
   box-shadow: 0 12px 32px var(--shadow-card);
@@ -286,8 +336,8 @@ input, textarea, select, [contenteditable="true"] {
   flex: 1 1 150px; min-width: 0;
   border-radius: var(--radius);
   padding: 10px 14px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--card) 55%, var(--bg));
+  border: 1px solid var(--line-strong);
+  background: var(--card);
 }
 .hero-pill .hero-k {
   display: block; font-size: var(--fs-cap); color: var(--ink-soft); margin-bottom: 1px;
@@ -296,25 +346,23 @@ input, textarea, select, [contenteditable="true"] {
   font-family: var(--mono); font-size: var(--fs-lead); font-weight: 600;
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.hero-pill.owed { border-color: color-mix(in srgb, var(--green) 35%, var(--line)); }
+.hero-pill.owed { border-color: color-mix(in srgb, var(--green) 45%, var(--line-strong)); }
 .hero-pill.owed .hero-v { color: var(--green); }
-.hero-pill.owe { border-color: color-mix(in srgb, var(--red) 35%, var(--line)); }
+.hero-pill.owe { border-color: color-mix(in srgb, var(--red) 45%, var(--line-strong)); }
 .hero-pill.owe .hero-v { color: var(--red); }
 .balance-hero-more { margin-top: var(--sp-3); font-size: var(--fs-cap); color: var(--ink-soft); }
 
 /* ---------- bottom navigation (phone) ----------
-   On small screens the primary views move into a thumb-reach glass bar along
-   the bottom edge — the top tab bar hides. Desktop keeps the top tabs and
-   hides this bar. Splitting an expense lives in the Ledger header. */
+   On small screens the primary views move into a thumb-reach bar along the
+   bottom edge — the top tab bar hides. Desktop keeps the top tabs and hides
+   this bar. Splitting an expense lives in the Ledger header. */
 .bottom-nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
   display: none;
   align-items: stretch;
   padding: 6px 10px calc(env(safe-area-inset-bottom, 0px) + 6px);
   background: var(--nav-bg);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  backdrop-filter: blur(18px) saturate(1.4);
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line-strong);
   box-shadow: 0 -6px 24px var(--shadow-bar);
 }
 .bnav-item {
@@ -325,83 +373,48 @@ input, textarea, select, [contenteditable="true"] {
   border-radius: var(--radius-sm);
   font-family: var(--body); font-size: var(--fs-tag); font-weight: 600;
   color: var(--ink-soft);
-  transition: color var(--duration-fast);
+  transition: color var(--duration-fast) var(--ease);
 }
 .bnav-item svg { width: 22px; height: 22px; flex: none; }
 .bnav-item.active { color: var(--green); }
 .bnav-item:active { color: var(--ink); }
-/* ---------- hamburger + navigation drawer ---------- */
+/* ---------- corner menus (Account, Settings) ----------
+   Two separate menus, each in its own corner: Account top-right in the
+   masthead, Settings bottom-right — the gear button below on wide screens,
+   the last slot of the bottom bar on the phone. Both are icon-only round
+   buttons in the same visual language. */
 
-.hamburger {
-  flex: 0 0 auto; width: 40px; height: 40px; margin-left: -8px;
-  display: inline-flex; flex-direction: column; justify-content: center; gap: 5px;
-  padding: 10px; background: none; border: none; cursor: pointer;
-  border-radius: 9px; transition: background var(--duration-fast);
+.nav-icon-btn {
+  flex: 0 0 auto; width: 40px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; background: none; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 50%;
+  color: var(--ink-soft);
+  transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease),
+              border-color var(--duration-fast) var(--ease);
 }
-.hamburger:hover { background: var(--bg); }
-.hamburger span {
-  display: block; height: 2px; width: 100%; border-radius: 2px;
-  background: var(--green-deep);
-}
-
-.wordmark[role="button"] { cursor: pointer; }
-
-/* Dim scrim behind the open drawer; click it to close. */
-.drawer-scrim {
-  position: fixed; inset: 0; z-index: 60;
-  background: rgba(0, 0, 0, 0.4);
-  opacity: 0; transition: opacity var(--duration-base, 0.22s) ease;
-}
-.drawer-scrim.open { opacity: 1; }
-.drawer-scrim[hidden] { display: none; }
-
-.drawer {
-  position: fixed; top: 0; left: 0; bottom: 0; z-index: 61;
-  width: 284px; max-width: 84vw;
-  display: flex; flex-direction: column;
-  padding: var(--sp-4) var(--sp-3) calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
-  background: var(--card); border-right: 1px solid var(--line-strong);
-  box-shadow: 2px 0 28px rgba(0, 0, 0, 0.14);
-  transform: translateX(-100%);
-  transition: transform var(--duration-base, 0.24s) ease;
-}
-.drawer.open { transform: translateX(0); }
-
-.drawer-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: var(--sp-1) var(--sp-2) var(--sp-4);
-}
-.drawer-brand {
-  font-family: var(--display); font-weight: 800; font-size: var(--fs-h1);
-  letter-spacing: -0.02em; color: var(--green-deep);
-}
-.drawer-close {
-  width: 34px; height: 34px; flex: 0 0 auto;
-  background: none; border: none; cursor: pointer; border-radius: 8px;
-  font-size: 18px; line-height: 1; color: var(--ink-soft);
-}
-.drawer-close:hover { background: var(--bg); color: var(--ink); }
-
-.drawer-nav { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.drawer-section { display: flex; flex-direction: column; gap: 2px; }
-
-.drawer-item {
-  display: flex; align-items: center; gap: var(--sp-3);
-  width: 100%; padding: 11px 12px; border-radius: 10px;
-  background: none; border: none; cursor: pointer; text-align: left;
-  font-family: var(--body); font-size: var(--fs-base); font-weight: 500;
-  color: var(--ink); transition: background var(--duration-fast), color var(--duration-fast);
-}
-.drawer-item svg { flex: 0 0 auto; color: var(--ink-soft); }
-.drawer-item:hover { background: var(--bg); }
-.drawer-item.active {
-  background: color-mix(in srgb, var(--green) 12%, transparent);
+.nav-icon-btn:hover { background: var(--bg); color: var(--ink); }
+.nav-icon-btn.active {
+  background: var(--green-tint);
+  border-color: var(--green);
   color: var(--green-deep);
 }
-.drawer-item.active svg { color: var(--green); }
 
-/* Lock body scroll while the drawer is open. */
-body.menu-open { overflow: hidden; }
+/* Settings sits at the bottom-right of the header — the end of the tab row,
+   diagonally opposite nothing and on top of nothing. It is laid out with the
+   tabs rather than floating over the page, so it can never cover a row the
+   user is trying to read or tap. */
+.tabbar-row {
+  max-width: 1000px; margin: 0 auto;
+  padding: 0 var(--sp-6);
+  display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-4);
+}
+/* Sized to the tab row so the header gains no extra height for it — the
+   active tab's underline still lands exactly on the masthead's bottom border. */
+.settings-corner { width: 32px; height: 32px; margin-bottom: 3px; }
+.settings-corner svg { width: 18px; height: 18px; }
+
+.wordmark[role="button"] { cursor: pointer; }
 
 /* ---------- layout ---------- */
 
@@ -438,7 +451,7 @@ body.menu-open { overflow: hidden; }
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  transition: border-color var(--duration-fast) ease;
+  transition: border-color var(--duration-fast) var(--ease);
 }
 .settings-group:hover { border-color: var(--line-strong); }
 .settings-group[open] { border-color: var(--line-strong); }
@@ -474,7 +487,7 @@ body.menu-open { overflow: hidden; }
   fill: none; stroke: currentColor; stroke-width: 2;
   stroke-linecap: round; stroke-linejoin: round;
   color: var(--ink-soft);
-  transition: transform 0.2s ease;
+  transition: transform var(--duration-normal) var(--ease);
 }
 .settings-group[open] > .settings-group-title .settings-group-chevron { transform: rotate(90deg); }
 
@@ -490,7 +503,7 @@ body.menu-open { overflow: hidden; }
 }
 
 /* Brief highlight when "Set up cloud sync" drops the user onto the panel. */
-.panel-flash { animation: panel-flash 1.6s ease-out; }
+.panel-flash { animation: panel-flash 1.6s var(--ease); }
 @keyframes panel-flash {
   0%, 25% { border-color: var(--green); box-shadow: 0 0 0 3px var(--focus-ring); }
   100% { border-color: var(--line); box-shadow: none; }
@@ -528,7 +541,7 @@ button { font-family: var(--body); cursor: pointer; }
   padding: 8px 16px; border-radius: var(--radius-sm);
   border: 1px solid var(--green);
   background: var(--green); color: var(--btn-ink);
-  transition: background var(--duration-fast);
+  transition: background var(--duration-fast) var(--ease);
 }
 .btn:hover { background: var(--green-deep); }
 
@@ -548,12 +561,31 @@ button { font-family: var(--body); cursor: pointer; }
 
 /* ---------- people search + inline add ---------- */
 
-.people-search {
-  position: relative; display: flex; align-items: center;
+/* Search and "add a person" are two controls, not one overloaded field: the
+   box shortens to leave room for the + beside it. */
+.people-search-row {
+  display: flex; align-items: center; gap: var(--sp-2);
   margin-bottom: var(--sp-5);
 }
-.people-search:has(~ .add-suggestion),
-.people-search:has(~ .add-person-quick) { margin-bottom: var(--sp-3); }
+.people-search-row:has(~ .add-person-quick) { margin-bottom: var(--sp-3); }
+.people-search {
+  position: relative; display: flex; align-items: center;
+  flex: 1; min-width: 0;
+}
+
+.people-add-btn {
+  flex: 0 0 auto; width: 42px; height: 42px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--card); color: var(--green-deep);
+  transition: background var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease),
+              color var(--duration-fast) var(--ease);
+}
+.people-add-btn:hover { background: var(--green-tint); border-color: var(--green); }
+.people-add-btn.active {
+  background: var(--green); border-color: var(--green); color: var(--btn-ink);
+}
 
 .people-search-icon {
   position: absolute; left: 13px; display: inline-flex;
@@ -570,7 +602,7 @@ button { font-family: var(--body); cursor: pointer; }
   border: none; background: transparent; color: var(--ink-soft);
   font-size: 19px; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
-  transition: background var(--duration-fast), color var(--duration-fast);
+  transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
 }
 .people-search-clear:hover { background: var(--line); color: var(--ink); }
 
@@ -581,9 +613,9 @@ button { font-family: var(--body); cursor: pointer; }
   background: var(--green-tint);
   border: 1px dashed var(--green); border-radius: var(--radius);
   color: var(--green-deep); font-size: var(--fs-base);
-  transition: background var(--duration-fast);
+  transition: background var(--duration-fast) var(--ease);
 }
-.add-suggestion:hover { background: color-mix(in srgb, var(--green) 16%, transparent); }
+.add-suggestion:hover { background: color-mix(in srgb, var(--green) 16%, var(--card)); }
 .add-suggestion b { font-weight: 700; }
 .add-suggestion-plus {
   display: inline-flex; align-items: center; justify-content: center;
@@ -592,8 +624,9 @@ button { font-family: var(--body); cursor: pointer; }
   font-size: 16px; line-height: 1; font-weight: 600;
 }
 
-/* Inline new-person panel: name (from the search box) plus amount + reason,
-   so a person and their opening balance are recorded in one step. */
+/* Inline new-person panel, opened by the + beside the search: a name plus an
+   optional amount + reason, so a person and their opening balance are
+   recorded in one step. */
 .add-person-quick {
   display: flex; flex-direction: column; gap: 10px;
   width: 100%; margin-bottom: var(--sp-5);
@@ -606,6 +639,16 @@ button { font-family: var(--body); cursor: pointer; }
   color: var(--green-deep); font-size: var(--fs-base);
 }
 .add-person-quick-head b { font-weight: 700; }
+.add-person-quick-head span:not(.add-suggestion-plus) { flex: 1; }
+.add-person-quick-close {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+  border: none; background: transparent; color: var(--ink-soft);
+  font-size: 14px; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+}
+.add-person-quick-close:hover { background: var(--line); color: var(--ink); }
+.add-person-name { width: 100%; }
 .add-person-quick .quick-add { min-width: 0; }
 .add-person-quick .quick-add input[type="number"] { flex: 0 0 110px; }
 .add-person-quick-hint { color: var(--ink-soft); font-size: var(--fs-sm); }
@@ -709,6 +752,9 @@ button { font-family: var(--body); cursor: pointer; }
 @media (min-width: 681px) {
   .quick-add { flex-direction: row; align-items: center; }
   .quick-add-main { flex-wrap: nowrap; }
+  /* the amount field holds its width — squeezed, it clipped its own
+     placeholder to "amoun" on the narrower desktop widths */
+  .quick-add input[type="number"] { flex: 0 0 90px; }
   .quick-add .qa-reason { width: auto; flex: 1 1 90px; min-width: 80px; }
 }
 
@@ -720,7 +766,7 @@ button { font-family: var(--body); cursor: pointer; }
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   padding: 7px 8px;
-  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+  transition: border-color var(--duration-fast) var(--ease), box-shadow var(--duration-fast) var(--ease);
 }
 .quick-add input[type="number"]:hover { border-color: var(--ink-soft); }
 .quick-add input[type="number"]:focus {
@@ -735,7 +781,7 @@ button { font-family: var(--body); cursor: pointer; }
   border-bottom: 1px solid var(--line);
   border-radius: 0;
   padding: 6px 4px;
-  transition: border-color var(--duration-fast), background var(--duration-fast);
+  transition: border-color var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease);
 }
 .quick-add .qa-reason:hover { border-bottom-color: var(--line-strong); }
 .quick-add .qa-reason:focus {
@@ -748,7 +794,7 @@ button { font-family: var(--body); cursor: pointer; }
   background: transparent;
   color: var(--ink-soft);
   border-color: var(--line-strong);
-  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+  transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
 }
 .quick-add .btn.plus:hover { color: var(--green-deep); border-color: var(--green); }
 .quick-add .btn.minus:hover { color: var(--ink); border-color: var(--ink-soft); }
@@ -763,7 +809,7 @@ button { font-family: var(--body); cursor: pointer; }
   background: transparent; color: var(--red);
   border-color: transparent; margin-left: auto;
 }
-.btn.quiet-danger:hover { background: color-mix(in srgb, var(--red) 10%, transparent); border-color: var(--red); }
+.btn.quiet-danger:hover { background: var(--red-tint); border-color: var(--red); }
 
 /* ---------- groups ---------- */
 
@@ -774,7 +820,7 @@ button { font-family: var(--body); cursor: pointer; }
   border: 1px solid var(--line); border-radius: var(--radius);
   padding: var(--sp-4); cursor: pointer;
   text-align: left; width: 100%;
-  transition: border-color var(--duration-fast);
+  transition: border-color var(--duration-fast) var(--ease);
 }
 .group-card:hover { border-color: var(--green); box-shadow: 0 2px 12px var(--shadow-card); }
 .group-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-2); }
@@ -807,7 +853,7 @@ button { font-family: var(--body); cursor: pointer; }
   padding: 8px 14px; border: 1px solid var(--line-strong); border-radius: var(--pill);
   cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent;
   font-size: var(--fs-sm); font-weight: 500; position: relative;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
 }
 .name-tile-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12em; }
 .name-tile:has(input:checked) { background: var(--green-tint); border-color: var(--green); }
@@ -875,19 +921,29 @@ button { font-family: var(--body); cursor: pointer; }
 }
 
 .xfer-preview {
-  background: var(--bg); border: 1px dashed var(--line-strong);
-  border-radius: var(--radius-sm); padding: var(--sp-3) 14px; margin: 2px 0 var(--sp-3);
+  background: var(--bg); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); padding: var(--sp-2) 14px; margin: 2px 0 var(--sp-3);
   font-size: var(--fs-sm);
 }
+/* One row = one name and one signed figure. The name can't push the figure
+   off the row (it ellipsises instead) and the row never wraps, so the column
+   of amounts stays a column you can read straight down. */
 .xfer-line {
-  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-  padding: 3px 0;
+  display: flex; align-items: baseline; gap: var(--sp-3);
+  padding: 4px 0; border-bottom: 1px solid var(--line);
 }
+.xfer-line:last-child { border-bottom: 0; }
+.xfer-who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .xfer-line b { color: var(--ink); font-weight: 600; }
-.xfer-arrow { color: var(--ink-soft); }
-.xfer-delta { font-family: var(--mono); font-size: var(--fs-cap); font-weight: 600; margin-left: auto; }
+.xfer-note { color: var(--ink-soft); font-size: var(--fs-cap); }
+.xfer-delta {
+  flex: none; font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
 .xfer-delta.pos { color: var(--green); }
 .xfer-delta.neg { color: var(--red); }
+.xfer-delta.muted { color: var(--ink-soft); }
+.xfer-via { font-style: italic; white-space: nowrap; }
 .xfer-warn { color: var(--amber); font-size: var(--fs-cap); margin-top: var(--sp-2); }
 
 /* split-expense preview: a header line above the per-person shares */
@@ -897,17 +953,11 @@ button { font-family: var(--body); cursor: pointer; }
   border-bottom: 1px solid var(--line);
 }
 
-.xfer-names { display: block; font-size: var(--fs-base); }
-.xfer-sub { display: block; font-size: var(--fs-cap); margin-top: 2px; }
-.xfer-via { font-style: italic; white-space: nowrap; }
-
 /* ---------- modal ---------- */
 
 .modal-overlay {
   position: fixed; inset: 0; z-index: 50;
   background: var(--overlay);
-  -webkit-backdrop-filter: blur(9px);
-  backdrop-filter: blur(9px);
   display: flex; align-items: flex-start; justify-content: center;
   padding: calc(env(safe-area-inset-top, 0px) + 40px) var(--sp-4) 40px; overflow-y: auto;
 }
@@ -916,33 +966,80 @@ button { font-family: var(--body); cursor: pointer; }
   background: var(--card); border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg); max-width: 700px; width: 100%;
   padding: var(--sp-6);
+  box-shadow: 0 18px 48px var(--shadow-modal);
 }
+/* The card takes focus when it opens (so the keyboard lands inside it), which
+   would otherwise draw the browser's own focus ring around the whole popup —
+   a heavy black outline nobody asked for. The controls inside keep their
+   rings; this is the container, and it's already unmissable. */
+.modal:focus { outline: none; }
 
 /* first-run cloud-sync prompt: a compact decision card, narrower than the
    data-entry modals. */
 .modal-cloud-prompt { max-width: 460px; }
 
-/* split picker: header, amount/note fields and the Record button stay put;
-   only the list of people scrolls. */
+/* ---------- split pickers (who paid / who shares) ----------
+   Both questions are the same list of name tiles, folded into a dropdown that
+   reads as one control when closed: label on the left, the current choice on
+   the right, chevron at the end. */
+.pick-drop {
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--card); margin-bottom: var(--sp-3);
+}
+.pick-drop-head {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 11px 14px; cursor: pointer; list-style: none;
+  border-radius: var(--radius);
+  font-size: var(--fs-base);
+}
+.pick-drop-head::-webkit-details-marker { display: none; }
+.pick-drop-head:hover { background: var(--bg); }
+.pick-drop-label { font-weight: 600; color: var(--green-deep); flex: none; }
+.pick-drop-value {
+  flex: 1; min-width: 0; text-align: right; color: var(--ink-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pick-drop-chevron {
+  width: 18px; height: 18px; flex: none; fill: none;
+  stroke: var(--ink-soft); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  transition: transform var(--duration-normal) var(--ease);
+}
+.pick-drop[open] > .pick-drop-head { border-bottom: 1px solid var(--line); border-radius: var(--radius) var(--radius) 0 0; }
+.pick-drop[open] > .pick-drop-head .pick-drop-chevron { transform: rotate(180deg); }
+/* A <details> has nothing to transition from — its content simply isn't laid
+   out while closed — so opening it plays an entry animation instead. Same
+   curve and distance as everything else that arrives on screen. */
+.pick-drop[open] > .pick-drop-body,
+.settings-group[open] > .settings-group-body { animation: disclose var(--duration-normal) var(--ease) both; }
+@keyframes disclose {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
+/* the open list is inset from the dropdown's own border */
+.pick-drop-body { padding: var(--sp-3) 12px; }
+.pick-drop .share-pick-list { margin: 0; }
+.pick-drop .seg-control { margin-bottom: var(--sp-3); }
+/* "Paid by" is a fold-out you close again as soon as you've picked, so it is
+   capped rather than allowed to push the rest of the form down. */
+.pick-drop-list { max-height: 50vh; overflow-y: auto; }
+
+/* split picker: with both questions folded into dropdowns the form is short by
+   default, so it scrolls as one region rather than parking a scrollbar inside
+   the name list — the content of a <details> is not a flex item, so it cannot
+   carry the leftover height itself. */
 .modal-split { display: flex; flex-direction: column; max-height: calc(100vh - 80px); }
 .modal-split .split-intro { margin-bottom: 18px; }
-/* Breathing room between a field (e.g. the lender select) and the next
-   section heading below it, so headings like "Lent to" aren't cramped. */
-.modal-split .form-row + .subhead { margin-top: 18px; }
-.modal-split form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.modal-split .split-scroll {
+.modal-split form {
+  display: flex; flex-direction: column;
   flex: 1; min-height: 0; overflow-y: auto;
-  margin-bottom: var(--sp-4); padding-right: 4px;
 }
-/* More names can be below the fold: fade the bottom edge of a scrollable pick
-   list so a clean cut never reads as the end of the list. The padding keeps
-   the last row clear of the fade once you're scrolled all the way down. */
-.split-scroll, .share-scroll {
-  padding-bottom: 26px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
-}
-.modal-split .split-fixed { flex: none; }
+.modal-split .pick-drop, .modal-split .split-fixed { flex: none; }
+.modal-split .split-scroll { margin-bottom: var(--sp-4); }
+/* More names can be below the fold. This used to fade the bottom edge to
+   hint at it, but a fade is a half-transparent row — the name under it was
+   the hardest thing on the page to read. A plain scroll with a little room
+   at the end says the same thing without dimming anybody's name. */
+.share-scroll { padding-bottom: var(--sp-3); }
 .modal-split .split-fixed #split-preview { max-height: 28vh; overflow-y: auto; }
 
 /* share pickers: the title, preview and Share button stay put; only the
@@ -970,7 +1067,7 @@ button { font-family: var(--body); cursor: pointer; }
 }
 .modal-close:hover { color: var(--red); border-color: var(--red); }
 
-/* group share picker — member checklist, live preview (backdrop blur inherited from .modal-overlay)
+/* group share picker — member checklist, live preview
    Each name is its own bordered tile with air between rows — picking one turns
    its border and fill green, so the choice reads at a glance instead of as a
    joined checklist. */
@@ -978,13 +1075,14 @@ button { font-family: var(--body); cursor: pointer; }
 .share-pick-row {
   display: flex; align-items: center; gap: var(--sp-3);
   padding: 11px 14px; border: 1px solid var(--line); cursor: pointer;
-  border-radius: var(--radius); transition: background 0.2s, border-color 0.2s;
+  border-radius: var(--radius); transition: background var(--duration-normal) var(--ease), border-color var(--duration-normal) var(--ease);
   -webkit-tap-highlight-color: transparent; position: relative;
 }
 /* Names are picked by tapping the tile, not a native checkbox: the input stays
    in the DOM (it carries the state and keyboard focus) but is invisible, and
    the sel-check tick circle beside it shows checked/unchecked instead. */
 .share-pick-row input[type="checkbox"],
+.share-pick-row input[type="radio"],
 .name-tile input[type="checkbox"] {
   position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none;
 }
@@ -994,7 +1092,7 @@ button { font-family: var(--body); cursor: pointer; }
 .share-pick-row input:focus-visible + .sel-check,
 .name-tile input:focus-visible + .sel-check { outline: 2px solid var(--green); outline-offset: 2px; }
 /* a picked tile fills green, same language as the create-group name tiles */
-.share-pick-row:has(input[type="checkbox"]:checked) {
+.share-pick-row:has(input:checked) {
   background: var(--green-tint); border-color: var(--green);
 }
 .share-pick-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1049,12 +1147,12 @@ button { font-family: var(--body); cursor: pointer; }
 .hist-tag { padding: 2px 7px; border-radius: var(--pill); }
 .hist-tag.lent { color: var(--green); background: var(--green-tint); }
 .hist-tag.paid { color: var(--ink-soft); background: var(--tag-neutral); }
-.hist-tag.indirect { color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, transparent); margin-left: var(--sp-1); }
-.hist-tag.split { color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); margin-left: var(--sp-1); }
+.hist-tag.indirect { color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, var(--card)); margin-left: var(--sp-1); }
+.hist-tag.split { color: var(--gold); background: color-mix(in srgb, var(--gold) 16%, var(--card)); margin-left: var(--sp-1); }
 .interest-tag { color: var(--gold); }
 /* virtual interest charges: accrued day-by-day, not yet capitalized — shown
    tinted and italic so they read as projections, not committed ledger entries */
-.virtual-interest { background: color-mix(in srgb, var(--gold) 7%, transparent); }
+.virtual-interest { background: color-mix(in srgb, var(--gold) 9%, var(--card)); }
 .virtual-interest td { font-style: italic; }
 .hist-amount { display: none; }   /* shown only on mobile cards */
 
@@ -1067,7 +1165,7 @@ button { font-family: var(--body); cursor: pointer; }
   color: var(--ink-soft); cursor: pointer;
   background: var(--card); border: 1px solid var(--line-strong);
   border-radius: var(--pill); padding: 7px 14px; margin-bottom: var(--sp-3);
-  transition: color var(--duration-fast), border-color var(--duration-fast);
+  transition: color var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
 }
 .cal-toggle:hover, .cal-toggle:focus-visible { color: var(--green-deep); border-color: var(--green); }
 .cal-toggle.open { color: var(--green-deep); }
@@ -1094,7 +1192,7 @@ button { font-family: var(--body); cursor: pointer; }
   border: 1px solid var(--line); background: var(--bg); color: var(--ink);
   font-size: 18px; line-height: 1; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  -webkit-tap-highlight-color: transparent; transition: background 0.15s, border-color 0.15s;
+  -webkit-tap-highlight-color: transparent; transition: background var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
 }
 .cal-nav:hover { background: var(--green-tint); border-color: var(--line-strong); }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
@@ -1111,7 +1209,7 @@ button { font-family: var(--body); cursor: pointer; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   color: var(--ink); font-size: var(--fs-sm); font-variant-numeric: tabular-nums;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
 }
 .cal-day:hover { background: var(--green-tint); }
 .cal-day.has-entries { font-weight: 600; }
@@ -1164,7 +1262,7 @@ button { font-family: var(--body); cursor: pointer; }
 /* long-press to start selecting: row tints while held */
 .history-table tr[data-txn-id],
 .ledger-table tr[data-member-id],
-.ledger-table tr[data-person-id] { transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
+.ledger-table tr[data-person-id] { transition: background var(--duration-normal) var(--ease); -webkit-tap-highlight-color: transparent; }
 /* the whole ledger tile is tappable (opens the person), not just the name */
 .ledger-table:not(.history-table) tr[data-person-id] { cursor: pointer; }
 /* select mode keeps the page's full layout so nothing jumps; the tile's own
@@ -1192,7 +1290,7 @@ button { font-family: var(--body); cursor: pointer; }
 .sel-check {
   display: inline-block; width: 20px; height: 20px; border-radius: 50%;
   border: 2px solid var(--line-strong); margin-right: 9px; vertical-align: -4px;
-  position: relative; flex: 0 0 auto; transition: background 0.15s, border-color 0.15s;
+  position: relative; flex: 0 0 auto; transition: background var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
 }
 .sel-check.on,
 input:checked + .sel-check { background: var(--green); border-color: var(--green); }
@@ -1222,7 +1320,7 @@ input:checked + .sel-check::after {
   display: inline-flex; align-items: center; justify-content: center;
   width: 42px; height: 42px; border-radius: var(--radius-lg);
   background: var(--danger); color: #fff; border: none; cursor: pointer;
-  transition: transform 0.1s, background 0.15s, opacity 0.15s;
+  transition: transform var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease), opacity var(--duration-fast) var(--ease);
 }
 .select-bin:hover { background: var(--danger-hover); }
 .select-bin:active { transform: scale(0.94); }
@@ -1233,20 +1331,20 @@ input:checked + .sel-check::after {
   display: inline-flex; align-items: center; justify-content: center;
   width: 42px; height: 42px; border-radius: var(--radius-lg);
   background: var(--green); color: var(--btn-ink); border: none; cursor: pointer;
-  transition: transform 0.1s, filter 0.15s, opacity 0.15s;
+  transition: transform var(--duration-fast) var(--ease), filter var(--duration-fast) var(--ease), opacity var(--duration-fast) var(--ease);
 }
 .select-share:hover { filter: brightness(1.08); }
 .select-share:active { transform: scale(0.94); }
 .select-share:disabled { opacity: 0.4; cursor: not-allowed; }
 .select-share svg { width: 20px; height: 20px; }
 
-/* delete confirmation with blurred backdrop */
+/* delete confirmation on its own opaque backdrop */
 .confirm-overlay {
   position: fixed; inset: 0; z-index: 200;
   display: flex; align-items: center; justify-content: center; padding: var(--sp-5);
   background: var(--overlay);
-  -webkit-backdrop-filter: blur(9px); backdrop-filter: blur(9px);
-  animation: fade 0.18s ease both;
+
+  animation: fade var(--duration-normal) var(--ease) both;
 }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .confirm-card {
@@ -1254,11 +1352,12 @@ input:checked + .sel-check::after {
   background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
   padding: 22px; max-width: 360px; width: 100%;
   box-shadow: 0 18px 50px var(--shadow-modal);
-  animation: rise 0.2s ease both;
+  animation: rise var(--duration-slow) var(--ease-out-expo) both;
 }
 .confirm-close { position: absolute; top: 14px; right: 14px; }
 .confirm-card h3 { padding-right: 38px; }
-@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.confirm-card:focus { outline: none; }
+@keyframes rise { from { opacity: 0; transform: translateY(12px) scale(0.985); } to { opacity: 1; transform: none; } }
 .confirm-card h3 { font-family: var(--display); font-size: var(--fs-h2); color: var(--green-deep); margin-bottom: var(--sp-1); }
 .btn.block { display: block; width: 100%; margin-top: var(--sp-3); text-align: center; }
 .confirm-hint { font-size: var(--fs-cap); color: var(--ink-soft); margin: 6px 2px 0; }
@@ -1367,7 +1466,7 @@ input:checked + .sel-check::after {
   border-radius: var(--pill);
   font-family: var(--body); font-size: var(--fs-base); font-weight: 500;
   color: var(--ink-soft); cursor: pointer;
-  transition: background var(--duration-fast), color var(--duration-fast);
+  transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
 }
 .seg:hover { color: var(--ink); }
 .seg.active {
@@ -1385,16 +1484,16 @@ input:checked + .sel-check::after {
 /* ---------- keyboard focus ----------
    One consistent emerald ring on every control reached by keyboard. */
 .btn:focus-visible, .tab-btn:focus-visible, .bnav-item:focus-visible,
-.drawer-item:focus-visible, .seg:focus-visible,
-.group-card:focus-visible, .person-name:focus-visible, .hamburger:focus-visible {
+.nav-icon-btn:focus-visible, .seg:focus-visible,
+.group-card:focus-visible, .person-name:focus-visible {
   outline: 2px solid var(--green); outline-offset: 2px;
 }
 
 /* ---------- reduced motion ----------
-   The tokens drive most transitions; the blanket rule catches the hard-coded
-   durations (drawer slide, modal rise, toast) without changing any end state. */
+   The tokens drive every transition now; the blanket rule is the backstop for
+   any animation that names its own duration. No end state changes. */
 @media (prefers-reduced-motion: reduce) {
-  :root { --duration-fast: 0ms; --duration-normal: 0ms; }
+  :root { --duration-fast: 0ms; --duration-normal: 0ms; --duration-slow: 0ms; }
   *, *::before, *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
@@ -1430,8 +1529,8 @@ input:checked + .sel-check::after {
   .btn { padding: 11px 16px; }
   .btn.small { padding: 10px 14px; font-size: var(--fs-sm); }
   .tab-btn { padding: 12px var(--sp-3); }
-  .hamburger { width: 44px; height: 44px; }
   .people-search-clear { width: 44px; height: 44px; }
+  .people-add-btn { width: 44px; height: 44px; }
 
   /* Pin the primary navigation. The ledger runs ~2.5 screens even for a
      handful of people, so a static masthead means Ledger/Groups/History and
@@ -1449,31 +1548,10 @@ input:checked + .sel-check::after {
   }
   .wordmark { font-size: var(--fs-h1); }
 
-  /* The menu opens as a bottom sheet on the phone — it's triggered from the
-     bottom nav, so it rises from the same edge the thumb is already on,
-     instead of sliding in from the left like the desktop drawer. */
-  .drawer {
-    top: auto; left: 0; right: 0; bottom: 0;
-    width: 100%; max-width: none;
-    max-height: 80vh; max-height: 80dvh;
-    padding-top: var(--sp-5);
-    padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
-    border-right: none; border-top: 1px solid var(--line-strong);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    box-shadow: 0 -10px 30px var(--shadow-bar);
-    transform: translateY(100%);
-  }
-  .drawer.open { transform: translateY(0); }
-  /* grab handle — signals "this is a sheet you can dismiss downward" */
-  .drawer::before {
-    content: ""; position: absolute; top: 8px; left: 50%;
-    transform: translateX(-50%);
-    width: 36px; height: 4px; border-radius: 2px;
-    background: var(--line-strong);
-  }
-  /* primary navigation lives in the bottom bar on the phone */
-  .tabbar { display: none; }
-  .hamburger { display: none; }
+  /* primary navigation lives in the bottom bar on the phone, which carries
+     Settings in its last (bottom-right) slot — so the floating gear, which
+     would sit on top of it, stands down. Account stays in the masthead. */
+  .tabbar-row { display: none; }
   .bottom-nav { display: flex; }
   /* bottom padding clears the fixed nav bar */
   .view { padding: 18px 14px calc(104px + env(safe-area-inset-bottom, 0px)); }
@@ -1491,6 +1569,24 @@ input:checked + .sel-check::after {
     margin-bottom: var(--sp-3);
   }
 
+  .balance-strip { gap: var(--sp-4); }
+  .modal-overlay { padding: var(--sp-4) var(--sp-2); }
+  .modal { padding: var(--sp-4); }
+  .modal-split,
+  .modal-share { max-height: calc(100vh - 2 * var(--sp-4)); }
+  .form-row { row-gap: var(--sp-2); }
+  input[type="date"] { width: auto; }
+  /* when the person-modal action row wraps, keep the destructive "Delete person"
+     in flow (left-aligned on its own line) instead of floating alone, right-edged */
+  .modal .form-row .btn.quiet-danger { margin-left: 0; }
+}
+
+/* ---------- narrow tables become stacked cards ----------
+   The ledger and history tables need about 880px before every column fits.
+   Below that they stack into one card per row instead of running off the
+   side of the screen — so this breakpoint is wider than the phone one above,
+   which is about thumb reach and navigation, not column widths. */
+@media (max-width: 900px) {
   /* tables become stacked cards */
   .ledger-table thead { display: none; }
   .ledger-table, .ledger-table tbody, .ledger-table tr, .ledger-table td { display: block; width: 100%; }
@@ -1546,17 +1642,6 @@ input:checked + .sel-check::after {
   .history-table td[data-label="Group"] .chip {
     background: none; border: none; padding: 0; color: var(--ink-soft);
   }
-
-  .balance-strip { gap: var(--sp-4); }
-  .modal-overlay { padding: var(--sp-4) var(--sp-2); }
-  .modal { padding: var(--sp-4); }
-  .modal-split,
-  .modal-share { max-height: calc(100vh - 2 * var(--sp-4)); }
-  .form-row { row-gap: var(--sp-2); }
-  input[type="date"] { width: auto; }
-  /* when the person-modal action row wraps, keep the destructive "Delete person"
-     in flow (left-aligned on its own line) instead of floating alone, right-edged */
-  .modal .form-row .btn.quiet-danger { margin-left: 0; }
 }
 
 /* ---------- notifications settings ---------- */
@@ -1576,16 +1661,20 @@ input:checked + .sel-check::after {
 .notif-row input[type="number"] { width: 90px; }
 .notif-value { color: var(--ink-soft); }
 
-/* ---------- toast (slides down from the top) ---------- */
+/* ---------- toast (rises from the bottom) ----------
+   It used to drop in from the top, where it landed on the multi-select bar —
+   two things saying different things in the same strip of screen. The bottom
+   edge is free: the toast clears the phone's nav bar, and the top chrome is
+   never covered by it. */
 
 .toast-stack {
   position: fixed;
-  top: 0; left: 50%;
+  bottom: 0; left: 50%;
   transform: translateX(-50%);
   z-index: 200;
-  display: flex; flex-direction: column; gap: var(--sp-2);
+  display: flex; flex-direction: column-reverse; gap: var(--sp-2);
   align-items: center;
-  padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--sp-5));
   width: max-content; max-width: 92vw;
   pointer-events: none;
 }
@@ -1599,11 +1688,17 @@ input:checked + .sel-check::after {
   box-shadow: 0 8px 24px var(--shadow-toast);
   text-align: center;
   opacity: 0;
-  transform: translateY(-20px);
-  transition: opacity var(--duration-normal), transform var(--duration-normal) var(--ease-out-expo);
+  transform: translateY(20px);
+  transition: opacity var(--duration-normal) var(--ease), transform var(--duration-normal) var(--ease-out-expo);
   pointer-events: auto;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
+
+/* On the phone the bottom edge belongs to the nav bar, so the toast stops
+   above it. (Declared here, after the base rule, so it actually wins.) */
+@media (max-width: 680px) {
+  .toast-stack { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 78px); }
+}
 
 /* history col-person: keep [check][name] left, amount right (mobile) */
 .history-table td.col-person { display: flex; align-items: center; justify-content: flex-start; }

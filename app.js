@@ -19,6 +19,8 @@ const ui = {
   calendarOpen: false,      // history calendar collapsed by default so the register leads
   renamingGroup: false,
   creatingGroup: false,     // group-create panel revealed
+  addingPerson: false,      // ledger add-a-person panel revealed (the + beside the search)
+  addPersonName: '',        // name typed into that panel (survives the re-render a search keystroke causes)
   selectMode: false,        // history multi-select for deletion
   selected: new Set(),      // selected transaction ids
   confirmDelete: false,     // delete-confirmation overlay open
@@ -30,7 +32,7 @@ const ui = {
   confirmDeletePeople: false, // delete-people confirmation overlay open
   confirmClearDebt: null,   // person id whose clear-debt confirmation overlay is open
   cloudPromptOpen: false,   // first-run "sync across devices?" popup open
-  drawerOpen: false,        // hamburger navigation drawer open
+  settingsOpen: new Set(),  // keys of the expanded Settings sections (survives re-render)
   scheduledSnoozed: new Set(), // scheduled-debt ids the user said "remind me later" to this session
 };
 
@@ -93,17 +95,16 @@ function peopleByName() {
 }
 
 /* ---------- theme ----------
-   The user's choice ('light' | 'dark' | 'device') lives in settings.
-   We resolve it to a concrete light/dark value, stamp <html data-theme>
-   (styles.css overrides the palette tokens for "dark"), and keep the
-   address-bar/status-bar colour in step. On "device" we follow the OS
-   and update live when it flips. */
+   The user's choice ('light' | 'dark') lives in settings, and light is the
+   default — the app picks a look rather than inheriting the OS one. We stamp
+   it on <html data-theme> (styles.css overrides the palette tokens for
+   "dark") and keep the address-bar/status-bar colour in step. */
 
-/* The flat colour the translucent masthead composites to, mirroring the
-   --bar-bg token in styles.css (read from there when it's available, so the
-   two can't drift). Chrome paints the status bar of the installed app with
-   this via the theme-color meta. */
-const THEME_BAR_COLOR = { light: '#fdfefd', dark: '#121212' };
+/* The masthead's flat colour, mirroring the --bar-bg token in styles.css
+   (read from there when it's available, so the two can't drift). Chrome
+   paints the status bar of the installed app with this via the theme-color
+   meta. */
+const THEME_BAR_COLOR = { light: '#ffffff', dark: '#171917' };
 
 /* iOS ignores theme-color entirely and offers only these three status-bar
    styles. 'default' is a white bar with black symbols, which matches the light
@@ -122,14 +123,10 @@ function barColor(theme) {
   return THEME_BAR_COLOR[theme];
 }
 
-function prefersDark() {
-  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-}
-
+/* Anything that isn't an explicit 'dark' reads as light, so a ledger saved
+   under the old 'device' setting simply lands on the light default. */
 function resolvedTheme() {
-  const pref = (state && state.settings && state.settings.theme) || 'device';
-  if (pref === 'light' || pref === 'dark') return pref;
-  return prefersDark() ? 'dark' : 'light';
+  return (state && state.settings && state.settings.theme) === 'dark' ? 'dark' : 'light';
 }
 
 function applyTheme() {
@@ -140,12 +137,6 @@ function applyTheme() {
   if (meta) meta.setAttribute('content', barColor(theme));
   const iosBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
   if (iosBar) iosBar.setAttribute('content', IOS_BAR_STYLE[theme]);
-}
-
-if (window.matchMedia) {
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    if (((state && state.settings && state.settings.theme) || 'device') === 'device') applyTheme();
-  });
 }
 
 /* ---------- back-button / gesture navigation ----------
@@ -160,7 +151,7 @@ if (window.matchMedia) {
 let navDepth = 0;
 
 function navState() {
-  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, splitOpen: ui.splitOpen, shareGroupId: ui.shareGroupId, sharePeopleOpen: ui.sharePeopleOpen, selectMode: ui.selectMode, memberSelect: ui.memberSelect, personSelect: ui.personSelect, drawerOpen: ui.drawerOpen, cloudPromptOpen: ui.cloudPromptOpen, confirmDelete: ui.confirmDelete, confirmRemoveMembers: ui.confirmRemoveMembers, confirmDeletePeople: ui.confirmDeletePeople, confirmClearDebt: ui.confirmClearDebt, calendarOpen: ui.calendarOpen };
+  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, splitOpen: ui.splitOpen, shareGroupId: ui.shareGroupId, sharePeopleOpen: ui.sharePeopleOpen, selectMode: ui.selectMode, memberSelect: ui.memberSelect, personSelect: ui.personSelect, cloudPromptOpen: ui.cloudPromptOpen, confirmDelete: ui.confirmDelete, confirmRemoveMembers: ui.confirmRemoveMembers, confirmDeletePeople: ui.confirmDeletePeople, confirmClearDebt: ui.confirmClearDebt, calendarOpen: ui.calendarOpen };
 }
 
 function pushNav() {
@@ -188,31 +179,15 @@ function applyNav(s) {
   ui.confirmClearDebt = (s && s.confirmClearDebt) || null;
   ui.calendarOpen = !!(s && s.calendarOpen);
   ui.cloudPromptOpen = !!(s && s.cloudPromptOpen);
-  ui.drawerOpen = !!(s && s.drawerOpen);
 }
 
 function goBack() { history.back(); }
-
-/* A drawer nav item wants to switch tabs, but the drawer owns the top history
-   entry — so we pop it first (closing the drawer) and run the navigation once
-   popstate settles, avoiding a pushState/popstate race. */
-let pendingDrawerNav = null;
-
-/* The drawer lives in static DOM (not re-rendered), so reconcile it to the
-   nav state after a back/forward restore. */
-function syncDrawer() {
-  const shown = document.body.classList.contains('menu-open');
-  if (ui.drawerOpen && !shown) openDrawer();
-  else if (!ui.drawerOpen && shown) closeDrawer();
-}
 
 window.addEventListener('popstate', e => {
   const s = e.state && e.state.tally ? e.state : { tab: 'ledger', depth: 0 };
   navDepth = s.depth || 0;
   applyNav(s);
-  syncDrawer();
   render();
-  if (pendingDrawerNav) { const t = pendingDrawerNav; pendingDrawerNav = null; navigateTab(t); }
 });
 
 /* ---------- notifications plumbing ---------- */
@@ -379,18 +354,19 @@ function renderLedger() {
   const people = state.people
     .filter(p => !q || p.name.toLowerCase().includes(q))
     .sort(byName);
-  const exactMatch = state.people.some(p => p.name.toLowerCase() === q);
-  const showAdd = query.length > 0 && !exactMatch;
 
-  /* The "add a new person" prompt. When the search matches existing people it
-     sits *below* the matches (the existing names come first); only when nothing
-     matches does it become the first/only option. */
-  const addPersonBlock = showAdd ? `
+  /* Adding someone is its own button — the + beside the search box — rather
+     than something the search field quietly doubles as. It opens this panel:
+     a name, and optionally the amount that starts them off. */
+  const addPersonBlock = ui.addingPerson ? `
       <div class="add-person-quick">
         <div class="add-person-quick-head">
           <span class="add-suggestion-plus" aria-hidden="true">+</span>
-          <span>Add “<b>${esc(query)}</b>” as a new person</span>
+          <span>Add a new person</span>
+          <button type="button" class="add-person-quick-close" data-action="cancel-add-person" aria-label="Cancel">✕</button>
         </div>
+        <input id="new-person-name" class="add-person-name" placeholder="name" maxlength="40"
+          value="${esc(ui.addPersonName)}" autocomplete="off">
         ${QuickAdd({ idSuffix: 'new', action: 'add-person-entry', titles: true })}
         <span class="add-person-quick-hint">Leave the amount blank to just add the name.</span>
       </div>` : '';
@@ -464,12 +440,16 @@ function renderLedger() {
     </div>
     <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− repaid</em>, like a spreadsheet row.</p>
 
-    <form id="person-search" data-form="person-search" class="people-search" role="search">
-      <span class="people-search-icon" aria-hidden="true">${Icons.search()}</span>
-      <input id="search-box" name="q" placeholder="Search people, or type a new name to add…" value="${esc(ui.search)}" autocomplete="off">
-      ${query ? `<button type="button" class="people-search-clear" data-action="clear-search" aria-label="Clear search">×</button>` : ''}
-    </form>
-    ${people.length ? '' : addPersonBlock}
+    <div class="people-search-row">
+      <form id="person-search" data-form="person-search" class="people-search" role="search">
+        <span class="people-search-icon" aria-hidden="true">${Icons.search()}</span>
+        <input id="search-box" name="q" placeholder="Search people…" value="${esc(ui.search)}" autocomplete="off">
+        ${query ? `<button type="button" class="people-search-clear" data-action="clear-search" aria-label="Clear search">×</button>` : ''}
+      </form>
+      <button type="button" class="people-add-btn${ui.addingPerson ? ' active' : ''}" data-action="add-person-open"
+        aria-label="Add a person" title="Add a person" aria-expanded="${ui.addingPerson}">${Icons.plus()}</button>
+    </div>
+    ${addPersonBlock}
 
     ${people.length ? `
     <div class="list-share">
@@ -487,13 +467,13 @@ function renderLedger() {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    ${ui.personSelect ? '' : addPersonBlock}` : (state.people.length === 0
+` : (state.people.length === 0
       ? EmptyState(`
           <div class="empty-mark" aria-hidden="true">${Icons.ledgerMark()}</div>
           <h3 class="empty-title">Your ledger is empty</h3>
           <p class="empty-copy">Add the first person you’ve lent to or borrowed from. Everything stays in this browser — nothing is uploaded.</p>
-          <button class="btn" data-action="focus-search">+ Add your first person</button>`, 'empty-onboard')
-      : EmptyState(`No one matches “${esc(query)}”.${showAdd ? ' Add them with the button above.' : ''}`))}
+          <button class="btn" data-action="add-person-open">+ Add your first person</button>`, 'empty-onboard')
+      : EmptyState(`No one matches “${esc(query)}”. Add them with the + beside the search box.`))}
   `;
 }
 
@@ -1344,15 +1324,8 @@ function performDeletePeople() {
   showToast(`${n} ${n === 1 ? 'person' : 'people'} deleted`);
 }
 
-/* Reads a balance as a phrase for the split preview's before/after lines. */
-function balancePhrase(n, currency) {
-  if (n > 0.005) return `owes you ${fmtMoney(n, currency)}`;
-  if (n < -0.005) return `you owe ${fmtMoney(-n, currency)}`;
-  return 'settled';
-}
-
 /* ---------- split expense ----------
-   A popup over a blurred page: pick who paid, tick who shares the cost, enter
+   A popup over the page: pick who paid, tick who shares the cost, enter
    the total, and a live preview shows each person's exact share before it's
    recorded. Paid by Me: each share becomes its own "they owe you" entry
    (tagged SPLIT). Paid by someone else: each share is routed through you as a
@@ -1401,55 +1374,58 @@ function splitPreviewHTML(payerId, ids, amt, includeMe, own) {
   if (payer) currencies.push(payer.currency);
   const multiCurrency = new Set(currencies).size > 1;
   const headCur = includeMe ? baseCur : people[0] ? people[0].currency : baseCur;
+  const payerCur = payer ? payer.currency : baseCur;
   const head = `<div class="split-head">${n} ${n === 1 ? 'person' : 'people'}${
-    multiCurrency ? '' : ` · ${fmtMoney(amt, headCur)} total`}${
-    payer ? ` · paid by ${esc(payer.name)}` : ''}</div>`;
-  const ownTag = k => Number.isFinite(ownMap[k]) ? ' <span class="pick-own-tag">own amount</span>' : '';
+    multiCurrency ? '' : ` · ${fmtMoney(amt, headCur)} total`} · paid by ${
+    payer ? esc(payer.name) : 'you'}</div>`;
+  const ownTag = k => Number.isFinite(ownMap[k]) ? '<span class="pick-own-tag">own amount</span>' : '';
 
-  /* Your own line. Paid by Me: your share is just what you covered for
-     yourself. Paid by someone else: your share is new debt to the payer. */
-  const meLine = includeMe ? (payer ? `
-    <div class="xfer-line">
-      <span><b>Me</b> · ${esc(payer.name)} covered your share${ownTag('me')}</span>
-      <span class="xfer-delta neg">you owe +${fmtMoney(shares.me, payer.currency)}</span>
-    </div>` : `
-    <div class="xfer-line">
-      <span><b>Me</b> · your share${ownTag('me')}</span>
-      <span class="xfer-delta">${fmtMoney(shares.me, baseCur)}</span>
-    </div>`) : '';
+  /* What the person who paid is out of pocket for everyone else: the shares
+     that actually become debts (their own ticked share is nobody's debt). */
+  const covered = people.filter(p => !payer || p.id !== payer.id)
+    .reduce((s, p) => s + shares[p.id], 0) + (includeMe && payer ? shares.me : 0);
 
-  /* Everyone else's share lands as "they owe you" — either directly (you
-     paid) or routed through you (someone else paid). The payer's own ticked
-     share counts toward the division but is nobody's debt. */
-  const lines = people.map(p => {
-    if (payer && p.id === payer.id) {
-      return `
+  /* One row per person, and the row is a name and a signed figure — nothing
+     else. The sign carries the whole meaning: + is money moving towards you,
+     − is money moving away, and an unsigned figure is your own share, which
+     is a cost rather than a balance change. Spelling that out as sentences
+     ("Bob owes you ₹0.00 → owes you ₹25.00") only buried the number. */
+  const line = (name, tag, delta, cls) => `
     <div class="xfer-line">
-      <span><b>${esc(p.name)}</b> · their own share${ownTag(p.id)}</span>
-      <span class="xfer-delta">${fmtMoney(shares[p.id], p.currency)}</span>
+      <span class="xfer-who"><b>${name}</b>${tag ? ' ' + tag : ''}</span>
+      <span class="xfer-delta${cls ? ' ' + cls : ''}">${delta}</span>
     </div>`;
-    }
-    return `
-    <div class="xfer-line">
-      <span><b>${esc(p.name)}</b> owes you${ownTag(p.id)}</span>
-      <span class="xfer-delta pos">+${fmtMoney(shares[p.id], p.currency)}</span>
-    </div>`;
-  }).join('');
 
-  /* Paid by someone else: their balance with you drops by everything they
-     covered for others (the recorded shares) — shown before → after. */
-  let payerLine = '';
-  if (payer) {
-    const drop = people.filter(p => p.id !== payer.id).reduce((s, p) => s + shares[p.id], 0)
-      + (includeMe ? shares.me : 0);
-    const before = totalOf(payer);
-    payerLine = `
-    <div class="xfer-line">
-      <span><b>${esc(payer.name)}</b> ${balancePhrase(before, payer.currency)}
-      <span class="xfer-arrow">→</span> ${balancePhrase(before - drop, payer.currency)}</span>
-      <span class="xfer-delta neg">−${fmtMoney(drop, payer.currency)}</span>
-    </div>`;
-  }
+  /* The payer leads, and gets the one row that isn't a share: the sum of what
+     they covered for everybody else, which is what their balance with you
+     moves by. If they're in the split themselves their own share rides along
+     as a note — it counts towards the division but is nobody's debt, so it
+     never belongs in the signed column. Covering nobody but yourself moves
+     nothing, so that figure is left off rather than printed as zero. */
+  const covers = covered > 0.005;
+  const payerKey = payer ? payer.id : 'me';
+  const payerShare = payer
+    ? (people.some(p => p.id === payer.id) ? shares[payer.id] : null)
+    : (includeMe ? shares.me : null);
+  const payerNote = payerShare == null ? ''
+    : `<span class="xfer-note">share ${fmtMoney(payerShare, payerCur)}</span> ${ownTag(payerKey)}`;
+  const payerLine = line(payer ? esc(payer.name) : 'Me', payerNote,
+    covers ? `${payer ? '−' : '+'}${fmtMoney(covered, payerCur)}` : '—',
+    covers ? (payer ? 'neg' : 'pos') : 'muted');
+
+  /* Everyone else's share becomes money they owe you — directly (you paid) or
+     routed through you (someone else paid). */
+  const lines = people.filter(p => !payer || p.id !== payer.id)
+    .map(p => line(esc(p.name), ownTag(p.id), `+${fmtMoney(shares[p.id], p.currency)}`, 'pos'))
+    .join('');
+
+  /* Your own row, only when you're sharing but didn't pay: the payer covered
+     your share, so it's added to what you owe them. When you did pay, your
+     share is the note on the payer row above. */
+  const meLine = includeMe && payer
+    ? line('Me', ownTag('me'), `−${fmtMoney(shares.me, payerCur)}`, 'neg')
+    : '';
+
   /* Individual amounts must fit the total; with everyone on their own figure
      they must reach it exactly, since nobody is left to absorb the remainder. */
   const short = !sharerCount && remainder > 0.005
@@ -1459,7 +1435,7 @@ function splitPreviewHTML(payerId, ids, amt, includeMe, own) {
   const mismatch = multiCurrency
     ? `<div class="xfer-warn">Selected people use different currencies — each share is applied in that person's own currency, nothing is converted.</div>`
     : '';
-  return head + meLine + lines + payerLine + short + over + mismatch;
+  return head + payerLine + lines + meLine + short + over + mismatch;
 }
 
 /* whether "Me" is ticked in the split picker */
@@ -1572,7 +1548,16 @@ function updateSplitPreview() {
     row.classList.toggle('has-own', own);
   });
 
-  node.innerHTML = splitPreviewHTML(form.payerId.value, splitSelectedIds(), parseFloat(form.amount.value), splitIncludesMe(), splitOwnMap());
+  const payerId = splitPayerId();
+  const ids = splitSelectedIds();
+  const me = splitIncludesMe();
+  // each collapsed picker shows what it currently holds
+  const payerSum = form.querySelector('[data-payer-summary]');
+  if (payerSum) payerSum.innerHTML = splitPayerLabel(payerId);
+  const memberSum = form.querySelector('[data-members-summary]');
+  if (memberSum) memberSum.innerHTML = splitMembersLabel(ids, me);
+
+  node.innerHTML = splitPreviewHTML(payerId, ids, parseFloat(form.amount.value), me, splitOwnMap());
 }
 
 /* Long-pressing someone in the split picker hands them their own amount box,
@@ -1621,14 +1606,41 @@ function freshSplitDraft() {
     payerId: 'me', selected: new Set(), me: false, amount: '',
     mode: 'equal', amounts: {}, meAmount: '', own: new Set(),
     date: new Date().toISOString().slice(0, 10), note: '', newName: '',
+    // which picker is expanded: "paid by" starts closed on its Me default,
+    // "split between" open, since ticking people is the point of the flow
+    open: { payer: false, members: true },
   };
+}
+
+/* Who paid, straight off the live picker. Both pickers are the same tile
+   list; the payer's tiles are radios, so only one is ever ticked. */
+function splitPayerId() {
+  const picked = document.querySelector('[data-split-payer]:checked');
+  return picked ? picked.value : 'me';
+}
+
+/* The one-line summary each collapsed picker shows, so the choice is readable
+   without opening it. */
+function splitPayerLabel(payerId) {
+  const p = payerId === 'me' ? null : getPerson(payerId);
+  return p ? esc(p.name) : 'Me';
+}
+
+function splitMembersLabel(ids, includeMe) {
+  const names = (includeMe ? ['Me'] : []).concat(ids.map(id => {
+    const p = getPerson(id);
+    return p ? esc(p.name) : null;
+  }).filter(Boolean));
+  if (!names.length) return '<span class="muted">nobody yet</span>';
+  if (names.length <= 3) return names.join(', ');
+  return `${names.slice(0, 2).join(', ')} + ${names.length - 2} more`;
 }
 
 function syncSplitDraft() {
   if (!ui.splitDraft) ui.splitDraft = freshSplitDraft();
   const form = document.querySelector('[data-form="add-split"]');
   if (form) {
-    ui.splitDraft.payerId = form.payerId.value;
+    ui.splitDraft.payerId = splitPayerId();
     ui.splitDraft.amount = form.amount.value;
     ui.splitDraft.date = form.date.value;
     ui.splitDraft.note = form.note.value;
@@ -1676,6 +1688,30 @@ function renderSplitModal() {
       ${chip}
     </div>`;
 
+  /* Both pickers are the same list of name tiles, each folded into a dropdown
+     that shows its current choice when closed. The only difference is the
+     hidden input behind each tile: radios for the one person who paid,
+     checkboxes for the several who share it. */
+  const payerRow = (key, name, chip) =>
+    `<div class="share-pick-row">
+      <label class="share-pick-main">
+        <input type="radio" name="payerId" value="${key}" data-split-payer ${draft.payerId === key ? 'checked' : ''}>
+        <span class="sel-check" aria-hidden="true"></span>
+        <span class="share-pick-name">${name}</span>
+      </label>
+      ${chip}
+    </div>`;
+
+  const picker = (key, label, summary, open, body) => `
+    <details class="pick-drop" data-pick-drop="${key}" ${open ? 'open' : ''}>
+      <summary class="pick-drop-head">
+        <span class="pick-drop-label">${label}</span>
+        <span class="pick-drop-value" data-${key}-summary>${summary}</span>
+        <svg class="pick-drop-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </summary>
+      <div class="pick-drop-body">${body}</div>
+    </details>`;
+
   /* "Me" — you can be one of the people sharing the cost. You pay your own
      share, so it only shrinks everyone else's; no debt is recorded for you. */
   const meRow = pickRow('me', 'Me',
@@ -1704,6 +1740,11 @@ function renderSplitModal() {
       <button type="button" class="btn ghost" data-action="split-add-person">+ Add</button>
     </div>`;
 
+  const payerRows = payerRow('me', 'Me', Chip(esc(state.settings.baseCurrency)))
+    + peopleByName().map(p => payerRow(p.id, esc(p.name), Chip(p.currency))).join('');
+
+  const openState = draft.open || (draft.open = { payer: false, members: true });
+
   root.innerHTML = Modal({
     overlayId: 'split-overlay',
     modalCls: 'modal-split',
@@ -1713,18 +1754,13 @@ function renderSplitModal() {
       <p class="section-sub split-intro">Pick who paid, tick who shares the cost, and enter the total. If you paid, each share is recorded as money they owe you; if someone else paid, the shares are routed through you and the payer's balance drops by what they covered. Long-press anyone for their own amount; the rest re-split what's left.</p>
 
       <form data-form="add-split">
-        <h3 class="subhead">Paid by</h3>
-        <div class="form-row tight">
-          <select name="payerId" style="flex:1">
-            <option value="me" ${draft.payerId === 'me' ? 'selected' : ''}>Me</option>
-            ${peopleByName().map(p =>
-              `<option value="${p.id}" ${p.id === draft.payerId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
-          </select>
-        </div>
+        ${picker('payer', 'Paid by', splitPayerLabel(draft.payerId), openState.payer,
+          `<div class="share-pick-list pick-drop-list">${payerRows}</div>`)}
 
-        <h3 class="subhead" style="margin-top:14px">Split between</h3>
-        ${modeBar}
-        <div class="share-pick-list split-scroll">${meRow}${rows}${addRow}</div>
+        ${picker('members', 'Split between',
+          splitMembersLabel([...sel].filter(getPerson), draft.me), openState.members,
+          `${modeBar}
+          <div class="share-pick-list split-scroll">${meRow}${rows}${addRow}</div>`)}
 
         <div class="split-fixed">
           <div class="form-row">
@@ -1745,7 +1781,7 @@ function renderSplitModal() {
 }
 
 /* ---------- share pickers ----------
-   A popup over a blurred page: a checklist of people with a live preview of
+   A popup over the page: a checklist of people with a live preview of
    exactly what will be shared. Nothing is persisted — the choice is made
    fresh each time. The group picker (below) starts with every member ticked
    and excludes unticked ones; the Ledger picker starts with nobody ticked
@@ -1880,20 +1916,19 @@ function updateSharePreview() {
 
 /* ---------- appearance / theme ---------- */
 const THEME_OPTIONS = [
-  ['light',  'Light'],
-  ['dark',   'Dark'],
-  ['device', 'Device default'],
+  ['light', 'Light'],
+  ['dark',  'Dark'],
 ];
 
 function appearancePanel() {
-  const current = (state.settings && state.settings.theme) || 'device';
+  const current = resolvedTheme();
   const seg = ([value, label]) =>
     `<button type="button" class="seg${value === current ? ' active' : ''}" data-action="set-theme" data-theme="${value}" aria-pressed="${value === current}">${label}</button>`;
   return Panel({
     title: 'Appearance',
     body: `
       <div class="seg-control" role="group" aria-label="Theme">${THEME_OPTIONS.map(seg).join('')}</div>
-      <p class="muted">Pick a fixed look, or follow your device’s light/dark setting.</p>`,
+      <p class="muted">Tally opens light unless you switch it here — it doesn’t follow your device’s setting.</p>`,
   });
 }
 
@@ -1947,12 +1982,16 @@ function dataPanel() {
    tappable cards (like the iPhone Settings app): each card shows an icon tile,
    the section name and a one-line summary of what's inside, so the page opens
    as a short, scannable list rather than one long stack of panels. Each card is
-   a collapsible disclosure — tapping it expands just that section. Native
-   <details>/<summary> handles the toggling, so the open/closed state survives
-   re-renders without any extra wiring. */
+   a collapsible disclosure — tapping it expands just that section.
+
+   Which sections are open is app state, not just DOM state: changing a setting
+   commits and re-renders the whole view, which would otherwise rebuild every
+   <details> closed and snap the section shut under the user mid-adjustment.
+   ui.settingsOpen holds the open keys; the toggle listener below keeps it in
+   step with what the user opens and closes. */
 function renderSettings() {
-  const group = (icon, title, desc, body) => `
-    <details class="settings-group">
+  const group = (key, icon, title, desc, body) => `
+    <details class="settings-group" data-settings-group="${key}" ${ui.settingsOpen.has(key) ? 'open' : ''}>
       <summary class="settings-group-title">
         <span class="settings-group-icon">${icon}</span>
         <span class="settings-group-text">
@@ -1969,17 +2008,18 @@ function renderSettings() {
     <p class="section-sub">Your ledger lives in this browser — nothing leaves it unless you turn on cloud sync (under Account) or export it.</p>
 
     <div class="settings-list">
-      ${group(Icons.sliders(), 'Preferences', 'Theme, currency &amp; rounding', appearancePanel() + currencyPanel())}
-      ${group(Icons.bell(), 'Alerts', 'Reminders for what you’re owed', notificationsPanel())}
-      ${group(Icons.percent(), 'Interest', 'How balances grow over time', interestRulesPanel())}
-      ${group(Icons.database(), 'Your data', 'Back up, export or erase', dataPanel())}
+      ${group('preferences', Icons.sliders(), 'Preferences', 'Theme, currency &amp; rounding', appearancePanel() + currencyPanel())}
+      ${group('alerts', Icons.bell(), 'Alerts', 'Reminders for what you’re owed', notificationsPanel())}
+      ${group('interest', Icons.percent(), 'Interest', 'How balances grow over time', interestRulesPanel())}
+      ${group('data', Icons.database(), 'Your data', 'Back up, export or erase', dataPanel())}
     </div>
   `;
 }
 
 /* Account: sign-in and cloud sync, split out of Settings so it has its own
-   place in the drawer. The heavy lifting still lives in cloud.js; this is
-   just the page wrapper around cloudSyncPanel(). */
+   menu — the user button in the masthead's top-right corner. The heavy
+   lifting still lives in cloud.js; this is just the page wrapper around
+   cloudSyncPanel(). */
 function renderAccount() {
   return `
     <h2 class="section-title">Account</h2>
@@ -2130,7 +2170,7 @@ function renderModal() {
 function render() {
   updateConnectivity();
 
-  document.querySelectorAll('.drawer-item, .tab-btn, .bnav-item').forEach(t => {
+  document.querySelectorAll('.tab-btn, .bnav-item, .nav-icon-btn').forEach(t => {
     const on = t.dataset.tab === ui.tab;
     t.classList.toggle('active', on);
     if (on) t.setAttribute('aria-current', 'page');
@@ -2282,7 +2322,17 @@ document.addEventListener('click', e => {
     }
 
     case 'clear-search': ui.search = ''; render(); document.getElementById('search-box')?.focus(); break;
-    case 'focus-search': document.getElementById('search-box')?.focus(); break;
+
+    case 'add-person-open':
+      ui.addingPerson = true;
+      render();
+      document.getElementById('new-person-name')?.focus();
+      break;
+    case 'cancel-add-person':
+      ui.addingPerson = false;
+      ui.addPersonName = '';
+      render();
+      break;
 
     /* History calendar: collapse/expand, pick a day to filter, page months,
        jump to today, clear. */
@@ -2384,9 +2434,14 @@ document.addEventListener('click', e => {
     case 'cancel-rename': ui.renamingGroup = false; render(); break;
 
     case 'add-person-entry': {
-      const name = ui.search.trim();
-      if (!name) { document.getElementById('search-box')?.focus(); return; }
-      if (state.people.some(p => p.name.toLowerCase() === name.toLowerCase())) return;
+      const field = document.getElementById('new-person-name');
+      const name = (field?.value ?? ui.addPersonName).trim();
+      if (!name) { field?.focus(); return; }
+      if (state.people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+        alert(`${name} is already on the ledger.`);
+        field?.focus();
+        return;
+      }
       const person = addPerson(name, state.settings.baseCurrency);
       const amt = parseFloat(document.getElementById('qa-new')?.value);
       // Amount is optional: with one, record the opening entry; without, just add the name.
@@ -2397,9 +2452,10 @@ document.addEventListener('click', e => {
         addTransaction({ personId: person.id, amount: signed, note });
         maybeCelebrate(person.id, 0);
       }
-      ui.search = '';
+      // stay open, cleared, so several people can be added in a row
+      ui.addPersonName = '';
       commit();
-      document.getElementById('search-box')?.focus();
+      document.getElementById('new-person-name')?.focus();
       break;
     }
 
@@ -2572,17 +2628,11 @@ document.addEventListener('submit', e => {
   const fd = new FormData(form);
 
   switch (form.dataset.form) {
-    case 'person-search': {
-      const name = (fd.get('q') || '').trim();
-      if (!name) return;
-      // Enter on a name that already exists just keeps filtering — no duplicate.
-      if (state.people.some(p => p.name.toLowerCase() === name.toLowerCase())) return;
-      addPerson(name, state.settings.baseCurrency);
-      ui.search = '';
-      commit();
-      document.getElementById('search-box')?.focus();
+    /* Search only filters — adding someone is the + button beside it, so
+       Enter here can't quietly create a person you were only looking for. */
+    case 'person-search':
+      document.getElementById('search-box')?.blur();
       break;
-    }
 
     case 'add-group': {
       const name = fd.get('name').trim();
@@ -2813,11 +2863,39 @@ document.addEventListener('change', e => {
       : Math.max(0, parseFloat(e.target.value) || 0);
     commit();
   }
+  /* Only one person can have paid, so picking one is the end of that
+     question — the dropdown folds back up the way a native select would. */
+  if (e.target.matches('[data-split-payer]')) {
+    const drop = e.target.closest('details.pick-drop');
+    if (drop) drop.open = false;
+  }
   if (e.target.closest('[data-form="add-split"]')) { syncSplitDraft(); updateSplitPreview(); }
   if (e.target.matches('[data-share-member]')) updateSharePreview();
 });
 
+/* Remember which disclosures are expanded. `toggle` doesn't bubble, so this
+   listens in the capture phase — the document still sees it on its way down to
+   the <details>.
+
+   Settings: everything that changes a setting re-renders the view, and
+   renderSettings reopens exactly what's in ui.settingsOpen, so a section never
+   shuts itself while the user is still adjusting it. The split pickers are the
+   same story — adding a person mid-flow re-renders the modal. */
+document.addEventListener('toggle', e => {
+  const d = e.target;
+  if (!d.matches) return;
+  if (d.matches('details.settings-group[data-settings-group]')) {
+    if (d.open) ui.settingsOpen.add(d.dataset.settingsGroup);
+    else ui.settingsOpen.delete(d.dataset.settingsGroup);
+  } else if (d.matches('details.pick-drop[data-pick-drop]') && ui.splitDraft) {
+    if (!ui.splitDraft.open) ui.splitDraft.open = {};
+    ui.splitDraft.open[d.dataset.pickDrop] = d.open;
+  }
+}, true);
+
 document.addEventListener('input', e => {
+  // held in ui so a search keystroke's re-render doesn't wipe a half-typed name
+  if (e.target.id === 'new-person-name') ui.addPersonName = e.target.value;
   if (e.target.id === 'search-box') {
     ui.search = e.target.value;
     const pos = e.target.selectionStart;
@@ -2849,6 +2927,14 @@ document.addEventListener('input', e => {
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
 
+  // Enter on the ledger's new-person name adds them, with whatever amount is
+  // typed beside it — same verb as the "+ lent" button the panel leads with.
+  if (e.target.id === 'new-person-name') {
+    e.preventDefault();
+    document.querySelector('[data-action="add-person-entry"][data-sign="1"]')?.click();
+    return;
+  }
+
   // the add-person field lives inside the split form; Enter should add the
   // person, not submit the whole split
   if (e.target.id === 'split-new-name') {
@@ -2866,37 +2952,12 @@ document.addEventListener('keydown', e => {
   if (btn) { e.preventDefault(); btn.click(); }
 });
 
-/* ---------- navigation drawer (hamburger menu) ---------- */
+/* ---------- top-level navigation ---------- */
 
-function openDrawer() {
-  const d = document.getElementById('drawer');
-  const s = document.getElementById('drawer-scrim');
-  s.hidden = false;
-  // Two frames so the off-screen start position is painted before we
-  // transition in — otherwise the slide/fade is skipped.
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    d.classList.add('open'); s.classList.add('open');
-  }));
-  d.setAttribute('aria-hidden', 'false');
-  document.getElementById('menu-toggle').setAttribute('aria-expanded', 'true');
-  document.body.classList.add('menu-open');
-}
-
-function closeDrawer() {
-  const d = document.getElementById('drawer');
-  const s = document.getElementById('drawer-scrim');
-  if (!d.classList.contains('open')) return;
-  d.classList.remove('open'); s.classList.remove('open');
-  d.setAttribute('aria-hidden', 'true');
-  document.getElementById('menu-toggle').setAttribute('aria-expanded', 'false');
-  document.body.classList.remove('menu-open');
-  // hide the scrim only after the fade-out so it can't swallow taps mid-close
-  setTimeout(() => { if (!d.classList.contains('open')) s.hidden = true; }, 260);
-}
-
-/* Switch top-level views. Shared by the drawer items and the wordmark
-   (which acts as "home"). Mirrors the old tab-bar behaviour: returning to
-   the Ledger floor unwinds the back stack so the next OS-back exits. */
+/* Switch top-level views. Shared by the tab bars, the two corner menus
+   (Account top-right, Settings bottom-right) and the wordmark (which acts as
+   "home"): returning to the Ledger floor unwinds the back stack so the next
+   OS-back exits. */
 function navigateTab(newTab) {
   const drilledIn = ui.openGroupId || ui.modalPersonId ||
     ui.splitOpen || ui.shareGroupId || ui.sharePeopleOpen || ui.selectMode ||
@@ -2913,6 +2974,7 @@ function navigateTab(newTab) {
   ui.sharePeopleOpen = false;
   ui.splitOpen = false;
   ui.renamingGroup = false;
+  ui.addingPerson = false;
   ui.selectMode = false;
   ui.selected = new Set();
   ui.confirmDelete = false;
@@ -2928,21 +2990,11 @@ function navigateTab(newTab) {
   render();
 }
 
-// Opening pushes a history entry so the OS back button/gesture closes the
-// drawer; every close route pops that entry (popstate → syncDrawer closes it).
-document.getElementById('menu-toggle').addEventListener('click', () => {
-  ui.drawerOpen = true;
-  openDrawer();
-  pushNav();
-});
-document.getElementById('menu-close').addEventListener('click', () => { if (ui.drawerOpen) goBack(); });
-document.getElementById('drawer-scrim').addEventListener('click', () => { if (ui.drawerOpen) goBack(); });
-
-document.getElementById('drawer-nav').addEventListener('click', e => {
-  const item = e.target.closest('.drawer-item');
-  if (!item) return;
-  pendingDrawerNav = item.dataset.tab;   // navigate after the drawer entry pops
-  goBack();
+/* The two corner menus are plain destinations, not a shared drawer: Account
+   in the masthead's top-right corner, Settings in the bottom-right one (the
+   gear here on wide screens, the last slot of the bottom bar on the phone). */
+document.querySelectorAll('.nav-icon-btn[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => navigateTab(btn.dataset.tab));
 });
 
 // Top tab bar: the everyday views (Ledger/Groups/History) switch from here.
@@ -2952,16 +3004,9 @@ document.getElementById('tabbar').addEventListener('click', e => {
   navigateTab(btn.dataset.tab);
 });
 
-// Phone bottom bar: same views within thumb reach; the Menu item opens the
-// drawer (mirrors the hamburger), and the centre FAB carries data-action
-// ("open-split") so the delegated click handler picks it up.
+// Phone bottom bar: the same views within thumb reach, with Settings in the
+// last slot — the bottom-right corner the gear button holds on wide screens.
 document.getElementById('bottom-nav').addEventListener('click', e => {
-  if (e.target.closest('#bnav-menu')) {
-    ui.drawerOpen = true;
-    openDrawer();
-    pushNav();
-    return;
-  }
   const btn = e.target.closest('.bnav-item[data-tab]');
   if (btn) navigateTab(btn.dataset.tab);
 });
@@ -2973,12 +3018,11 @@ homeLink.addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigateTab('ledger'); }
 });
 
-/* Escape dismisses whatever is on top — the drawer or any popup — exactly the
-   way tapping its scrim does (so the scheduled-debt reminder snoozes and the
-   cloud prompt records its dismissal rather than reappearing). */
+/* Escape dismisses whatever popup is on top, exactly the way tapping its
+   scrim does (so the scheduled-debt reminder snoozes and the cloud prompt
+   records its dismissal rather than reappearing). */
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (ui.drawerOpen) { goBack(); return; }
   const sched = document.getElementById('scheduled-overlay');
   if (sched) {
     const id = sched.querySelector('[data-action="snooze-scheduled"]')?.dataset.id;
