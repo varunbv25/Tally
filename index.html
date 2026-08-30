@@ -21,15 +21,14 @@
 /* Stamp the theme before first paint to avoid a flash of the wrong palette,
    and colour the OS status bar to match it — Safari reads the Apple
    status-bar meta once at load, so it has to be right before we paint.
-   app.js re-applies all of this once state is loaded; keep the storage key,
-   the resolution logic and the two bar values in sync with applyTheme(). */
+   Light unless the saved setting says 'dark'; app.js re-applies all of this
+   once state is loaded. Keep the storage key, the resolution logic and the
+   two bar values in sync with applyTheme(). */
 (function () {
   try {
-    var pref = 'device';
     var raw = localStorage.getItem('tally-ledger-v1');
-    if (raw) { var s = JSON.parse(raw); if (s && s.settings && s.settings.theme) pref = s.settings.theme; }
-    var dark = pref === 'dark' || (pref === 'device' &&
-      window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var s = raw ? JSON.parse(raw) : null;
+    var dark = !!(s && s.settings && s.settings.theme === 'dark');
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', dark ? '#121212' : '#fdfefd');

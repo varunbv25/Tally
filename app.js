@@ -19,6 +19,8 @@ const ui = {
   calendarOpen: false,      // history calendar collapsed by default so the register leads
   renamingGroup: false,
   creatingGroup: false,     // group-create panel revealed
+  addingPerson: false,      // ledger add-a-person panel revealed (the + beside the search)
+  addPersonName: '',        // name typed into that panel (survives the re-render a search keystroke causes)
   selectMode: false,        // history multi-select for deletion
   selected: new Set(),      // selected transaction ids
   confirmDelete: false,     // delete-confirmation overlay open
@@ -93,11 +95,10 @@ function peopleByName() {
 }
 
 /* ---------- theme ----------
-   The user's choice ('light' | 'dark' | 'device') lives in settings.
-   We resolve it to a concrete light/dark value, stamp <html data-theme>
-   (styles.css overrides the palette tokens for "dark"), and keep the
-   address-bar/status-bar colour in step. On "device" we follow the OS
-   and update live when it flips. */
+   The user's choice ('light' | 'dark') lives in settings, and light is the
+   default — the app picks a look rather than inheriting the OS one. We stamp
+   it on <html data-theme> (styles.css overrides the palette tokens for
+   "dark") and keep the address-bar/status-bar colour in step. */
 
 /* The flat colour the translucent masthead composites to, mirroring the
    --bar-bg token in styles.css (read from there when it's available, so the
@@ -122,14 +123,10 @@ function barColor(theme) {
   return THEME_BAR_COLOR[theme];
 }
 
-function prefersDark() {
-  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-}
-
+/* Anything that isn't an explicit 'dark' reads as light, so a ledger saved
+   under the old 'device' setting simply lands on the light default. */
 function resolvedTheme() {
-  const pref = (state && state.settings && state.settings.theme) || 'device';
-  if (pref === 'light' || pref === 'dark') return pref;
-  return prefersDark() ? 'dark' : 'light';
+  return (state && state.settings && state.settings.theme) === 'dark' ? 'dark' : 'light';
 }
 
 function applyTheme() {
@@ -140,12 +137,6 @@ function applyTheme() {
   if (meta) meta.setAttribute('content', barColor(theme));
   const iosBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
   if (iosBar) iosBar.setAttribute('content', IOS_BAR_STYLE[theme]);
-}
-
-if (window.matchMedia) {
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    if (((state && state.settings && state.settings.theme) || 'device') === 'device') applyTheme();
-  });
 }
 
 /* ---------- back-button / gesture navigation ----------
@@ -363,18 +354,19 @@ function renderLedger() {
   const people = state.people
     .filter(p => !q || p.name.toLowerCase().includes(q))
     .sort(byName);
-  const exactMatch = state.people.some(p => p.name.toLowerCase() === q);
-  const showAdd = query.length > 0 && !exactMatch;
 
-  /* The "add a new person" prompt. When the search matches existing people it
-     sits *below* the matches (the existing names come first); only when nothing
-     matches does it become the first/only option. */
-  const addPersonBlock = showAdd ? `
+  /* Adding someone is its own button — the + beside the search box — rather
+     than something the search field quietly doubles as. It opens this panel:
+     a name, and optionally the amount that starts them off. */
+  const addPersonBlock = ui.addingPerson ? `
       <div class="add-person-quick">
         <div class="add-person-quick-head">
           <span class="add-suggestion-plus" aria-hidden="true">+</span>
-          <span>Add “<b>${esc(query)}</b>” as a new person</span>
+          <span>Add a new person</span>
+          <button type="button" class="add-person-quick-close" data-action="cancel-add-person" aria-label="Cancel">✕</button>
         </div>
+        <input id="new-person-name" class="add-person-name" placeholder="name" maxlength="40"
+          value="${esc(ui.addPersonName)}" autocomplete="off">
         ${QuickAdd({ idSuffix: 'new', action: 'add-person-entry', titles: true })}
         <span class="add-person-quick-hint">Leave the amount blank to just add the name.</span>
       </div>` : '';
@@ -448,12 +440,16 @@ function renderLedger() {
     </div>
     <p class="section-sub">Every person, every balance — across all groups. Positive means they owe you. Type an amount and hit <em>+ lent</em> or <em>− repaid</em>, like a spreadsheet row.</p>
 
-    <form id="person-search" data-form="person-search" class="people-search" role="search">
-      <span class="people-search-icon" aria-hidden="true">${Icons.search()}</span>
-      <input id="search-box" name="q" placeholder="Search people, or type a new name to add…" value="${esc(ui.search)}" autocomplete="off">
-      ${query ? `<button type="button" class="people-search-clear" data-action="clear-search" aria-label="Clear search">×</button>` : ''}
-    </form>
-    ${people.length ? '' : addPersonBlock}
+    <div class="people-search-row">
+      <form id="person-search" data-form="person-search" class="people-search" role="search">
+        <span class="people-search-icon" aria-hidden="true">${Icons.search()}</span>
+        <input id="search-box" name="q" placeholder="Search people…" value="${esc(ui.search)}" autocomplete="off">
+        ${query ? `<button type="button" class="people-search-clear" data-action="clear-search" aria-label="Clear search">×</button>` : ''}
+      </form>
+      <button type="button" class="people-add-btn${ui.addingPerson ? ' active' : ''}" data-action="add-person-open"
+        aria-label="Add a person" title="Add a person" aria-expanded="${ui.addingPerson}">${Icons.plus()}</button>
+    </div>
+    ${addPersonBlock}
 
     ${people.length ? `
     <div class="list-share">
@@ -471,13 +467,13 @@ function renderLedger() {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    ${ui.personSelect ? '' : addPersonBlock}` : (state.people.length === 0
+` : (state.people.length === 0
       ? EmptyState(`
           <div class="empty-mark" aria-hidden="true">${Icons.ledgerMark()}</div>
           <h3 class="empty-title">Your ledger is empty</h3>
           <p class="empty-copy">Add the first person you’ve lent to or borrowed from. Everything stays in this browser — nothing is uploaded.</p>
-          <button class="btn" data-action="focus-search">+ Add your first person</button>`, 'empty-onboard')
-      : EmptyState(`No one matches “${esc(query)}”.${showAdd ? ' Add them with the button above.' : ''}`))}
+          <button class="btn" data-action="add-person-open">+ Add your first person</button>`, 'empty-onboard')
+      : EmptyState(`No one matches “${esc(query)}”. Add them with the + beside the search box.`))}
   `;
 }
 
@@ -1573,7 +1569,16 @@ function updateSplitPreview() {
     row.classList.toggle('has-own', own);
   });
 
-  node.innerHTML = splitPreviewHTML(form.payerId.value, splitSelectedIds(), parseFloat(form.amount.value), splitIncludesMe(), splitOwnMap());
+  const payerId = splitPayerId();
+  const ids = splitSelectedIds();
+  const me = splitIncludesMe();
+  // each collapsed picker shows what it currently holds
+  const payerSum = form.querySelector('[data-payer-summary]');
+  if (payerSum) payerSum.innerHTML = splitPayerLabel(payerId);
+  const memberSum = form.querySelector('[data-members-summary]');
+  if (memberSum) memberSum.innerHTML = splitMembersLabel(ids, me);
+
+  node.innerHTML = splitPreviewHTML(payerId, ids, parseFloat(form.amount.value), me, splitOwnMap());
 }
 
 /* Long-pressing someone in the split picker hands them their own amount box,
@@ -1622,14 +1627,41 @@ function freshSplitDraft() {
     payerId: 'me', selected: new Set(), me: false, amount: '',
     mode: 'equal', amounts: {}, meAmount: '', own: new Set(),
     date: new Date().toISOString().slice(0, 10), note: '', newName: '',
+    // which picker is expanded: "paid by" starts closed on its Me default,
+    // "split between" open, since ticking people is the point of the flow
+    open: { payer: false, members: true },
   };
+}
+
+/* Who paid, straight off the live picker. Both pickers are the same tile
+   list; the payer's tiles are radios, so only one is ever ticked. */
+function splitPayerId() {
+  const picked = document.querySelector('[data-split-payer]:checked');
+  return picked ? picked.value : 'me';
+}
+
+/* The one-line summary each collapsed picker shows, so the choice is readable
+   without opening it. */
+function splitPayerLabel(payerId) {
+  const p = payerId === 'me' ? null : getPerson(payerId);
+  return p ? esc(p.name) : 'Me';
+}
+
+function splitMembersLabel(ids, includeMe) {
+  const names = (includeMe ? ['Me'] : []).concat(ids.map(id => {
+    const p = getPerson(id);
+    return p ? esc(p.name) : null;
+  }).filter(Boolean));
+  if (!names.length) return '<span class="muted">nobody yet</span>';
+  if (names.length <= 3) return names.join(', ');
+  return `${names.slice(0, 2).join(', ')} + ${names.length - 2} more`;
 }
 
 function syncSplitDraft() {
   if (!ui.splitDraft) ui.splitDraft = freshSplitDraft();
   const form = document.querySelector('[data-form="add-split"]');
   if (form) {
-    ui.splitDraft.payerId = form.payerId.value;
+    ui.splitDraft.payerId = splitPayerId();
     ui.splitDraft.amount = form.amount.value;
     ui.splitDraft.date = form.date.value;
     ui.splitDraft.note = form.note.value;
@@ -1677,6 +1709,30 @@ function renderSplitModal() {
       ${chip}
     </div>`;
 
+  /* Both pickers are the same list of name tiles, each folded into a dropdown
+     that shows its current choice when closed. The only difference is the
+     hidden input behind each tile: radios for the one person who paid,
+     checkboxes for the several who share it. */
+  const payerRow = (key, name, chip) =>
+    `<div class="share-pick-row">
+      <label class="share-pick-main">
+        <input type="radio" name="payerId" value="${key}" data-split-payer ${draft.payerId === key ? 'checked' : ''}>
+        <span class="sel-check" aria-hidden="true"></span>
+        <span class="share-pick-name">${name}</span>
+      </label>
+      ${chip}
+    </div>`;
+
+  const picker = (key, label, summary, open, body) => `
+    <details class="pick-drop" data-pick-drop="${key}" ${open ? 'open' : ''}>
+      <summary class="pick-drop-head">
+        <span class="pick-drop-label">${label}</span>
+        <span class="pick-drop-value" data-${key}-summary>${summary}</span>
+        <svg class="pick-drop-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </summary>
+      ${body}
+    </details>`;
+
   /* "Me" — you can be one of the people sharing the cost. You pay your own
      share, so it only shrinks everyone else's; no debt is recorded for you. */
   const meRow = pickRow('me', 'Me',
@@ -1705,6 +1761,11 @@ function renderSplitModal() {
       <button type="button" class="btn ghost" data-action="split-add-person">+ Add</button>
     </div>`;
 
+  const payerRows = payerRow('me', 'Me', Chip(esc(state.settings.baseCurrency)))
+    + peopleByName().map(p => payerRow(p.id, esc(p.name), Chip(p.currency))).join('');
+
+  const openState = draft.open || (draft.open = { payer: false, members: true });
+
   root.innerHTML = Modal({
     overlayId: 'split-overlay',
     modalCls: 'modal-split',
@@ -1714,18 +1775,13 @@ function renderSplitModal() {
       <p class="section-sub split-intro">Pick who paid, tick who shares the cost, and enter the total. If you paid, each share is recorded as money they owe you; if someone else paid, the shares are routed through you and the payer's balance drops by what they covered. Long-press anyone for their own amount; the rest re-split what's left.</p>
 
       <form data-form="add-split">
-        <h3 class="subhead">Paid by</h3>
-        <div class="form-row tight">
-          <select name="payerId" style="flex:1">
-            <option value="me" ${draft.payerId === 'me' ? 'selected' : ''}>Me</option>
-            ${peopleByName().map(p =>
-              `<option value="${p.id}" ${p.id === draft.payerId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
-          </select>
-        </div>
+        ${picker('payer', 'Paid by', splitPayerLabel(draft.payerId), openState.payer,
+          `<div class="share-pick-list pick-drop-list">${payerRows}</div>`)}
 
-        <h3 class="subhead" style="margin-top:14px">Split between</h3>
-        ${modeBar}
-        <div class="share-pick-list split-scroll">${meRow}${rows}${addRow}</div>
+        ${picker('members', 'Split between',
+          splitMembersLabel([...sel].filter(getPerson), draft.me), openState.members,
+          `${modeBar}
+          <div class="share-pick-list split-scroll">${meRow}${rows}${addRow}</div>`)}
 
         <div class="split-fixed">
           <div class="form-row">
@@ -1881,20 +1937,19 @@ function updateSharePreview() {
 
 /* ---------- appearance / theme ---------- */
 const THEME_OPTIONS = [
-  ['light',  'Light'],
-  ['dark',   'Dark'],
-  ['device', 'Device default'],
+  ['light', 'Light'],
+  ['dark',  'Dark'],
 ];
 
 function appearancePanel() {
-  const current = (state.settings && state.settings.theme) || 'device';
+  const current = resolvedTheme();
   const seg = ([value, label]) =>
     `<button type="button" class="seg${value === current ? ' active' : ''}" data-action="set-theme" data-theme="${value}" aria-pressed="${value === current}">${label}</button>`;
   return Panel({
     title: 'Appearance',
     body: `
       <div class="seg-control" role="group" aria-label="Theme">${THEME_OPTIONS.map(seg).join('')}</div>
-      <p class="muted">Pick a fixed look, or follow your device’s light/dark setting.</p>`,
+      <p class="muted">Tally opens light unless you switch it here — it doesn’t follow your device’s setting.</p>`,
   });
 }
 
@@ -2288,7 +2343,17 @@ document.addEventListener('click', e => {
     }
 
     case 'clear-search': ui.search = ''; render(); document.getElementById('search-box')?.focus(); break;
-    case 'focus-search': document.getElementById('search-box')?.focus(); break;
+
+    case 'add-person-open':
+      ui.addingPerson = true;
+      render();
+      document.getElementById('new-person-name')?.focus();
+      break;
+    case 'cancel-add-person':
+      ui.addingPerson = false;
+      ui.addPersonName = '';
+      render();
+      break;
 
     /* History calendar: collapse/expand, pick a day to filter, page months,
        jump to today, clear. */
@@ -2390,9 +2455,14 @@ document.addEventListener('click', e => {
     case 'cancel-rename': ui.renamingGroup = false; render(); break;
 
     case 'add-person-entry': {
-      const name = ui.search.trim();
-      if (!name) { document.getElementById('search-box')?.focus(); return; }
-      if (state.people.some(p => p.name.toLowerCase() === name.toLowerCase())) return;
+      const field = document.getElementById('new-person-name');
+      const name = (field?.value ?? ui.addPersonName).trim();
+      if (!name) { field?.focus(); return; }
+      if (state.people.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+        alert(`${name} is already on the ledger.`);
+        field?.focus();
+        return;
+      }
       const person = addPerson(name, state.settings.baseCurrency);
       const amt = parseFloat(document.getElementById('qa-new')?.value);
       // Amount is optional: with one, record the opening entry; without, just add the name.
@@ -2403,9 +2473,10 @@ document.addEventListener('click', e => {
         addTransaction({ personId: person.id, amount: signed, note });
         maybeCelebrate(person.id, 0);
       }
-      ui.search = '';
+      // stay open, cleared, so several people can be added in a row
+      ui.addPersonName = '';
       commit();
-      document.getElementById('search-box')?.focus();
+      document.getElementById('new-person-name')?.focus();
       break;
     }
 
@@ -2578,17 +2649,11 @@ document.addEventListener('submit', e => {
   const fd = new FormData(form);
 
   switch (form.dataset.form) {
-    case 'person-search': {
-      const name = (fd.get('q') || '').trim();
-      if (!name) return;
-      // Enter on a name that already exists just keeps filtering — no duplicate.
-      if (state.people.some(p => p.name.toLowerCase() === name.toLowerCase())) return;
-      addPerson(name, state.settings.baseCurrency);
-      ui.search = '';
-      commit();
-      document.getElementById('search-box')?.focus();
+    /* Search only filters — adding someone is the + button beside it, so
+       Enter here can't quietly create a person you were only looking for. */
+    case 'person-search':
+      document.getElementById('search-box')?.blur();
       break;
-    }
 
     case 'add-group': {
       const name = fd.get('name').trim();
@@ -2819,23 +2884,39 @@ document.addEventListener('change', e => {
       : Math.max(0, parseFloat(e.target.value) || 0);
     commit();
   }
+  /* Only one person can have paid, so picking one is the end of that
+     question — the dropdown folds back up the way a native select would. */
+  if (e.target.matches('[data-split-payer]')) {
+    const drop = e.target.closest('details.pick-drop');
+    if (drop) drop.open = false;
+  }
   if (e.target.closest('[data-form="add-split"]')) { syncSplitDraft(); updateSplitPreview(); }
   if (e.target.matches('[data-share-member]')) updateSharePreview();
 });
 
-/* Remember which Settings sections are expanded. `toggle` doesn't bubble, so
-   this listens in the capture phase — the document still sees it on its way
-   down to the <details>. Everything that changes a setting re-renders the
-   view, and renderSettings reopens exactly what's in ui.settingsOpen, so a
-   section never shuts itself while the user is still adjusting it. */
+/* Remember which disclosures are expanded. `toggle` doesn't bubble, so this
+   listens in the capture phase — the document still sees it on its way down to
+   the <details>.
+
+   Settings: everything that changes a setting re-renders the view, and
+   renderSettings reopens exactly what's in ui.settingsOpen, so a section never
+   shuts itself while the user is still adjusting it. The split pickers are the
+   same story — adding a person mid-flow re-renders the modal. */
 document.addEventListener('toggle', e => {
   const d = e.target;
-  if (!d.matches || !d.matches('details.settings-group[data-settings-group]')) return;
-  if (d.open) ui.settingsOpen.add(d.dataset.settingsGroup);
-  else ui.settingsOpen.delete(d.dataset.settingsGroup);
+  if (!d.matches) return;
+  if (d.matches('details.settings-group[data-settings-group]')) {
+    if (d.open) ui.settingsOpen.add(d.dataset.settingsGroup);
+    else ui.settingsOpen.delete(d.dataset.settingsGroup);
+  } else if (d.matches('details.pick-drop[data-pick-drop]') && ui.splitDraft) {
+    if (!ui.splitDraft.open) ui.splitDraft.open = {};
+    ui.splitDraft.open[d.dataset.pickDrop] = d.open;
+  }
 }, true);
 
 document.addEventListener('input', e => {
+  // held in ui so a search keystroke's re-render doesn't wipe a half-typed name
+  if (e.target.id === 'new-person-name') ui.addPersonName = e.target.value;
   if (e.target.id === 'search-box') {
     ui.search = e.target.value;
     const pos = e.target.selectionStart;
@@ -2866,6 +2947,14 @@ document.addEventListener('input', e => {
    spreadsheet-row feel. Shift+Enter records a repayment instead. */
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
+
+  // Enter on the ledger's new-person name adds them, with whatever amount is
+  // typed beside it — same verb as the "+ lent" button the panel leads with.
+  if (e.target.id === 'new-person-name') {
+    e.preventDefault();
+    document.querySelector('[data-action="add-person-entry"][data-sign="1"]')?.click();
+    return;
+  }
 
   // the add-person field lives inside the split form; Enter should add the
   // person, not submit the whole split
@@ -2906,6 +2995,7 @@ function navigateTab(newTab) {
   ui.sharePeopleOpen = false;
   ui.splitOpen = false;
   ui.renamingGroup = false;
+  ui.addingPerson = false;
   ui.selectMode = false;
   ui.selected = new Set();
   ui.confirmDelete = false;

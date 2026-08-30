@@ -49,7 +49,7 @@ function defaultState() {
     settings: {
       baseCurrency: 'INR',        // default currency for new people
       interestTz: null,           // UTC offset (minutes) interest charges are phased to; see interestOffset()
-      theme: 'device',            // 'light' | 'dark' | 'device' (follow OS preference)
+      theme: 'light',             // 'light' | 'dark' — the app's own look, not the OS one
       roundWhole: false,          // show every amount (incl. past entries & interest) as whole numbers
     },
   };
@@ -68,6 +68,9 @@ function loadState() {
     state = defaultState();
     saveState();
   }
+  /* The old 'device' setting is gone: normalise it (and any other stray value)
+     to the light default here, so everything downstream reads a real theme. */
+  if (state.settings.theme !== 'dark') state.settings.theme = 'light';
 }
 
 function saveState() {

@@ -516,12 +516,31 @@ button { font-family: var(--body); cursor: pointer; }
 
 /* ---------- people search + inline add ---------- */
 
-.people-search {
-  position: relative; display: flex; align-items: center;
+/* Search and "add a person" are two controls, not one overloaded field: the
+   box shortens to leave room for the + beside it. */
+.people-search-row {
+  display: flex; align-items: center; gap: var(--sp-2);
   margin-bottom: var(--sp-5);
 }
-.people-search:has(~ .add-suggestion),
-.people-search:has(~ .add-person-quick) { margin-bottom: var(--sp-3); }
+.people-search-row:has(~ .add-person-quick) { margin-bottom: var(--sp-3); }
+.people-search {
+  position: relative; display: flex; align-items: center;
+  flex: 1; min-width: 0;
+}
+
+.people-add-btn {
+  flex: 0 0 auto; width: 42px; height: 42px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--card); color: var(--green-deep);
+  transition: background var(--duration-fast), border-color var(--duration-fast),
+              color var(--duration-fast);
+}
+.people-add-btn:hover { background: var(--green-tint); border-color: var(--green); }
+.people-add-btn.active {
+  background: var(--green); border-color: var(--green); color: var(--btn-ink);
+}
 
 .people-search-icon {
   position: absolute; left: 13px; display: inline-flex;
@@ -560,8 +579,9 @@ button { font-family: var(--body); cursor: pointer; }
   font-size: 16px; line-height: 1; font-weight: 600;
 }
 
-/* Inline new-person panel: name (from the search box) plus amount + reason,
-   so a person and their opening balance are recorded in one step. */
+/* Inline new-person panel, opened by the + beside the search: a name plus an
+   optional amount + reason, so a person and their opening balance are
+   recorded in one step. */
 .add-person-quick {
   display: flex; flex-direction: column; gap: 10px;
   width: 100%; margin-bottom: var(--sp-5);
@@ -574,6 +594,16 @@ button { font-family: var(--body); cursor: pointer; }
   color: var(--green-deep); font-size: var(--fs-base);
 }
 .add-person-quick-head b { font-weight: 700; }
+.add-person-quick-head span:not(.add-suggestion-plus) { flex: 1; }
+.add-person-quick-close {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+  border: none; background: transparent; color: var(--ink-soft);
+  font-size: 14px; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+.add-person-quick-close:hover { background: var(--line); color: var(--ink); }
+.add-person-name { width: 100%; }
 .add-person-quick .quick-add { min-width: 0; }
 .add-person-quick .quick-add input[type="number"] { flex: 0 0 110px; }
 .add-person-quick-hint { color: var(--ink-soft); font-size: var(--fs-sm); }
@@ -890,27 +920,61 @@ button { font-family: var(--body); cursor: pointer; }
    data-entry modals. */
 .modal-cloud-prompt { max-width: 460px; }
 
-/* split picker: header, amount/note fields and the Record button stay put;
-   only the list of people scrolls. */
+/* ---------- split pickers (who paid / who shares) ----------
+   Both questions are the same list of name tiles, folded into a dropdown that
+   reads as one control when closed: label on the left, the current choice on
+   the right, chevron at the end. */
+.pick-drop {
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--card); margin-bottom: var(--sp-3);
+}
+.pick-drop-head {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 11px 14px; cursor: pointer; list-style: none;
+  border-radius: var(--radius);
+  font-size: var(--fs-base);
+}
+.pick-drop-head::-webkit-details-marker { display: none; }
+.pick-drop-head:hover { background: var(--bg); }
+.pick-drop-label { font-weight: 600; color: var(--green-deep); flex: none; }
+.pick-drop-value {
+  flex: 1; min-width: 0; text-align: right; color: var(--ink-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pick-drop-chevron {
+  width: 18px; height: 18px; flex: none; fill: none;
+  stroke: var(--ink-soft); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  transition: transform var(--duration-fast);
+}
+.pick-drop[open] > .pick-drop-head { border-bottom: 1px solid var(--line); border-radius: var(--radius) var(--radius) 0 0; }
+.pick-drop[open] > .pick-drop-head .pick-drop-chevron { transform: rotate(180deg); }
+/* the open list is inset from the dropdown's own border */
+.pick-drop .share-pick-list { margin: var(--sp-3) 12px; }
+.pick-drop .seg-control { margin: var(--sp-3) 12px 0; }
+/* "Paid by" is a fold-out you close again as soon as you've picked, so it is
+   capped rather than allowed to push the rest of the form down. */
+.pick-drop-list { max-height: 50vh; overflow-y: auto; }
+
+/* split picker: with both questions folded into dropdowns the form is short by
+   default, so it scrolls as one region rather than parking a scrollbar inside
+   the name list — the content of a <details> is not a flex item, so it cannot
+   carry the leftover height itself. */
 .modal-split { display: flex; flex-direction: column; max-height: calc(100vh - 80px); }
 .modal-split .split-intro { margin-bottom: 18px; }
-/* Breathing room between a field (e.g. the lender select) and the next
-   section heading below it, so headings like "Lent to" aren't cramped. */
-.modal-split .form-row + .subhead { margin-top: 18px; }
-.modal-split form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.modal-split .split-scroll {
+.modal-split form {
+  display: flex; flex-direction: column;
   flex: 1; min-height: 0; overflow-y: auto;
-  margin-bottom: var(--sp-4); padding-right: 4px;
 }
+.modal-split .pick-drop, .modal-split .split-fixed { flex: none; }
+.modal-split .split-scroll { margin-bottom: var(--sp-4); }
 /* More names can be below the fold: fade the bottom edge of a scrollable pick
    list so a clean cut never reads as the end of the list. The padding keeps
    the last row clear of the fade once you're scrolled all the way down. */
-.split-scroll, .share-scroll {
+.share-scroll {
   padding-bottom: 26px;
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
 }
-.modal-split .split-fixed { flex: none; }
 .modal-split .split-fixed #split-preview { max-height: 28vh; overflow-y: auto; }
 
 /* share pickers: the title, preview and Share button stay put; only the
@@ -953,6 +1017,7 @@ button { font-family: var(--body); cursor: pointer; }
    in the DOM (it carries the state and keyboard focus) but is invisible, and
    the sel-check tick circle beside it shows checked/unchecked instead. */
 .share-pick-row input[type="checkbox"],
+.share-pick-row input[type="radio"],
 .name-tile input[type="checkbox"] {
   position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none;
 }
@@ -962,7 +1027,7 @@ button { font-family: var(--body); cursor: pointer; }
 .share-pick-row input:focus-visible + .sel-check,
 .name-tile input:focus-visible + .sel-check { outline: 2px solid var(--green); outline-offset: 2px; }
 /* a picked tile fills green, same language as the create-group name tiles */
-.share-pick-row:has(input[type="checkbox"]:checked) {
+.share-pick-row:has(input:checked) {
   background: var(--green-tint); border-color: var(--green);
 }
 .share-pick-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1399,6 +1464,7 @@ input:checked + .sel-check::after {
   .btn.small { padding: 10px 14px; font-size: var(--fs-sm); }
   .tab-btn { padding: 12px var(--sp-3); }
   .people-search-clear { width: 44px; height: 44px; }
+  .people-add-btn { width: 44px; height: 44px; }
 
   /* Pin the primary navigation. The ledger runs ~2.5 screens even for a
      handful of people, so a static masthead means Ledger/Groups/History and

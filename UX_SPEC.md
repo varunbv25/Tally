@@ -6,7 +6,7 @@ architecture, the low-friction add-expense flow, edge-case handling, and
 accessibility rules — and maps each of them to how the shipped app implements
 them on both phone and desktop.
 
-Visual language: **dark slate (#121212) and clean white themes; emerald green
+Visual language: **clean white (default) and dark slate (#121212) themes; emerald green
 = money coming to you, coral-orange = money you owe.** The same two hues carry
 the same meaning in every view, in both themes.
 
@@ -21,14 +21,14 @@ a top tab bar with header actions.
 - **Dashboard (Ledger)** — the default view, answers "where do I stand?" in one glance
   - Total Balance hero card: net position, split into *You are owed* (emerald) and *You owe* (coral)
   - Per-person balance tiles: principal, interest, total; inline quick entry (amount → *+ lent* / *− repaid*)
-  - Search-or-add field: typing an unknown name becomes the "add person" affordance
+  - Search field (filters only) with a **+** button beside it that opens the add-a-person panel: name plus an optional opening amount
   - Long-press any tile → multi-select mode (share / delete from the top bar)
 - **Groups**
   - Group cards: name, member count, members, per-currency net for the group
   - Group detail: members, group history, share, rename, add/remove members
   - Note that per-group nets overlap and are not additive (one payment shows in every group)
 - **Add Expense (the centre FAB — a flow, not a place)**
-  - Split an expense (paid by you or anyone else, equal or custom shares, add a new person mid-flow; a payer other than Me records the shares as indirect payments)
+  - Split an expense: *Paid by* and *Split between* are the same list of name tiles, each folded into a dropdown (one radio pick, several ticks); equal or custom shares, add a new person mid-flow; a payer other than Me records the shares as indirect payments
   - Quick entry on any person tile (the one-line "spreadsheet row" path)
 - **Activity (History)**
   - Reverse-chronological register across everyone: lent / repaid / interest / split / indirect
@@ -61,7 +61,7 @@ you, no confirmation screen — the preview *was* the confirmation.
 - **Uneven cents.** Shares are computed in integer cents; the remainder after floor-division is distributed one cent at a time so the shares always sum *exactly* to the bill (₹100 ÷ 3 → 33.34 + 33.33 + 33.33). Property-tested in `tests/split.test.js` — no cent is ever lost or invented.
 - **Settling up offline.** Tally is local-first: every view renders from local storage and every action (settle included) commits locally and instantly. A quiet "Offline · showing saved data" pill appears in the header — reassurance, not an alarm — and cloud sync (if enabled) reconciles when connectivity returns. The user is never blocked from recording money because of the network.
 - **Adding a non-group member to a group bill.** The split flow accepts anyone: an *add a new person* field lives inside the picker, so the visiting friend is created, ticked, and included in one step — without polluting the group's membership. The debt lands on their personal ledger; the group's own history stays scoped to members.
-- **Empty states as onboarding.** A new account never sees a blank screen: the ledger shows a friendly card ("Your ledger is empty") with a single primary action, and explains the privacy model ("everything stays in this browser"). A search with no matches offers "Add ‘Name’ as a new person" instead of a dead end.
+- **Empty states as onboarding.** A new account never sees a blank screen: the ledger shows a friendly card ("Your ledger is empty") with a single primary action, and explains the privacy model ("everything stays in this browser"). A search with no matches points at the **+** beside the box instead of a dead end.
 - **Destructive actions.** Deletes and settlements always pass through a blurred confirmation card stating the consequence ("removed along with ALL of their transactions… cannot be undone"), with the safe action available and the OS back gesture as a cancel.
 - **Accidental gestures.** A long-press that moves >10px is cancelled (it was a scroll); a completed long-press swallows the ghost click behind it; one long-press produces exactly one haptic pulse.
 
