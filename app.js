@@ -30,7 +30,7 @@ const ui = {
   confirmDeletePeople: false, // delete-people confirmation overlay open
   confirmClearDebt: null,   // person id whose clear-debt confirmation overlay is open
   cloudPromptOpen: false,   // first-run "sync across devices?" popup open
-  drawerOpen: false,        // hamburger navigation drawer open
+  settingsOpen: new Set(),  // keys of the expanded Settings sections (survives re-render)
   scheduledSnoozed: new Set(), // scheduled-debt ids the user said "remind me later" to this session
 };
 
@@ -160,7 +160,7 @@ if (window.matchMedia) {
 let navDepth = 0;
 
 function navState() {
-  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, splitOpen: ui.splitOpen, shareGroupId: ui.shareGroupId, sharePeopleOpen: ui.sharePeopleOpen, selectMode: ui.selectMode, memberSelect: ui.memberSelect, personSelect: ui.personSelect, drawerOpen: ui.drawerOpen, cloudPromptOpen: ui.cloudPromptOpen, confirmDelete: ui.confirmDelete, confirmRemoveMembers: ui.confirmRemoveMembers, confirmDeletePeople: ui.confirmDeletePeople, confirmClearDebt: ui.confirmClearDebt, calendarOpen: ui.calendarOpen };
+  return { tally: true, depth: navDepth, tab: ui.tab, openGroupId: ui.openGroupId, modalPersonId: ui.modalPersonId, splitOpen: ui.splitOpen, shareGroupId: ui.shareGroupId, sharePeopleOpen: ui.sharePeopleOpen, selectMode: ui.selectMode, memberSelect: ui.memberSelect, personSelect: ui.personSelect, cloudPromptOpen: ui.cloudPromptOpen, confirmDelete: ui.confirmDelete, confirmRemoveMembers: ui.confirmRemoveMembers, confirmDeletePeople: ui.confirmDeletePeople, confirmClearDebt: ui.confirmClearDebt, calendarOpen: ui.calendarOpen };
 }
 
 function pushNav() {
@@ -188,31 +188,15 @@ function applyNav(s) {
   ui.confirmClearDebt = (s && s.confirmClearDebt) || null;
   ui.calendarOpen = !!(s && s.calendarOpen);
   ui.cloudPromptOpen = !!(s && s.cloudPromptOpen);
-  ui.drawerOpen = !!(s && s.drawerOpen);
 }
 
 function goBack() { history.back(); }
-
-/* A drawer nav item wants to switch tabs, but the drawer owns the top history
-   entry — so we pop it first (closing the drawer) and run the navigation once
-   popstate settles, avoiding a pushState/popstate race. */
-let pendingDrawerNav = null;
-
-/* The drawer lives in static DOM (not re-rendered), so reconcile it to the
-   nav state after a back/forward restore. */
-function syncDrawer() {
-  const shown = document.body.classList.contains('menu-open');
-  if (ui.drawerOpen && !shown) openDrawer();
-  else if (!ui.drawerOpen && shown) closeDrawer();
-}
 
 window.addEventListener('popstate', e => {
   const s = e.state && e.state.tally ? e.state : { tab: 'ledger', depth: 0 };
   navDepth = s.depth || 0;
   applyNav(s);
-  syncDrawer();
   render();
-  if (pendingDrawerNav) { const t = pendingDrawerNav; pendingDrawerNav = null; navigateTab(t); }
 });
 
 /* ---------- notifications plumbing ---------- */
@@ -1401,26 +1385,43 @@ function splitPreviewHTML(payerId, ids, amt, includeMe, own) {
   if (payer) currencies.push(payer.currency);
   const multiCurrency = new Set(currencies).size > 1;
   const headCur = includeMe ? baseCur : people[0] ? people[0].currency : baseCur;
+  const payerCur = payer ? payer.currency : baseCur;
   const head = `<div class="split-head">${n} ${n === 1 ? 'person' : 'people'}${
-    multiCurrency ? '' : ` · ${fmtMoney(amt, headCur)} total`}${
-    payer ? ` · paid by ${esc(payer.name)}` : ''}</div>`;
+    multiCurrency ? '' : ` · ${fmtMoney(amt, headCur)} total`} · paid by ${
+    payer ? esc(payer.name) : 'you'}</div>`;
   const ownTag = k => Number.isFinite(ownMap[k]) ? ' <span class="pick-own-tag">own amount</span>' : '';
 
-  /* Your own line. Paid by Me: your share is just what you covered for
-     yourself. Paid by someone else: your share is new debt to the payer. */
-  const meLine = includeMe ? (payer ? `
+  /* What the person who paid is out of pocket for everyone else: the shares
+     that actually become debts (their own ticked share is nobody's debt). */
+  const covered = people.filter(p => !payer || p.id !== payer.id)
+    .reduce((s, p) => s + shares[p.id], 0) + (includeMe && payer ? shares.me : 0);
+
+  /* The lender line leads the preview: who put the money in, and what it does
+     to their balance with you. Paid by someone else, their balance drops by
+     everything they covered — shown before → after. Paid by you, there is no
+     single balance to move, so it reads as the total you laid out and the part
+     of it coming back to you. Cover nobody but yourself and there is no
+     movement to report, so the figure is left off rather than shown as zero. */
+  const covers = covered > 0.005;
+  const lenderLine = payer ? (() => {
+    const before = totalOf(payer);
+    return `
     <div class="xfer-line">
-      <span><b>Me</b> · ${esc(payer.name)} covered your share${ownTag('me')}</span>
-      <span class="xfer-delta neg">you owe +${fmtMoney(shares.me, payer.currency)}</span>
-    </div>` : `
+      <span><b>${esc(payer.name)}</b> ${multiCurrency ? '' : `paid ${fmtMoney(amt, payerCur)}`}${
+        covers ? `${multiCurrency ? '' : ' · '}${balancePhrase(before, payerCur)}
+      <span class="xfer-arrow">→</span> ${balancePhrase(before - covered, payerCur)}` : ''}</span>
+      ${covers ? `<span class="xfer-delta neg">−${fmtMoney(covered, payerCur)}</span>` : ''}
+    </div>`;
+  })() : `
     <div class="xfer-line">
-      <span><b>Me</b> · your share${ownTag('me')}</span>
-      <span class="xfer-delta">${fmtMoney(shares.me, baseCur)}</span>
-    </div>`) : '';
+      <span><b>Me</b> · you paid ${fmtMoney(amt, baseCur)}</span>
+      ${covers ? `<span class="xfer-delta pos">+${fmtMoney(covered, baseCur)} owed to you</span>` : ''}
+    </div>`;
 
   /* Everyone else's share lands as "they owe you" — either directly (you
-     paid) or routed through you (someone else paid). The payer's own ticked
-     share counts toward the division but is nobody's debt. */
+     paid) or routed through you (someone else paid) — so each recipient reads
+     as their balance before → after. The payer's own ticked share counts
+     toward the division but is nobody's debt. */
   const lines = people.map(p => {
     if (payer && p.id === payer.id) {
       return `
@@ -1429,27 +1430,27 @@ function splitPreviewHTML(payerId, ids, amt, includeMe, own) {
       <span class="xfer-delta">${fmtMoney(shares[p.id], p.currency)}</span>
     </div>`;
     }
+    const before = totalOf(p);
     return `
     <div class="xfer-line">
-      <span><b>${esc(p.name)}</b> owes you${ownTag(p.id)}</span>
+      <span><b>${esc(p.name)}</b> ${balancePhrase(before, p.currency)}
+      <span class="xfer-arrow">→</span> ${balancePhrase(before + shares[p.id], p.currency)}${ownTag(p.id)}</span>
       <span class="xfer-delta pos">+${fmtMoney(shares[p.id], p.currency)}</span>
     </div>`;
   }).join('');
 
-  /* Paid by someone else: their balance with you drops by everything they
-     covered for others (the recorded shares) — shown before → after. */
-  let payerLine = '';
-  if (payer) {
-    const drop = people.filter(p => p.id !== payer.id).reduce((s, p) => s + shares[p.id], 0)
-      + (includeMe ? shares.me : 0);
-    const before = totalOf(payer);
-    payerLine = `
+  /* Your own line. Paid by Me: your share is just what you covered for
+     yourself. Paid by someone else: your share is new debt to the payer. */
+  const meLine = includeMe ? (payer ? `
     <div class="xfer-line">
-      <span><b>${esc(payer.name)}</b> ${balancePhrase(before, payer.currency)}
-      <span class="xfer-arrow">→</span> ${balancePhrase(before - drop, payer.currency)}</span>
-      <span class="xfer-delta neg">−${fmtMoney(drop, payer.currency)}</span>
-    </div>`;
-  }
+      <span><b>Me</b> · ${esc(payer.name)} covered your share${ownTag('me')}</span>
+      <span class="xfer-delta neg">you owe +${fmtMoney(shares.me, payerCur)}</span>
+    </div>` : `
+    <div class="xfer-line">
+      <span><b>Me</b> · your share${ownTag('me')}</span>
+      <span class="xfer-delta">${fmtMoney(shares.me, baseCur)}</span>
+    </div>`) : '';
+
   /* Individual amounts must fit the total; with everyone on their own figure
      they must reach it exactly, since nobody is left to absorb the remainder. */
   const short = !sharerCount && remainder > 0.005
@@ -1459,7 +1460,7 @@ function splitPreviewHTML(payerId, ids, amt, includeMe, own) {
   const mismatch = multiCurrency
     ? `<div class="xfer-warn">Selected people use different currencies — each share is applied in that person's own currency, nothing is converted.</div>`
     : '';
-  return head + meLine + lines + payerLine + short + over + mismatch;
+  return head + lenderLine + lines + meLine + short + over + mismatch;
 }
 
 /* whether "Me" is ticked in the split picker */
@@ -1947,12 +1948,16 @@ function dataPanel() {
    tappable cards (like the iPhone Settings app): each card shows an icon tile,
    the section name and a one-line summary of what's inside, so the page opens
    as a short, scannable list rather than one long stack of panels. Each card is
-   a collapsible disclosure — tapping it expands just that section. Native
-   <details>/<summary> handles the toggling, so the open/closed state survives
-   re-renders without any extra wiring. */
+   a collapsible disclosure — tapping it expands just that section.
+
+   Which sections are open is app state, not just DOM state: changing a setting
+   commits and re-renders the whole view, which would otherwise rebuild every
+   <details> closed and snap the section shut under the user mid-adjustment.
+   ui.settingsOpen holds the open keys; the toggle listener below keeps it in
+   step with what the user opens and closes. */
 function renderSettings() {
-  const group = (icon, title, desc, body) => `
-    <details class="settings-group">
+  const group = (key, icon, title, desc, body) => `
+    <details class="settings-group" data-settings-group="${key}" ${ui.settingsOpen.has(key) ? 'open' : ''}>
       <summary class="settings-group-title">
         <span class="settings-group-icon">${icon}</span>
         <span class="settings-group-text">
@@ -1969,17 +1974,18 @@ function renderSettings() {
     <p class="section-sub">Your ledger lives in this browser — nothing leaves it unless you turn on cloud sync (under Account) or export it.</p>
 
     <div class="settings-list">
-      ${group(Icons.sliders(), 'Preferences', 'Theme, currency &amp; rounding', appearancePanel() + currencyPanel())}
-      ${group(Icons.bell(), 'Alerts', 'Reminders for what you’re owed', notificationsPanel())}
-      ${group(Icons.percent(), 'Interest', 'How balances grow over time', interestRulesPanel())}
-      ${group(Icons.database(), 'Your data', 'Back up, export or erase', dataPanel())}
+      ${group('preferences', Icons.sliders(), 'Preferences', 'Theme, currency &amp; rounding', appearancePanel() + currencyPanel())}
+      ${group('alerts', Icons.bell(), 'Alerts', 'Reminders for what you’re owed', notificationsPanel())}
+      ${group('interest', Icons.percent(), 'Interest', 'How balances grow over time', interestRulesPanel())}
+      ${group('data', Icons.database(), 'Your data', 'Back up, export or erase', dataPanel())}
     </div>
   `;
 }
 
 /* Account: sign-in and cloud sync, split out of Settings so it has its own
-   place in the drawer. The heavy lifting still lives in cloud.js; this is
-   just the page wrapper around cloudSyncPanel(). */
+   menu — the user button in the masthead's top-right corner. The heavy
+   lifting still lives in cloud.js; this is just the page wrapper around
+   cloudSyncPanel(). */
 function renderAccount() {
   return `
     <h2 class="section-title">Account</h2>
@@ -2130,7 +2136,7 @@ function renderModal() {
 function render() {
   updateConnectivity();
 
-  document.querySelectorAll('.drawer-item, .tab-btn, .bnav-item').forEach(t => {
+  document.querySelectorAll('.tab-btn, .bnav-item, .nav-icon-btn').forEach(t => {
     const on = t.dataset.tab === ui.tab;
     t.classList.toggle('active', on);
     if (on) t.setAttribute('aria-current', 'page');
@@ -2817,6 +2823,18 @@ document.addEventListener('change', e => {
   if (e.target.matches('[data-share-member]')) updateSharePreview();
 });
 
+/* Remember which Settings sections are expanded. `toggle` doesn't bubble, so
+   this listens in the capture phase — the document still sees it on its way
+   down to the <details>. Everything that changes a setting re-renders the
+   view, and renderSettings reopens exactly what's in ui.settingsOpen, so a
+   section never shuts itself while the user is still adjusting it. */
+document.addEventListener('toggle', e => {
+  const d = e.target;
+  if (!d.matches || !d.matches('details.settings-group[data-settings-group]')) return;
+  if (d.open) ui.settingsOpen.add(d.dataset.settingsGroup);
+  else ui.settingsOpen.delete(d.dataset.settingsGroup);
+}, true);
+
 document.addEventListener('input', e => {
   if (e.target.id === 'search-box') {
     ui.search = e.target.value;
@@ -2866,37 +2884,12 @@ document.addEventListener('keydown', e => {
   if (btn) { e.preventDefault(); btn.click(); }
 });
 
-/* ---------- navigation drawer (hamburger menu) ---------- */
+/* ---------- top-level navigation ---------- */
 
-function openDrawer() {
-  const d = document.getElementById('drawer');
-  const s = document.getElementById('drawer-scrim');
-  s.hidden = false;
-  // Two frames so the off-screen start position is painted before we
-  // transition in — otherwise the slide/fade is skipped.
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    d.classList.add('open'); s.classList.add('open');
-  }));
-  d.setAttribute('aria-hidden', 'false');
-  document.getElementById('menu-toggle').setAttribute('aria-expanded', 'true');
-  document.body.classList.add('menu-open');
-}
-
-function closeDrawer() {
-  const d = document.getElementById('drawer');
-  const s = document.getElementById('drawer-scrim');
-  if (!d.classList.contains('open')) return;
-  d.classList.remove('open'); s.classList.remove('open');
-  d.setAttribute('aria-hidden', 'true');
-  document.getElementById('menu-toggle').setAttribute('aria-expanded', 'false');
-  document.body.classList.remove('menu-open');
-  // hide the scrim only after the fade-out so it can't swallow taps mid-close
-  setTimeout(() => { if (!d.classList.contains('open')) s.hidden = true; }, 260);
-}
-
-/* Switch top-level views. Shared by the drawer items and the wordmark
-   (which acts as "home"). Mirrors the old tab-bar behaviour: returning to
-   the Ledger floor unwinds the back stack so the next OS-back exits. */
+/* Switch top-level views. Shared by the tab bars, the two corner menus
+   (Account top-right, Settings bottom-right) and the wordmark (which acts as
+   "home"): returning to the Ledger floor unwinds the back stack so the next
+   OS-back exits. */
 function navigateTab(newTab) {
   const drilledIn = ui.openGroupId || ui.modalPersonId ||
     ui.splitOpen || ui.shareGroupId || ui.sharePeopleOpen || ui.selectMode ||
@@ -2928,21 +2921,11 @@ function navigateTab(newTab) {
   render();
 }
 
-// Opening pushes a history entry so the OS back button/gesture closes the
-// drawer; every close route pops that entry (popstate → syncDrawer closes it).
-document.getElementById('menu-toggle').addEventListener('click', () => {
-  ui.drawerOpen = true;
-  openDrawer();
-  pushNav();
-});
-document.getElementById('menu-close').addEventListener('click', () => { if (ui.drawerOpen) goBack(); });
-document.getElementById('drawer-scrim').addEventListener('click', () => { if (ui.drawerOpen) goBack(); });
-
-document.getElementById('drawer-nav').addEventListener('click', e => {
-  const item = e.target.closest('.drawer-item');
-  if (!item) return;
-  pendingDrawerNav = item.dataset.tab;   // navigate after the drawer entry pops
-  goBack();
+/* The two corner menus are plain destinations, not a shared drawer: Account
+   in the masthead's top-right corner, Settings in the bottom-right one (the
+   gear here on wide screens, the last slot of the bottom bar on the phone). */
+document.querySelectorAll('.nav-icon-btn[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => navigateTab(btn.dataset.tab));
 });
 
 // Top tab bar: the everyday views (Ledger/Groups/History) switch from here.
@@ -2952,16 +2935,9 @@ document.getElementById('tabbar').addEventListener('click', e => {
   navigateTab(btn.dataset.tab);
 });
 
-// Phone bottom bar: same views within thumb reach; the Menu item opens the
-// drawer (mirrors the hamburger), and the centre FAB carries data-action
-// ("open-split") so the delegated click handler picks it up.
+// Phone bottom bar: the same views within thumb reach, with Settings in the
+// last slot — the bottom-right corner the gear button holds on wide screens.
 document.getElementById('bottom-nav').addEventListener('click', e => {
-  if (e.target.closest('#bnav-menu')) {
-    ui.drawerOpen = true;
-    openDrawer();
-    pushNav();
-    return;
-  }
   const btn = e.target.closest('.bnav-item[data-tab]');
   if (btn) navigateTab(btn.dataset.tab);
 });
@@ -2973,12 +2949,11 @@ homeLink.addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigateTab('ledger'); }
 });
 
-/* Escape dismisses whatever is on top — the drawer or any popup — exactly the
-   way tapping its scrim does (so the scheduled-debt reminder snoozes and the
-   cloud prompt records its dismissal rather than reappearing). */
+/* Escape dismisses whatever popup is on top, exactly the way tapping its
+   scrim does (so the scheduled-debt reminder snoozes and the cloud prompt
+   records its dismissal rather than reappearing). */
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (ui.drawerOpen) { goBack(); return; }
   const sched = document.getElementById('scheduled-overlay');
   if (sched) {
     const id = sched.querySelector('[data-action="snooze-scheduled"]')?.dataset.id;

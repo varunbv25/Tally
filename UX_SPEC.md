@@ -34,8 +34,11 @@ a top tab bar with header actions.
   - Reverse-chronological register across everyone: lent / repaid / interest / split / indirect
   - Search (person, reason, amount, date) + collapsible calendar filter with entry-dot markers
   - Long-press an entry → multi-select for deletion
-- Secondary (drawer, behind the Menu item / hamburger): **Settings** (theme,
-  currency, interest rules, alerts, data backup) and **Account** (cloud sync).
+- Secondary, one corner each — two separate menus, no shared drawer:
+  **Account** (cloud sync) behind the user button in the masthead's top-right
+  corner, and **Settings** (theme, currency, interest rules, alerts, data
+  backup) behind the gear in the bottom-right corner — the last slot of the
+  bottom bar on the phone, a floating button on wider screens.
 
 ## 2. Frictionless "Add Expense" Flow
 
@@ -82,7 +85,7 @@ you, no confirmation screen — the preview *was* the confirmation.
 
 | Aspect | Phone (≤680px) | Desktop |
 |---|---|---|
-| Navigation | Bottom glass bar + centre FAB | Top tabs + header action buttons |
+| Navigation | Bottom glass bar (Settings in its last slot) + Account button in the header | Top tabs + Account button in the header + floating Settings gear, bottom-right |
 | Ledger | Stacked cards, one per person | True table with aligned money columns |
 | Header | Sticky, frosted, safe-area aware | Sticky, frosted, max-width 1000px |
 | Add expense | FAB → full-height modal, keypad-friendly | Header button → centered 700px modal |

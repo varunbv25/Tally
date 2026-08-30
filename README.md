@@ -146,7 +146,7 @@ interest rules and settings stay on the device. Nothing ever leaves the
 browser unless you export it — **or** unless you opt in to cloud sync.
 
 ### Cloud sync (optional)
-Under **Account** (in the hamburger menu) you can sign in to mirror your
+Under **Account** (the user button in the top-right corner) you can sign in to mirror your
 ledger to the cloud. Two ways in, both keyed to your email address so they
 resolve to the same ledger:
 

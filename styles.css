@@ -206,6 +206,13 @@ input, textarea, select, [contenteditable="true"] {
   gap: var(--sp-4); flex-wrap: wrap;
 }
 
+/* Right-hand cluster of the masthead: the offline flag and the Account
+   button, which owns the top-right corner on every screen size. */
+.masthead-actions {
+  margin-left: auto;
+  display: flex; align-items: center; gap: var(--sp-3);
+}
+
 .wordmark {
   font-family: var(--display);
   font-weight: 800; font-size: var(--fs-display);
@@ -243,7 +250,6 @@ input, textarea, select, [contenteditable="true"] {
    on the locally-stored data, so this reassures rather than alarms. */
 .offline-flag {
   display: inline-flex; align-items: center; gap: 6px;
-  margin-left: auto;   /* right edge of the masthead */
   font-family: var(--mono); font-size: var(--fs-cap); font-weight: 500;
   color: var(--ink-soft); padding: 5px 11px; border-radius: var(--pill);
   border: 1px solid var(--line-strong); background: var(--bg);
@@ -330,78 +336,40 @@ input, textarea, select, [contenteditable="true"] {
 .bnav-item svg { width: 22px; height: 22px; flex: none; }
 .bnav-item.active { color: var(--green); }
 .bnav-item:active { color: var(--ink); }
-/* ---------- hamburger + navigation drawer ---------- */
+/* ---------- corner menus (Account, Settings) ----------
+   Two separate menus, each in its own corner: Account top-right in the
+   masthead, Settings bottom-right — the gear button below on wide screens,
+   the last slot of the bottom bar on the phone. Both are icon-only round
+   buttons in the same visual language. */
 
-.hamburger {
-  flex: 0 0 auto; width: 40px; height: 40px; margin-left: -8px;
-  display: inline-flex; flex-direction: column; justify-content: center; gap: 5px;
-  padding: 10px; background: none; border: none; cursor: pointer;
-  border-radius: 9px; transition: background var(--duration-fast);
+.nav-icon-btn {
+  flex: 0 0 auto; width: 40px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; background: none; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 50%;
+  color: var(--ink-soft);
+  transition: background var(--duration-fast), color var(--duration-fast),
+              border-color var(--duration-fast);
 }
-.hamburger:hover { background: var(--bg); }
-.hamburger span {
-  display: block; height: 2px; width: 100%; border-radius: 2px;
-  background: var(--green-deep);
-}
-
-.wordmark[role="button"] { cursor: pointer; }
-
-/* Dim scrim behind the open drawer; click it to close. */
-.drawer-scrim {
-  position: fixed; inset: 0; z-index: 60;
-  background: rgba(0, 0, 0, 0.4);
-  opacity: 0; transition: opacity var(--duration-base, 0.22s) ease;
-}
-.drawer-scrim.open { opacity: 1; }
-.drawer-scrim[hidden] { display: none; }
-
-.drawer {
-  position: fixed; top: 0; left: 0; bottom: 0; z-index: 61;
-  width: 284px; max-width: 84vw;
-  display: flex; flex-direction: column;
-  padding: var(--sp-4) var(--sp-3) calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
-  background: var(--card); border-right: 1px solid var(--line-strong);
-  box-shadow: 2px 0 28px rgba(0, 0, 0, 0.14);
-  transform: translateX(-100%);
-  transition: transform var(--duration-base, 0.24s) ease;
-}
-.drawer.open { transform: translateX(0); }
-
-.drawer-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: var(--sp-1) var(--sp-2) var(--sp-4);
-}
-.drawer-brand {
-  font-family: var(--display); font-weight: 800; font-size: var(--fs-h1);
-  letter-spacing: -0.02em; color: var(--green-deep);
-}
-.drawer-close {
-  width: 34px; height: 34px; flex: 0 0 auto;
-  background: none; border: none; cursor: pointer; border-radius: 8px;
-  font-size: 18px; line-height: 1; color: var(--ink-soft);
-}
-.drawer-close:hover { background: var(--bg); color: var(--ink); }
-
-.drawer-nav { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.drawer-section { display: flex; flex-direction: column; gap: 2px; }
-
-.drawer-item {
-  display: flex; align-items: center; gap: var(--sp-3);
-  width: 100%; padding: 11px 12px; border-radius: 10px;
-  background: none; border: none; cursor: pointer; text-align: left;
-  font-family: var(--body); font-size: var(--fs-base); font-weight: 500;
-  color: var(--ink); transition: background var(--duration-fast), color var(--duration-fast);
-}
-.drawer-item svg { flex: 0 0 auto; color: var(--ink-soft); }
-.drawer-item:hover { background: var(--bg); }
-.drawer-item.active {
+.nav-icon-btn:hover { background: var(--bg); color: var(--ink); }
+.nav-icon-btn.active {
   background: color-mix(in srgb, var(--green) 12%, transparent);
+  border-color: color-mix(in srgb, var(--green) 40%, var(--line-strong));
   color: var(--green-deep);
 }
-.drawer-item.active svg { color: var(--green); }
 
-/* Lock body scroll while the drawer is open. */
-body.menu-open { overflow: hidden; }
+/* The Settings gear floats in the bottom-right corner, clear of the colophon
+   and above the page content it sits over. */
+.settings-corner {
+  position: fixed; z-index: 44;
+  right: var(--sp-6); bottom: calc(var(--sp-6) + env(safe-area-inset-bottom, 0px));
+  width: 44px; height: 44px;
+  background: var(--card);
+  box-shadow: 0 4px 18px var(--shadow-bar);
+}
+.settings-corner:hover { background: var(--card); color: var(--ink); }
+
+.wordmark[role="button"] { cursor: pointer; }
 
 /* ---------- layout ---------- */
 
@@ -1385,14 +1353,14 @@ input:checked + .sel-check::after {
 /* ---------- keyboard focus ----------
    One consistent emerald ring on every control reached by keyboard. */
 .btn:focus-visible, .tab-btn:focus-visible, .bnav-item:focus-visible,
-.drawer-item:focus-visible, .seg:focus-visible,
-.group-card:focus-visible, .person-name:focus-visible, .hamburger:focus-visible {
+.nav-icon-btn:focus-visible, .seg:focus-visible,
+.group-card:focus-visible, .person-name:focus-visible {
   outline: 2px solid var(--green); outline-offset: 2px;
 }
 
 /* ---------- reduced motion ----------
    The tokens drive most transitions; the blanket rule catches the hard-coded
-   durations (drawer slide, modal rise, toast) without changing any end state. */
+   durations (modal rise, toast slide) without changing any end state. */
 @media (prefers-reduced-motion: reduce) {
   :root { --duration-fast: 0ms; --duration-normal: 0ms; }
   *, *::before, *::after {
@@ -1430,7 +1398,6 @@ input:checked + .sel-check::after {
   .btn { padding: 11px 16px; }
   .btn.small { padding: 10px 14px; font-size: var(--fs-sm); }
   .tab-btn { padding: 12px var(--sp-3); }
-  .hamburger { width: 44px; height: 44px; }
   .people-search-clear { width: 44px; height: 44px; }
 
   /* Pin the primary navigation. The ledger runs ~2.5 screens even for a
@@ -1449,31 +1416,11 @@ input:checked + .sel-check::after {
   }
   .wordmark { font-size: var(--fs-h1); }
 
-  /* The menu opens as a bottom sheet on the phone — it's triggered from the
-     bottom nav, so it rises from the same edge the thumb is already on,
-     instead of sliding in from the left like the desktop drawer. */
-  .drawer {
-    top: auto; left: 0; right: 0; bottom: 0;
-    width: 100%; max-width: none;
-    max-height: 80vh; max-height: 80dvh;
-    padding-top: var(--sp-5);
-    padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
-    border-right: none; border-top: 1px solid var(--line-strong);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    box-shadow: 0 -10px 30px var(--shadow-bar);
-    transform: translateY(100%);
-  }
-  .drawer.open { transform: translateY(0); }
-  /* grab handle — signals "this is a sheet you can dismiss downward" */
-  .drawer::before {
-    content: ""; position: absolute; top: 8px; left: 50%;
-    transform: translateX(-50%);
-    width: 36px; height: 4px; border-radius: 2px;
-    background: var(--line-strong);
-  }
-  /* primary navigation lives in the bottom bar on the phone */
+  /* primary navigation lives in the bottom bar on the phone, which carries
+     Settings in its last (bottom-right) slot — so the floating gear, which
+     would sit on top of it, stands down. Account stays in the masthead. */
   .tabbar { display: none; }
-  .hamburger { display: none; }
+  .settings-corner { display: none; }
   .bottom-nav { display: flex; }
   /* bottom padding clears the fixed nav bar */
   .view { padding: 18px 14px calc(104px + env(safe-area-inset-bottom, 0px)); }
