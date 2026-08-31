@@ -12,24 +12,41 @@ const vm = require('node:vm');
 
 const ROOT = path.join(__dirname, '..');
 
-/* Mirrors worker/src/index.js: a PUT older than what's stored is refused. */
+/* One clock the whole test drives by hand, so "later" is something the test
+   states rather than something it races the real clock for. The Worker reads
+   it too — that is the point of the skew tests below: the server's clock is
+   the only one both devices can agree on. */
+let NOW = Date.UTC(2026, 0, 1, 12, 0, 0);
+const advance = ms => { NOW += ms; };
+
+/* Mirrors worker/src/index.js: a PUT older than what's stored is refused, and
+   every reply carries the server's own clock. */
 function makeServer() {
   const s = { rec: null, puts: 0 };
   s.put = (state, updatedAt) => {
     s.puts++;
     if (s.rec && typeof s.rec.updatedAt === 'number' && s.rec.updatedAt > updatedAt) {
-      return { ok: true, updatedAt: s.rec.updatedAt, stale: true };
+      return { ok: true, updatedAt: s.rec.updatedAt, stale: true, now: NOW };
     }
     s.rec = { state, updatedAt };
-    return { ok: true, updatedAt };
+    return { ok: true, updatedAt, now: NOW };
   };
-  s.get = () => s.rec || { state: null, updatedAt: 0 };
+  s.get = () => ({ ...(s.rec || { state: null, updatedAt: 0 }), now: NOW });
   return s;
 }
 
-function makeDevice(server, tzOffsetMin = -330) {
+/* `clockSkewMs` is how far this device's own clock is off from the server's —
+   the phone that's running ten minutes fast. */
+function makeDevice(server, tzOffsetMin = -330, clockSkewMs = 0) {
   const ls = new Map();
-  class FakeDate extends Date { getTimezoneOffset() { return tzOffsetMin; } }
+  class FakeDate extends Date {
+    constructor(...args) {
+      if (args.length === 0) super(NOW + clockSkewMs);
+      else super(...args);
+    }
+    static now() { return NOW + clockSkewMs; }
+    getTimezoneOffset() { return tzOffsetMin; }
+  }
   const ctx = vm.createContext({
     localStorage: {
       getItem: k => (ls.has(k) ? ls.get(k) : null),
@@ -227,4 +244,94 @@ test('a device carrying a corrupted timezone history is repaired on pull', async
     run(poisoned, `totalOf(getPerson('p1'), ${now})`),
     'the repaired device now matches',
   );
+});
+
+/* Every ledger version is a wall-clock millisecond, and last-write-wins only
+   means anything if both devices read those milliseconds off the same clock.
+   They don't — a phone a few minutes fast used to stamp every save into the
+   future, so the accurate device's uploads were refused as "stale" forever and
+   its edits were silently replaced by the fast phone's copy. Both devices now
+   stamp in server time, measured from the clock the Worker returns. */
+test('a device with a fast clock cannot lock the other one out of the cloud', async () => {
+  const server = makeServer();
+  const TEN_MIN = 10 * 60 * 1000;
+  const fast = makeDevice(server, -330, TEN_MIN);   // ten minutes ahead
+  const slow = makeDevice(server, -330, 0);         // in step with the server
+
+  // Boot: both foreground and reconcile, which is where they learn the offset.
+  await runAsync(fast, `return await cloudReconcile();`);
+  await runAsync(slow, `return await cloudReconcile();`);
+  assert.ok(Math.abs(run(fast, `cloudSkewMs`) + TEN_MIN) < 1000, 'fast device measured its skew');
+  assert.strictEqual(run(slow, `cloudSkewMs`), 0, 'the accurate device has nothing to correct');
+
+  // The fast phone makes the first edit and uploads it.
+  run(fast, `const p = addPerson('Ada','INR'); p.id='p1';
+             addTransaction({ personId:'p1', amount:100, note:'from the fast phone' });
+             saveState();`);
+  await runAsync(fast, `await cloudPush();`);
+  assert.ok(
+    server.rec.updatedAt <= NOW,
+    'the fast phone stamped server time, not its own ten-minutes-ahead clock',
+  );
+
+  await runAsync(slow, `return await cloudReconcile();`);
+  assert.strictEqual(run(slow, `state.transactions.length`), 1, 'the other device pulled it');
+
+  // A minute later the accurate device makes the next edit. It is genuinely the
+  // newest version of the ledger, so it must reach the cloud.
+  advance(60_000);
+  run(slow, `addTransaction({ personId:'p1', amount:250, note:'from the accurate phone' });
+             saveState();`);
+  await runAsync(slow, `await cloudPush();`);
+
+  assert.notStrictEqual(server.rec.stale, true);
+  assert.strictEqual(server.rec.state.transactions.length, 2, 'the cloud took the newer edit');
+  assert.ok(
+    server.rec.state.transactions.some(t => t.note === 'from the accurate phone'),
+    'the accurate device was not locked out by the fast one',
+  );
+  assert.strictEqual(run(slow, `state.transactions.length`), 2, 'and kept its own edit');
+
+  // And the fast phone picks it up on its next pull.
+  await runAsync(fast, `return await cloudReconcile();`);
+  assert.strictEqual(run(fast, `state.transactions.length`), 2, 'the fast phone pulled it back');
+});
+
+/* The offset is remembered, so an edit made before the first request of a
+   session (or made offline) is still stamped on the shared clock. */
+test('the measured clock offset survives a reload', async () => {
+  const server = makeServer();
+  const fast = makeDevice(server, -330, 10 * 60 * 1000);
+  await runAsync(fast, `return await cloudReconcile();`);
+
+  const stored = Number(run(fast, `localStorage.getItem('tally-cloud-skew')`));
+  assert.ok(Math.abs(stored + 10 * 60 * 1000) < 1000, 'offset persisted');
+
+  run(fast, `cloudSkewMs = 0; loadCloudSkew();`);
+  assert.strictEqual(run(fast, `cloudSkewMs`), stored, 'and is restored at boot');
+  assert.ok(Math.abs(run(fast, `cloudNow()`) - NOW) < 1000, 'so versions land on server time');
+});
+
+/* The first edits of a session happen before the device has heard from the
+   server, so they carry a version stamped on the local clock. A fast phone
+   would park the ledger at a timestamp no other device could ever beat. */
+test('an edit made before the clock offset is known is still pulled back to server time', async () => {
+  const server = makeServer();
+  const fast = makeDevice(server, -330, 10 * 60 * 1000);
+  const slow = makeDevice(server, -330, 0);
+
+  // Edit first, sign in second: the save is stamped on the uncorrected clock.
+  run(fast, `const p = addPerson('Ada','INR'); p.id='p1';
+             addTransaction({ personId:'p1', amount:100, note:'before sign-in' }); saveState();`);
+  assert.ok(run(fast, `cloudLocalUpdated()`) > NOW, 'stamped in the future, as the device knew no better');
+
+  await runAsync(fast, `return await cloudReconcile();`);
+  assert.ok(server.rec.updatedAt <= NOW, 'the upload was pulled back to server time');
+
+  // Which means the accurate device can still take the next turn.
+  await runAsync(slow, `return await cloudReconcile();`);
+  advance(60_000);
+  run(slow, `addTransaction({ personId:'p1', amount:250, note:'later' }); saveState();`);
+  await runAsync(slow, `await cloudPush();`);
+  assert.strictEqual(server.rec.state.transactions.length, 2, 'the cloud took the newer edit');
 });

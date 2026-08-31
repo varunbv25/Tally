@@ -167,6 +167,20 @@ whole-blob last-write-wins by timestamp (Tally is single-user, so the only
 saved one wins). Signing out leaves the device's ledger untouched; it just
 stops mirroring.
 
+Two things make that "by timestamp" actually hold across devices, and both are
+easy to get wrong:
+
+- **The sync API is never cached.** `GET /ledger` is a cross-origin `GET` like
+  any other, so the service worker deliberately does not handle it (only the
+  font CDNs are cached cross-origin) and the Worker sends `Cache-Control:
+  no-store`. A cached ledger read is indistinguishable from a device that never
+  receives the other device's changes.
+- **Versions are stamped on the server's clock.** Every `/ledger` reply carries
+  the Worker's own time, and the client stamps versions against it. A device
+  whose clock runs fast would otherwise park the ledger at a version no other
+  device could beat, so the accurate device's uploads would be refused as
+  "stale" forever and its edits silently replaced.
+
 Because the app reads from `localStorage`, a weak or dropped connection never
 blocks anything: every view keeps rendering the locally-saved data, an
 **“Offline · showing saved data”** badge appears in the header, and any edits

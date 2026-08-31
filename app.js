@@ -1598,14 +1598,14 @@ function setSplitIndividualAmount(row) {
   if (!box.hidden) { box.focus(); box.select(); }
 }
 
-/* The split picker is re-rendered when a person is added mid-flow, which would
+/* Switching between equal and custom shares re-renders the picker, which would
    otherwise wipe the typed amount/note and the current ticks. We snapshot the
    live form into ui.splitDraft so renderSplitModal can restore it. */
 function freshSplitDraft() {
   return {
     payerId: 'me', selected: new Set(), me: false, amount: '',
     mode: 'equal', amounts: {}, meAmount: '', own: new Set(),
-    date: new Date().toISOString().slice(0, 10), note: '', newName: '',
+    date: new Date().toISOString().slice(0, 10), note: '',
     // which picker is expanded: "paid by" starts closed on its Me default,
     // "split between" open, since ticking people is the point of the flow
     open: { payer: false, members: true },
@@ -1652,8 +1652,6 @@ function syncSplitDraft() {
       else ui.splitDraft.amounts[box.dataset.splitAmount] = box.value;
     });
   }
-  const ni = document.getElementById('split-new-name');
-  if (ni) ui.splitDraft.newName = ni.value;
 }
 
 function renderSplitModal() {
@@ -1732,13 +1730,12 @@ function renderSplitModal() {
       <button type="button" class="seg${custom ? ' active' : ''}" data-action="set-split-mode" data-mode="custom" aria-pressed="${custom}">Custom amounts</button>
     </div>`;
 
-  /* Add a brand-new person without leaving the split: typing a name and
-     hitting + Add creates them, ticks them, and clears the field to repeat. */
-  const addRow =
-    `<div class="split-add-row">
-      <input type="text" id="split-new-name" placeholder="add a new person…" maxlength="40" value="${esc(draft.newName || '')}">
-      <button type="button" class="btn ghost" data-action="split-add-person">+ Add</button>
-    </div>`;
+  /* People are created on the Ledger, never here — a split only divides a cost
+     between people who already exist. With nobody to divide it with, say so
+     rather than leaving the list looking broken. */
+  const emptyRow = peopleByName().length
+    ? ''
+    : '<p class="muted split-pick-empty">No people yet — add someone on the Ledger first, then split an expense with them.</p>';
 
   const payerRows = payerRow('me', 'Me', Chip(esc(state.settings.baseCurrency)))
     + peopleByName().map(p => payerRow(p.id, esc(p.name), Chip(p.currency))).join('');
@@ -1760,7 +1757,7 @@ function renderSplitModal() {
         ${picker('members', 'Split between',
           splitMembersLabel([...sel].filter(getPerson), draft.me), openState.members,
           `${modeBar}
-          <div class="share-pick-list split-scroll">${meRow}${rows}${addRow}</div>`)}
+          <div class="share-pick-list split-scroll">${meRow}${rows}${emptyRow}</div>`)}
 
         <div class="split-fixed">
           <div class="form-row">
@@ -2412,20 +2409,6 @@ document.addEventListener('click', e => {
     }
     case 'open-split': ui.splitOpen = true; ui.splitDraft = freshSplitDraft(); pushNav(); render(); break;
     case 'close-split': goBack(); break;
-    case 'split-add-person': {
-      const input = document.getElementById('split-new-name');
-      const name = ((input && input.value) || '').trim();
-      if (!name) { if (input) input.focus(); break; }
-      syncSplitDraft();                       // keep typed amount/note + ticks
-      const p = addPerson(name);              // base currency by default
-      ui.splitDraft.selected.add(p.id);       // newly added → ticked
-      ui.splitDraft.newName = '';
-      saveState();
-      render();
-      const next = document.getElementById('split-new-name');
-      if (next) next.focus();
-      break;
-    }
     case 'new-group': ui.creatingGroup = true; render(); document.querySelector('[data-form="add-group"] input')?.focus(); break;
     case 'cancel-create-group': ui.creatingGroup = false; render(); break;
     case 'open-group': ui.openGroupId = id; ui.tab = 'groups'; ui.renamingGroup = false; pushNav(); render(); break;
@@ -2932,15 +2915,6 @@ document.addEventListener('keydown', e => {
   if (e.target.id === 'new-person-name') {
     e.preventDefault();
     document.querySelector('[data-action="add-person-entry"][data-sign="1"]')?.click();
-    return;
-  }
-
-  // the add-person field lives inside the split form; Enter should add the
-  // person, not submit the whole split
-  if (e.target.id === 'split-new-name') {
-    e.preventDefault();
-    const addBtn = document.querySelector('[data-action="split-add-person"]');
-    if (addBtn) addBtn.click();
     return;
   }
 

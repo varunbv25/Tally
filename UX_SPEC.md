@@ -28,7 +28,7 @@ a top tab bar with header actions.
   - Group detail: members, group history, share, rename, add/remove members
   - Note that per-group nets overlap and are not additive (one payment shows in every group)
 - **Add Expense (the centre FAB — a flow, not a place)**
-  - Split an expense: *Paid by* and *Split between* are the same list of name tiles, each folded into a dropdown (one radio pick, several ticks); equal or custom shares, add a new person mid-flow; a payer other than Me records the shares as indirect payments
+  - Split an expense: *Paid by* and *Split between* are the same list of name tiles, each folded into a dropdown (one radio pick, several ticks); equal or custom shares; a payer other than Me records the shares as indirect payments
   - Quick entry on any person tile (the one-line "spreadsheet row" path)
 - **Activity (History)**
   - Reverse-chronological register across everyone: lent / repaid / interest / split / indirect
@@ -47,7 +47,7 @@ required number.
 
 1. **Tap *÷ Split expense*** in the Ledger header. The modal opens with focus managed, on an opaque backdrop — the page behind is frozen and out of sight, not showing through.
 2. **Pick who shared the bill.** Everyone is a large tappable tile with a tick circle — the whole tile is the target, not the checkbox. "Me" is pinned first.
-3. **No account, no problem.** An inline *add a new person…* field sits under the list, so an outsider joins the split without leaving the flow (see edge cases).
+3. **Only people you already have.** The picker lists the Ledger, and nothing else: people are created on the Ledger, so the split flow stays one decision wide. With nobody on the Ledger yet, the picker says so and points there.
 4. **Enter the total** — one number field, numeric keypad on mobile (16px input so iOS never zoom-jumps). Date defaults to today; reason is optional.
 5. **Live share preview.** Every keystroke re-renders "each person's share" — the maths is always visible *before* committing, never a surprise after.
 6. **Uneven shares without mode-switching:** long-press a person's tile to give them a custom amount; everyone else automatically re-splits the remainder. A tag on their tile shows who left the equal split, and a second long-press puts them back.
@@ -60,7 +60,7 @@ you, no confirmation screen — the preview *was* the confirmation.
 
 - **Uneven cents.** Shares are computed in integer cents; the remainder after floor-division is distributed one cent at a time so the shares always sum *exactly* to the bill (₹100 ÷ 3 → 33.34 + 33.33 + 33.33). Property-tested in `tests/split.test.js` — no cent is ever lost or invented.
 - **Settling up offline.** Tally is local-first: every view renders from local storage and every action (settle included) commits locally and instantly. A quiet "Offline · showing saved data" pill appears in the header — reassurance, not an alarm — and cloud sync (if enabled) reconciles when connectivity returns. The user is never blocked from recording money because of the network.
-- **Adding a non-group member to a group bill.** The split flow accepts anyone: an *add a new person* field lives inside the picker, so the visiting friend is created, ticked, and included in one step — without polluting the group's membership. The debt lands on their personal ledger; the group's own history stays scoped to members.
+- **Adding a non-group member to a group bill.** The split flow accepts anyone on the Ledger, group member or not: the visiting friend is added on the Ledger once, then ticked in the picker like everybody else — without polluting the group's membership. The debt lands on their personal ledger; the group's own history stays scoped to members.
 - **Empty states as onboarding.** A new account never sees a blank screen: the ledger shows a friendly card ("Your ledger is empty") with a single primary action, and explains the privacy model ("everything stays in this browser"). A search with no matches points at the **+** beside the box instead of a dead end.
 - **Destructive actions.** Deletes and settlements always pass through a confirmation card stating the consequence ("removed along with ALL of their transactions… cannot be undone"), with the safe action available and the OS back gesture as a cancel.
 - **Accidental gestures.** A long-press that moves >10px is cancelled (it was a scroll); a completed long-press swallows the ghost click behind it; one long-press produces exactly one haptic pulse.

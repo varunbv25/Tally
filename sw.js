@@ -3,7 +3,7 @@
 
 importScripts('./store.js', './notif.js');
 
-const CACHE = 'tally-v53';
+const CACHE = 'tally-v54';
 const SHELL = [
   './',
   './index.html',
@@ -102,29 +102,44 @@ async function networkFirstWithTimeout(request) {
   return Response.error();
 }
 
+/* The only cross-origin responses that may be cached: the font CDNs, whose
+   files are content-addressed and genuinely never change. Everything else
+   cross-origin — above all the sync API — must reach the network on every
+   call. Caching those by origin is what broke cloud sync: `GET /ledger` is a
+   plain cross-origin GET, so the first response was cached and then replayed
+   for every later pull. Each device kept re-reading the snapshot it happened
+   to fetch first, so a change made on one device never arrived on the other
+   however often either of them synced. */
+const CACHEABLE_ORIGINS = ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'];
+
+async function cacheFirst(request) {
+  const hit = await caches.match(request);
+  if (hit) return hit;
+  const res = await fetch(request);
+  if (res.ok || res.type === 'opaque') {
+    const copy = res.clone();
+    caches.open(CACHE).then(c => c.put(request, copy));
+  }
+  return res;
+}
+
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-  const sameOrigin = new URL(e.request.url).origin === self.location.origin;
+  const { origin } = new URL(e.request.url);
 
-  if (sameOrigin) {
+  if (origin === self.location.origin) {
     /* network-first for app files so users get updates immediately when online,
        but time-boxed so a slow network falls back to the cached shell fast */
     e.respondWith(networkFirstWithTimeout(e.request));
-  } else {
-    /* cache-first for cross-origin assets (fonts) — they never change */
-    e.respondWith(
-      caches.match(e.request).then(hit =>
-        hit ||
-        fetch(e.request).then(res => {
-          if (res.ok || res.type === 'opaque') {
-            const copy = res.clone();
-            caches.open(CACHE).then(c => c.put(e.request, copy));
-          }
-          return res;
-        })
-      )
-    );
+    return;
   }
+  if (CACHEABLE_ORIGINS.includes(origin)) {
+    e.respondWith(cacheFirst(e.request));
+    return;
+  }
+  /* Anything else (the sync/push API, Google sign-in) is left alone: not
+     calling respondWith hands the request straight to the network, so the
+     service worker can never answer it with a stale copy. */
 });
 
 /* ---------- background notifications ---------- */
