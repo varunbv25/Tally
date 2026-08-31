@@ -20,7 +20,7 @@ a top tab bar with header actions.
 
 - **Dashboard (Ledger)** — the default view, answers "where do I stand?" in one glance
   - Total Balance hero card: net position, split into *You are owed* (emerald) and *You owe* (coral)
-  - Per-person balance tiles: principal, interest, total; inline quick entry (amount → *+ lent* / *− repaid*)
+  - Per-person balance tiles: principal, interest, total; inline quick entry (amount → *+ lent* / *− repaid*). Uniform tiles — one height, one column for each of the name, the *Settle* button and each figure — so the list scans as a stack, not a ragged one. Group membership isn't a column here; it's on the person's own card.
   - Search field (filters only) with a **+** button beside it that opens the add-a-person panel: name plus an optional opening amount
   - Long-press any tile → multi-select mode (share / delete from the top bar)
 - **Groups**

@@ -685,11 +685,11 @@ button { font-family: var(--body); cursor: pointer; }
   background: none; border: none; border-radius: 0; overflow: visible;
 }
 @media (min-width: 681px) {
-  /* Column rhythm: names and chips get what they need, not half the table —
-     so the money columns sit closer to the names they describe. */
-  .ledger-table:not(.history-table) th:first-child { width: 24%; }
-  .ledger-table:not(.history-table) th.col-groups { width: 13%; }
-  .ledger-table:not(.history-table) th.num { width: 11%; }
+  /* Column rhythm, fixed rather than content-driven: every row then puts its
+     name, its Settle button and each figure at the same x as the row above,
+     and the header labels sit squarely over their own column. */
+  .ledger-table:not(.history-table) th:first-child { width: 30%; }
+  .ledger-table:not(.history-table) th.num { width: 12%; }
 
   .ledger-table:not(.history-table) th { background: none; border-bottom: none; }
   .ledger-table:not(.history-table) tbody td {
@@ -697,6 +697,10 @@ button { font-family: var(--body); cursor: pointer; }
     border-top: 1px solid var(--line);
     border-bottom: 1px solid var(--line);
   }
+  /* One height for every tile. On a table cell `height` is a minimum, so a row
+     can still grow if it must — but nothing in it varies any more, so none do,
+     and the list reads as an even stack rather than a ragged one. */
+  .ledger-table:not(.history-table) tbody td { height: 60px; padding: var(--sp-2) var(--sp-3); }
   .ledger-table:not(.history-table) tbody td:first-child {
     border-left: 1px solid var(--line);
     border-top-left-radius: var(--radius); border-bottom-left-radius: var(--radius);
@@ -728,6 +732,24 @@ button { font-family: var(--body); cursor: pointer; }
   cursor: pointer;
 }
 .person-name:hover { color: var(--green); text-decoration: underline; }
+
+/* The row's name cell. Settle is pushed to the far edge instead of trailing
+   the name, so it lands at the same x on every row however long the name is;
+   the min-height reserves its space on the rows that have no balance to
+   settle, so those tiles are exactly as tall as the rest. */
+.person-cell {
+  display: flex; align-items: center; gap: var(--sp-2);
+  min-height: 28px;
+}
+/* a name long enough to wrap stays left-aligned (a button centres its text by
+   default) and the chip drops its own margin — the flex gap is the spacing */
+.person-cell .person-name { text-align: left; min-width: 0; }
+.person-cell .chip { margin: 0; }
+.person-cell .row-actions { margin-left: auto; }
+
+/* group membership, under the person's name in their own card */
+.modal-groups { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-bottom: var(--sp-3); }
+.modal-groups .chip { margin: 0; }
 
 .chip {
   display: inline-block; font-size: var(--fs-tag);
@@ -1600,15 +1622,37 @@ input:checked + .sel-check::after {
   .ledger-table:not(.history-table) tr.row.selected { border-color: var(--green); }
   .ledger-table:not(.history-table) tr:last-child { margin-bottom: 0; }
   .ledger-table td.num { text-align: left; }
-  .ledger-table td.col-person { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
-  /* select mode: no Settle button on the right, so keep [check][name] together on the left */
-  .ledger-table td.col-person.selecting { justify-content: flex-start; }
   .ledger-table td[data-label] { display: flex; justify-content: space-between; align-items: baseline; }
   .ledger-table td[data-label]::before {
     content: attr(data-label);
     font-size: var(--fs-tag); text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--ink-soft);
   }
+
+  /* A person's card, on a phone: the name (with Settle on the right edge), a
+     row of figures each captioned above its value, then quick entry. The
+     figures share the width evenly instead of stacking into three
+     label-and-value lines, which is what made these cards so tall — and since
+     every card holds the same three things, every card is the same height.
+     Laid out on the row itself: the cells are `display: block` here, so the
+     row is free to be the flex container. */
+  .ledger-table:not(.history-table) tr.row {
+    display: flex; flex-wrap: wrap; align-items: flex-start;
+    gap: var(--sp-3) var(--sp-3);
+    padding: var(--sp-3) 14px;
+  }
+  .ledger-table:not(.history-table) tr.row > td { padding: 0; }
+  .ledger-table:not(.history-table) td.col-person { flex: 1 1 100%; }
+  /* equal columns, and `min-width: 0` so a long figure shrinks rather than
+     wrapping the row */
+  .ledger-table:not(.history-table) td.num {
+    flex: 1 1 0; min-width: 0;
+    display: block; text-align: left;
+  }
+  .ledger-table:not(.history-table) td[data-label]::before {
+    display: block; margin-bottom: 3px;
+  }
+  .ledger-table:not(.history-table) td.col-quick { flex: 1 1 100%; margin-top: 0; }
   .ledger-table td.col-quick { margin-top: var(--sp-2); }
   .quick-add input { flex: 1; width: auto; min-width: 0; }
   .quick-add .qa-reason { flex: 1 1 100%; order: 1; }

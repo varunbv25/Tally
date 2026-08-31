@@ -373,7 +373,6 @@ function renderLedger() {
 
   const rows = people.map(p => {
     const { principal, interest, total } = balanceDisplay(p);
-    const groups = groupsOf(p.id).map(g => Chip(esc(g.name))).join('');
     const exempt = p.interestExempt ? Chip('no interest', 'exempt') : '';
     const isSel = ui.selectedPeople.has(p.id);
     const selCls = ui.personSelect ? (isSel ? ' selected' : '') : '';
@@ -381,10 +380,12 @@ function renderLedger() {
 
     /* In select mode the tile keeps its full layout — Settle and the
        quick-entry boxes stay put (inert, dimmed via CSS) so entering
-       selection never shifts the page; share/delete live in the top bar. */
+       selection never shifts the page; share/delete live in the top bar.
+       Which groups someone is in isn't a column any more: it was the one
+       cell whose height varied with its contents, so it alone decided how
+       tall each row was. It lives on the person's own card instead. */
     return `<tr class="row${selCls}" data-person-id="${p.id}">
-      <td class="col-person${ui.personSelect ? ' selecting' : ''}">${check}${PersonName(p.id, p.name, 'Tap to open · long-press or right-click to select, then share or delete')} ${exempt} ${rowActions(p.name, p.id, total)}</td>
-      <td class="col-groups">${groups}</td>
+      <td class="col-person"><div class="person-cell">${check}${PersonName(p.id, p.name, 'Tap to open · long-press or right-click to select, then share or delete')}${exempt}${rowActions(p.name, p.id, total)}</div></td>
       <td class="num" data-label="Principal">${Money(principal, p.currency)}</td>
       <td class="num" data-label="Interest"><span class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</span></td>
       <td class="num" data-label="Total">${Money(total, p.currency)}</td>
@@ -461,7 +462,7 @@ function renderLedger() {
     </div>
     <table class="ledger-table">
       <thead><tr>
-        <th>Person</th><th class="col-groups">Groups</th>
+        <th>Person</th>
         <th class="num">Principal</th><th class="num">Interest</th><th class="num">Total</th>
         <th>Quick entry</th>
       </tr></thead>
@@ -578,8 +579,7 @@ function renderGroupDetail() {
     const selCls = ui.memberSelect ? (isSel ? ' selected' : '') : '';
     const check = ui.memberSelect ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
     return `<tr class="row${selCls}" data-member-id="${p.id}">
-      <td class="col-person">${check}${PersonName(p.id, p.name)}
-        ${rowActions(p.name, p.id, total)}</td>
+      <td class="col-person"><div class="person-cell">${check}${PersonName(p.id, p.name)}${rowActions(p.name, p.id, total)}</div></td>
       <td class="num" data-label="Total owed">${Money(total, p.currency)}</td>
       <td class="col-quick">
         ${QuickAdd({ idSuffix: p.id, action: 'quick-add', dataId: p.id, group: g.id, titles: false })}
@@ -2074,8 +2074,15 @@ function renderModal() {
       </tr>`;
     }).join('');
 
+  const memberOf = groupsOf(p.id);
   const groupOptions = ['<option value="">No group (personal)</option>']
-    .concat(groupsOf(p.id).map(g => `<option value="${g.id}">${esc(g.name)}</option>`)).join('');
+    .concat(memberOf.map(g => `<option value="${g.id}">${esc(g.name)}</option>`)).join('');
+
+  /* The Ledger no longer carries a Groups column, so this is where you find
+     out who someone shares a group with — right under their name. */
+  const groupChips = memberOf.length
+    ? `<div class="modal-groups">${memberOf.map(g => Chip(esc(g.name))).join('')}</div>`
+    : '';
 
   const customInterestPanel = Panel({
     style: 'margin-top:16px',
@@ -2133,6 +2140,7 @@ function renderModal() {
     title: esc(p.name),
     closeAction: 'close-modal',
     body: `
+      ${groupChips}
       <div class="form-row">
         <label>Currency <select id="person-currency">${currencyOptions(p.currency)}</select></label>
         <label><input type="checkbox" id="person-exempt" ${p.interestExempt ? 'checked' : ''}> interest exempt</label>

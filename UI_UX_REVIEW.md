@@ -149,13 +149,17 @@ and panel flash all play regardless of the OS setting.
 `@media (prefers-reduced-motion: reduce) { :root { --duration-fast: 0ms; --duration-normal: 0ms; } … }`
 plus the few hard-coded transition/animation durations.
 
-**M9 — Desktop ledger rows are mostly air.**
-On wide screens the Person and Groups columns take half the width for a name and a
-chip, the three money columns huddle in a narrow band, and the three-line quick-entry
-stack (amount+buttons / repaid / reason) sets a tall row height — so each row is a large
-box that's ~70% empty. The phone layout of the same data is tighter and easier to scan.
-*Fix:* on `min-width: 681px`, let quick-entry sit on one line (amount, +, −, reason
-inline) and rebalance column widths so the numbers sit nearer the names.
+**M9 — Desktop ledger rows are mostly air.** *(fixed)*
+On wide screens the Person and Groups columns took half the width for a name and a
+chip, the three money columns huddled in a narrow band, and the three-line quick-entry
+stack (amount+buttons / repaid / reason) set a tall row height — so each row was a large
+box that's ~70% empty. The phone layout of the same data was tighter and easier to scan.
+*Fix, as shipped:* quick entry sits on one line above `681px`; the Groups column is gone
+altogether (it was also the one cell whose height varied with its contents, so it alone
+decided how tall each row was — membership now lives on the person's own card); the
+remaining columns have fixed widths and every row a fixed height, so names, Settle
+buttons and figures all land at the same x down the list. On phones the three figures
+share one captioned row instead of stacking into three label-and-value lines.
 
 ### Low
 
