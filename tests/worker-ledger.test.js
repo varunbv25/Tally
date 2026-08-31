@@ -58,7 +58,7 @@ async function ledger(worker, env, token, method, body) {
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   const res = await worker.default.fetch(req, env, { waitUntil() {} });
-  return { status: res.status, body: await res.json() };
+  return { status: res.status, headers: res.headers, body: await res.json() };
 }
 
 test('the real Worker refuses a ledger write older than what it holds', async () => {
@@ -103,4 +103,44 @@ test('the real Worker rejects an unauthenticated ledger read', async () => {
   const res = await worker.default.fetch(
     new Request('https://x/ledger', { method: 'GET' }), env, { waitUntil() {} });
   assert.strictEqual(res.status, 401);
+});
+
+/* A ledger reply is a per-account, per-moment answer. Cached anywhere between
+   the Worker and the page, it is indistinguishable from a device that simply
+   never receives the other device's changes. */
+test('ledger replies forbid caching', async () => {
+  const worker = await loadWorker();
+  const env = { AUTH_SECRET, TALLY_SYNC: fakeKV(), TALLY_PUSH: fakeKV() };
+  const token = await mintToken(AUTH_SECRET, 'account-hash');
+
+  for (const r of [
+    await ledger(worker, env, token, 'GET'),
+    await ledger(worker, env, token, 'PUT', { state: { people: [] }, updatedAt: 1 }),
+  ]) {
+    assert.match(r.headers.get('cache-control') || '', /no-store/);
+  }
+});
+
+/* Versions are wall-clock milliseconds, so the devices comparing them need a
+   clock they share. The Worker's is the only candidate, so it ships in every
+   reply and the client stamps against it. */
+test('every ledger reply carries the server clock', async () => {
+  const worker = await loadWorker();
+  const env = { AUTH_SECRET, TALLY_SYNC: fakeKV(), TALLY_PUSH: fakeKV() };
+  const token = await mintToken(AUTH_SECRET, 'account-hash');
+
+  const before = Date.now();
+  const empty = await ledger(worker, env, token, 'GET');
+  assert.ok(empty.body.now >= before, 'GET on an empty account still reports the time');
+
+  const put = await ledger(worker, env, token, 'PUT', { state: { people: [] }, updatedAt: 2000 });
+  assert.ok(put.body.now >= before, 'accepted PUT reports the time');
+
+  const stale = await ledger(worker, env, token, 'PUT', { state: { people: [] }, updatedAt: 1000 });
+  assert.strictEqual(stale.body.stale, true);
+  assert.ok(stale.body.now >= before, 'a refused PUT reports it too — that is when a skewed device needs it');
+
+  const got = await ledger(worker, env, token, 'GET');
+  assert.ok(got.body.now >= before, 'GET with a stored ledger reports the time');
+  assert.strictEqual(got.body.updatedAt, 2000, 'and still returns the stored version');
 });

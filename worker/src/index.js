@@ -23,9 +23,18 @@ const CORS = {
   'access-control-allow-headers': 'content-type, authorization',
 };
 
+/* `no-store` on every reply: these are per-account, per-moment answers. A
+   cached GET /ledger is indistinguishable from a device that never receives
+   another device's changes, so nothing between here and the browser may keep
+   a copy. */
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
-    status, headers: { 'content-type': 'application/json', ...CORS },
+    status,
+    headers: {
+      'content-type': 'application/json',
+      'cache-control': 'no-store, no-cache, must-revalidate',
+      ...CORS,
+    },
   });
 
 /* ---------- small crypto helpers ---------- */
@@ -230,9 +239,15 @@ async function handleSync(req, env, path) {
     if (!payload) return json({ error: 'unauthorized' }, 401);
     const key = `ledger:${payload.sub}`;
 
+    /* Every reply carries the server's clock. Versions are wall-clock
+       milliseconds, so two devices can only agree on which ledger is newer if
+       they stamp them against the same clock: a phone running a few minutes
+       fast would otherwise win every comparison forever, and the other
+       device's edits would be refused as "stale" and silently discarded. The
+       client measures its offset from this and stamps in server time. */
     if (req.method === 'GET') {
       const rec = await env.TALLY_SYNC.get(key, 'json');
-      return json(rec || { state: null, updatedAt: 0 });
+      return json({ ...(rec || { state: null, updatedAt: 0 }), now: Date.now() });
     }
     if (req.method === 'PUT') {
       const { state, updatedAt } = await req.json();
@@ -243,10 +258,10 @@ async function handleSync(req, env, path) {
          indefinitely. The client reconciles on the returned updatedAt. */
       const cur = await env.TALLY_SYNC.get(key, 'json');
       if (cur && typeof cur.updatedAt === 'number' && cur.updatedAt > updatedAt) {
-        return json({ ok: true, updatedAt: cur.updatedAt, stale: true });
+        return json({ ok: true, updatedAt: cur.updatedAt, stale: true, now: Date.now() });
       }
       await env.TALLY_SYNC.put(key, JSON.stringify({ state, updatedAt }));
-      return json({ ok: true, updatedAt });
+      return json({ ok: true, updatedAt, now: Date.now() });
     }
   }
 

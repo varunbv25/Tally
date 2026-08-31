@@ -28,6 +28,7 @@ const GOOGLE_CLIENT_ID =
 
 const CLOUD_AUTH_KEY = "tally-cloud"; // { token, email }
 const CLOUD_UPDATED_KEY = "tally-cloud-updated"; // local ledger version (ms)
+const CLOUD_SKEW_KEY = "tally-cloud-skew"; // this device's clock offset from the server (ms)
 const CLOUD_PROMPT_KEY = "tally-cloud-prompt"; // '1' once we've offered sync to a first-time user
 const CLOUD_TIMEOUT_MS = 8000; // give up on a slow request and fall back to local data
 const CLOUD_AUTH_TIMEOUT_MS = 20000; // sign-in code requests also send an email server-side, so allow longer
@@ -45,6 +46,43 @@ let cloudAuth = {
 
 let cloudApplying = false; // true while we write a pulled blob (suppresses re-upload)
 let cloudPushTimer = null;
+
+/* ---------- one clock for every device ----------
+   A ledger version is a wall-clock millisecond, and the whole last-write-wins
+   scheme rests on both devices reading those numbers off the same clock. They
+   don't: a phone running a few minutes fast stamps every save into the future,
+   so the accurate device's uploads are refused as "stale" forever and its edits
+   are quietly replaced by the fast device's copy — the ledger stops syncing in
+   one direction and looks like it's reverting changes in the other.
+
+   So every reply from the Worker carries its own clock, and we stamp versions
+   in *server* time instead of local time. The offset is remembered across
+   reloads so an edit made before the first request of a session (or made
+   offline) is still stamped on the shared clock. */
+let cloudSkewMs = 0;
+
+function loadCloudSkew() {
+  const v = Number(localStorage.getItem(CLOUD_SKEW_KEY) || 0);
+  cloudSkewMs = Number.isFinite(v) ? v : 0;
+}
+
+function noteCloudServerTime(now) {
+  if (typeof now !== "number" || !Number.isFinite(now)) return;
+  const skew = now - Date.now();
+  // Ignore sub-second noise: that's round-trip time, not a clock disagreement.
+  if (Math.abs(skew - cloudSkewMs) < 1000) return;
+  cloudSkewMs = skew;
+  try {
+    localStorage.setItem(CLOUD_SKEW_KEY, String(skew));
+  } catch {
+    /* storage full / private mode — an in-memory offset still works */
+  }
+}
+
+/* "Now", as the server would tell it. Every ledger version is stamped here. */
+function cloudNow() {
+  return Date.now() + cloudSkewMs;
+}
 
 function cloudConfigured() {
   return !!SYNC_SERVER;
@@ -208,6 +246,8 @@ function saveCloudSession() {
 function clearCloudSession() {
   localStorage.removeItem(CLOUD_AUTH_KEY);
   localStorage.removeItem(CLOUD_UPDATED_KEY);
+  localStorage.removeItem(CLOUD_SKEW_KEY);
+  cloudSkewMs = 0;
 }
 
 /* ---------- network ---------- */
@@ -229,6 +269,12 @@ async function cloudFetch(path, opts = {}) {
     res = await fetch(SYNC_SERVER + path, {
       ...fetchOpts,
       headers,
+      /* Never let a cache answer for the sync API. `GET /ledger` is a plain
+         cross-origin GET, so without this the browser's HTTP cache can hand
+         back the previous pull and the device sits on a ledger that no longer
+         exists anywhere else. (The service worker is kept off these requests
+         for the same reason — see sw.js.) */
+      cache: "no-store",
       signal: ctrl.signal,
     });
   } catch (err) {
@@ -256,6 +302,7 @@ async function cloudFetch(path, opts = {}) {
     throw new Error("Session expired — sign in again");
   }
   const data = await res.json().catch(() => ({}));
+  noteCloudServerTime(data && data.now);
   if (!res.ok) throw new Error(data.error || "Something went wrong");
   return data;
 }
@@ -396,8 +443,15 @@ async function cloudPush() {
       (local.transactions || []).length ||
       (local.groups || []).length;
     if (!hasData) return;
-    updatedAt = Date.now();
+    updatedAt = cloudNow();
   }
+  /* A version stamped before this device had ever heard from the server (its
+     first edits of a session, or edits made offline) was stamped on the local
+     clock. If that clock runs fast the version sits in the future, where no
+     other device can ever beat it — so pull it back to server time now that we
+     know what server time is. */
+  const serverNow = cloudNow();
+  if (updatedAt > serverNow) updatedAt = serverNow;
   const res = await cloudFetch("/ledger", {
     method: "PUT",
     body: JSON.stringify({ state: JSON.parse(json), updatedAt }),
@@ -448,7 +502,7 @@ async function cloudSyncNow() {
    the cloud (and other devices polling it) in real time. No-ops unless signed in. */
 function cloudOnSave() {
   if (cloudApplying || !cloudSignedIn()) return;
-  setCloudLocalUpdated(Date.now());
+  setCloudLocalUpdated(cloudNow());
   clearTimeout(cloudPushTimer);
   cloudPushTimer = setTimeout(() => {
     cloudPushTimer = null;
@@ -469,6 +523,7 @@ function cloudFlushPush() {
 
 function cloudInit() {
   if (!cloudConfigured()) return;
+  loadCloudSkew();
   loadCloudSession();
   if (cloudSignedIn()) {
     // pull anything newer that another device may have pushed while we were away

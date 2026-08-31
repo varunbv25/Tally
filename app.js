@@ -373,7 +373,6 @@ function renderLedger() {
 
   const rows = people.map(p => {
     const { principal, interest, total } = balanceDisplay(p);
-    const groups = groupsOf(p.id).map(g => Chip(esc(g.name))).join('');
     const exempt = p.interestExempt ? Chip('no interest', 'exempt') : '';
     const isSel = ui.selectedPeople.has(p.id);
     const selCls = ui.personSelect ? (isSel ? ' selected' : '') : '';
@@ -381,10 +380,12 @@ function renderLedger() {
 
     /* In select mode the tile keeps its full layout — Settle and the
        quick-entry boxes stay put (inert, dimmed via CSS) so entering
-       selection never shifts the page; share/delete live in the top bar. */
+       selection never shifts the page; share/delete live in the top bar.
+       Which groups someone is in isn't a column any more: it was the one
+       cell whose height varied with its contents, so it alone decided how
+       tall each row was. It lives on the person's own card instead. */
     return `<tr class="row${selCls}" data-person-id="${p.id}">
-      <td class="col-person${ui.personSelect ? ' selecting' : ''}">${check}${PersonName(p.id, p.name, 'Tap to open · long-press or right-click to select, then share or delete')} ${exempt} ${rowActions(p.name, p.id, total)}</td>
-      <td class="col-groups">${groups}</td>
+      <td class="col-person"><div class="person-cell">${check}${PersonName(p.id, p.name, 'Tap to open · long-press or right-click to select, then share or delete')}${exempt}${rowActions(p.name, p.id, total)}</div></td>
       <td class="num" data-label="Principal">${Money(principal, p.currency)}</td>
       <td class="num" data-label="Interest"><span class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</span></td>
       <td class="num" data-label="Total">${Money(total, p.currency)}</td>
@@ -461,7 +462,7 @@ function renderLedger() {
     </div>
     <table class="ledger-table">
       <thead><tr>
-        <th>Person</th><th class="col-groups">Groups</th>
+        <th>Person</th>
         <th class="num">Principal</th><th class="num">Interest</th><th class="num">Total</th>
         <th>Quick entry</th>
       </tr></thead>
@@ -578,8 +579,7 @@ function renderGroupDetail() {
     const selCls = ui.memberSelect ? (isSel ? ' selected' : '') : '';
     const check = ui.memberSelect ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
     return `<tr class="row${selCls}" data-member-id="${p.id}">
-      <td class="col-person">${check}${PersonName(p.id, p.name)}
-        ${rowActions(p.name, p.id, total)}</td>
+      <td class="col-person"><div class="person-cell">${check}${PersonName(p.id, p.name)}${rowActions(p.name, p.id, total)}</div></td>
       <td class="num" data-label="Total owed">${Money(total, p.currency)}</td>
       <td class="col-quick">
         ${QuickAdd({ idSuffix: p.id, action: 'quick-add', dataId: p.id, group: g.id, titles: false })}
@@ -1598,14 +1598,14 @@ function setSplitIndividualAmount(row) {
   if (!box.hidden) { box.focus(); box.select(); }
 }
 
-/* The split picker is re-rendered when a person is added mid-flow, which would
+/* Switching between equal and custom shares re-renders the picker, which would
    otherwise wipe the typed amount/note and the current ticks. We snapshot the
    live form into ui.splitDraft so renderSplitModal can restore it. */
 function freshSplitDraft() {
   return {
     payerId: 'me', selected: new Set(), me: false, amount: '',
     mode: 'equal', amounts: {}, meAmount: '', own: new Set(),
-    date: new Date().toISOString().slice(0, 10), note: '', newName: '',
+    date: new Date().toISOString().slice(0, 10), note: '',
     // which picker is expanded: "paid by" starts closed on its Me default,
     // "split between" open, since ticking people is the point of the flow
     open: { payer: false, members: true },
@@ -1652,8 +1652,6 @@ function syncSplitDraft() {
       else ui.splitDraft.amounts[box.dataset.splitAmount] = box.value;
     });
   }
-  const ni = document.getElementById('split-new-name');
-  if (ni) ui.splitDraft.newName = ni.value;
 }
 
 function renderSplitModal() {
@@ -1732,13 +1730,12 @@ function renderSplitModal() {
       <button type="button" class="seg${custom ? ' active' : ''}" data-action="set-split-mode" data-mode="custom" aria-pressed="${custom}">Custom amounts</button>
     </div>`;
 
-  /* Add a brand-new person without leaving the split: typing a name and
-     hitting + Add creates them, ticks them, and clears the field to repeat. */
-  const addRow =
-    `<div class="split-add-row">
-      <input type="text" id="split-new-name" placeholder="add a new person…" maxlength="40" value="${esc(draft.newName || '')}">
-      <button type="button" class="btn ghost" data-action="split-add-person">+ Add</button>
-    </div>`;
+  /* People are created on the Ledger, never here — a split only divides a cost
+     between people who already exist. With nobody to divide it with, say so
+     rather than leaving the list looking broken. */
+  const emptyRow = peopleByName().length
+    ? ''
+    : '<p class="muted split-pick-empty">No people yet — add someone on the Ledger first, then split an expense with them.</p>';
 
   const payerRows = payerRow('me', 'Me', Chip(esc(state.settings.baseCurrency)))
     + peopleByName().map(p => payerRow(p.id, esc(p.name), Chip(p.currency))).join('');
@@ -1760,7 +1757,7 @@ function renderSplitModal() {
         ${picker('members', 'Split between',
           splitMembersLabel([...sel].filter(getPerson), draft.me), openState.members,
           `${modeBar}
-          <div class="share-pick-list split-scroll">${meRow}${rows}${addRow}</div>`)}
+          <div class="share-pick-list split-scroll">${meRow}${rows}${emptyRow}</div>`)}
 
         <div class="split-fixed">
           <div class="form-row">
@@ -2077,8 +2074,15 @@ function renderModal() {
       </tr>`;
     }).join('');
 
+  const memberOf = groupsOf(p.id);
   const groupOptions = ['<option value="">No group (personal)</option>']
-    .concat(groupsOf(p.id).map(g => `<option value="${g.id}">${esc(g.name)}</option>`)).join('');
+    .concat(memberOf.map(g => `<option value="${g.id}">${esc(g.name)}</option>`)).join('');
+
+  /* The Ledger no longer carries a Groups column, so this is where you find
+     out who someone shares a group with — right under their name. */
+  const groupChips = memberOf.length
+    ? `<div class="modal-groups">${memberOf.map(g => Chip(esc(g.name))).join('')}</div>`
+    : '';
 
   const customInterestPanel = Panel({
     style: 'margin-top:16px',
@@ -2136,6 +2140,7 @@ function renderModal() {
     title: esc(p.name),
     closeAction: 'close-modal',
     body: `
+      ${groupChips}
       <div class="form-row">
         <label>Currency <select id="person-currency">${currencyOptions(p.currency)}</select></label>
         <label><input type="checkbox" id="person-exempt" ${p.interestExempt ? 'checked' : ''}> interest exempt</label>
@@ -2412,20 +2417,6 @@ document.addEventListener('click', e => {
     }
     case 'open-split': ui.splitOpen = true; ui.splitDraft = freshSplitDraft(); pushNav(); render(); break;
     case 'close-split': goBack(); break;
-    case 'split-add-person': {
-      const input = document.getElementById('split-new-name');
-      const name = ((input && input.value) || '').trim();
-      if (!name) { if (input) input.focus(); break; }
-      syncSplitDraft();                       // keep typed amount/note + ticks
-      const p = addPerson(name);              // base currency by default
-      ui.splitDraft.selected.add(p.id);       // newly added → ticked
-      ui.splitDraft.newName = '';
-      saveState();
-      render();
-      const next = document.getElementById('split-new-name');
-      if (next) next.focus();
-      break;
-    }
     case 'new-group': ui.creatingGroup = true; render(); document.querySelector('[data-form="add-group"] input')?.focus(); break;
     case 'cancel-create-group': ui.creatingGroup = false; render(); break;
     case 'open-group': ui.openGroupId = id; ui.tab = 'groups'; ui.renamingGroup = false; pushNav(); render(); break;
@@ -2932,15 +2923,6 @@ document.addEventListener('keydown', e => {
   if (e.target.id === 'new-person-name') {
     e.preventDefault();
     document.querySelector('[data-action="add-person-entry"][data-sign="1"]')?.click();
-    return;
-  }
-
-  // the add-person field lives inside the split form; Enter should add the
-  // person, not submit the whole split
-  if (e.target.id === 'split-new-name') {
-    e.preventDefault();
-    const addBtn = document.querySelector('[data-action="split-add-person"]');
-    if (addBtn) addBtn.click();
     return;
   }
 
