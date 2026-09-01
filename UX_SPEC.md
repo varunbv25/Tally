@@ -75,7 +75,7 @@ you, no confirmation screen — the preview *was* the confirmation.
 
 **Screen-reader logic for debts**
 - Read debts as a sentence, not a signed number: "Aarav owes you ₹1,250" / "You owe Meera ₹480" — direction first, then amount. A bare "−480" is meaningless by ear.
-- Balances carry their as-of moment ("Balances as of 21 Aug, 3:01 pm") because interest is time-based; the ledger exposes it as text, not just visual context.
+- Balances carry their as-of moment ("Balances as of 21 Aug, 3:01 pm") because interest is time-based; the ledger exposes it as text, not just visual context. It appears only while interest is switched on — with no rule running, a balance changes only when someone records an entry, and an as-of stamp would be answering a question nobody asked.
 - Selection state is real state: pick-tiles keep a hidden native checkbox that carries focus and `checked`, so SRs announce "checked/unchecked", while the visual tick is `aria-hidden`.
 - Modals: focus moves into the dialog on open, Tab is trapped inside, Escape/back closes; the page behind is inert (scroll-locked and covered by an opaque scrim).
 - Touch targets ≥44px on touch devices; `prefers-reduced-motion` collapses all transitions/animations without changing any end state.
