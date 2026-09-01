@@ -299,12 +299,31 @@ function connectionDown() {
   return !!(navOff || syncOff);
 }
 
+/* The footer's interest line is a promise about a feature that may not be
+   switched on. When it isn't, the ledger says nothing about interest at all. */
+function updateColophon() {
+  const el = document.getElementById('colophon-note');
+  if (!el) return;
+  el.textContent = interestInPlay()
+    ? 'Interest accrues only on what they owe you · data lives in your browser'
+    : 'data lives in your browser';
+}
+
 function updateConnectivity() {
   const el = document.getElementById('offline-flag');
   if (el) el.hidden = !connectionDown();
 }
 
 /* ---------- ledger view ---------- */
+
+/* Is interest part of this ledger at all? It is switched on either globally
+   (a rule) or on one person (their own config). With none of them on, every
+   interest-shaped piece of furniture — the as-of stamp, the "no interest"
+   badge — is answering a question nobody in this ledger has asked. */
+function interestInPlay() {
+  return state.interestRules.some(r => r.enabled)
+    || state.people.some(p => p.interestConfig && p.interestConfig.enabled);
+}
 
 /* Dashboard hero: the headline net position, split into "you are owed"
    (emerald) and "you owe" (coral). Figures are summed in the base currency
@@ -371,9 +390,20 @@ function renderLedger() {
         <span class="add-person-quick-hint">Leave the amount blank to just add the name.</span>
       </div>` : '';
 
-  const rows = people.map(p => {
-    const { principal, interest, total } = balanceDisplay(p);
-    const exempt = p.interestExempt ? Chip('no interest', 'exempt') : '';
+  /* Balances are computed once per render and reused: the figures decide the
+     table's own shape, so they have to be known before the header is written.
+     Interest is shown only when it is actually sitting on someone — no rows
+     accruing, no Interest column, and with it the Principal column goes too,
+     since Principal and Total would be the same number printed twice. */
+  const balances = people.map(p => ({ p, ...balanceDisplay(p) }));
+  const showInterest = balances.some(b => b.interest > 0.005);
+  const interestOn = interestInPlay();
+  const noFigure = '<span class="money zero">—</span>';
+
+  const rows = balances.map(({ p, principal, interest, total }) => {
+    const hasInterest = interest > 0.005;
+    /* "no interest" only means something while interest exists to be spared. */
+    const exempt = p.interestExempt && interestOn ? Chip('no interest', 'exempt') : '';
     const isSel = ui.selectedPeople.has(p.id);
     const selCls = ui.personSelect ? (isSel ? ' selected' : '') : '';
     const check = ui.personSelect ? `<span class="sel-check${isSel ? ' on' : ''}" aria-hidden="true"></span>` : '';
@@ -384,11 +414,19 @@ function renderLedger() {
        Which groups someone is in isn't a column any more: it was the one
        cell whose height varied with its contents, so it alone decided how
        tall each row was. It lives on the person's own card instead. */
-    return `<tr class="row${selCls}" data-person-id="${p.id}">
+    /* Split into principal + interest only for the people who carry interest.
+       For everyone else the split is empty (their principal IS their total),
+       so those two cells hold a dash on wide screens to keep the columns
+       lined up, and drop out entirely on the stacked mobile card. */
+    const figures = showInterest
+      ? `<td class="num col-principal" data-label="Principal">${hasInterest ? Money(principal, p.currency) : noFigure}</td>
+      <td class="num col-interest" data-label="Interest">${hasInterest ? `<span class="money interest">+${fmtMoney(interest, p.currency)}</span>` : noFigure}</td>
+      <td class="num col-total" data-label="${hasInterest ? 'Total' : 'Balance'}">${Money(total, p.currency)}</td>`
+      : `<td class="num col-total" data-label="Balance">${Money(total, p.currency)}</td>`;
+
+    return `<tr class="row${selCls}${showInterest && !hasInterest ? ' no-interest' : ''}" data-person-id="${p.id}">
       <td class="col-person"><div class="person-cell">${check}${PersonName(p.id, p.name, 'Tap to open · long-press or right-click to select, then share or delete')}${exempt}${rowActions(p.name, p.id, total)}</div></td>
-      <td class="num" data-label="Principal">${Money(principal, p.currency)}</td>
-      <td class="num" data-label="Interest"><span class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</span></td>
-      <td class="num" data-label="Total">${Money(total, p.currency)}</td>
+      ${figures}
       <td class="col-quick">
         ${QuickAdd({ idSuffix: p.id, action: 'quick-add', dataId: p.id, titles: true })}
       </td>
@@ -454,16 +492,18 @@ function renderLedger() {
 
     ${people.length ? `
     <div class="list-share">
-      <span class="as-of" title="Interest accrues continuously, so totals are computed at this moment">Balances as of ${esc(fmtAsOf())}</span>
+      ${interestOn ? `<span class="as-of" title="Interest accrues continuously, so totals are computed at this moment">Balances as of ${esc(fmtAsOf())}</span>` : ''}
       <span class="list-tools">
         <button class="btn small ghost" data-action="enter-person-select" title="Select people to share or delete">Select</button>
         ${ShareButton({ cls: 'btn ghost head-action head-share', action: 'open-share-people', extra: state.people.length < 1 ? 'disabled title="Add someone first"' : '' })}
       </span>
     </div>
-    <table class="ledger-table">
+    <table class="ledger-table${showInterest ? '' : ' lean'}">
       <thead><tr>
         <th>Person</th>
-        <th class="num">Principal</th><th class="num">Interest</th><th class="num">Total</th>
+        ${showInterest
+          ? '<th class="num">Principal</th><th class="num">Interest</th><th class="num">Total</th>'
+          : '<th class="num">Balance</th>'}
         <th>Quick entry</th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -2147,14 +2187,16 @@ function renderModal() {
       </div>
 
       <div class="balance-strip">
+        ${interest > 0.005 ? `
         <span>Principal${Money(principal, p.currency, { tag: 'b' })}</span>
-        <span>Accrued interest<b class="money interest">${interest > 0.005 ? '+' + fmtMoney(interest, p.currency) : '—'}</b></span>
-        <span>Total${Money(total, p.currency, { tag: 'b' })}</span>
+        <span>Accrued interest<b class="money interest">+${fmtMoney(interest, p.currency)}</b></span>
+        <span>Total${Money(total, p.currency, { tag: 'b' })}</span>` : `
+        <span>Balance${Money(total, p.currency, { tag: 'b' })}</span>`}
       </div>
       ${ruleNames ? `<p class="muted" style="margin:-8px 0 14px">Interest from rule: <em>${ruleNames}</em></p>` : ''}
 
       <div class="form-row">
-        <button class="btn ghost" data-action="capitalize" data-id="${p.id}" ${detail.total > 0.005 ? '' : 'disabled'}>Capitalize interest</button>
+        ${detail.total > 0.005 ? `<button class="btn ghost" data-action="capitalize" data-id="${p.id}">Capitalize interest</button>` : ''}
         <button class="btn" data-action="settle" data-id="${p.id}" ${Math.abs(total) > 0.005 ? '' : 'disabled'}>Settle up</button>
         <button class="btn ghost head-action" data-action="share-statement" data-id="${p.id}" title="Share ${esc(p.name)}'s statement — balance and entries, as text">${Icons.share()} Statement</button>
         <button class="btn quiet-danger" data-action="delete-person" data-id="${p.id}">Delete person</button>
@@ -2174,6 +2216,7 @@ function renderModal() {
 
 function render() {
   updateConnectivity();
+  updateColophon();
 
   document.querySelectorAll('.tab-btn, .bnav-item, .nav-icon-btn').forEach(t => {
     const on = t.dataset.tab === ui.tab;

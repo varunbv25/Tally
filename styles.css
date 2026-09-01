@@ -690,6 +690,11 @@ button { font-family: var(--body); cursor: pointer; }
      and the header labels sit squarely over their own column. */
   .ledger-table:not(.history-table) th:first-child { width: 30%; }
   .ledger-table:not(.history-table) th.num { width: 12%; }
+  /* With no interest anywhere, the three money columns collapse into one
+     Balance column. The width freed up goes to the name and the quick-entry
+     boxes rather than leaving a canyon between the name and the figure. */
+  .ledger-table.lean:not(.history-table) th:first-child { width: 38%; }
+  .ledger-table.lean:not(.history-table) th.num { width: 16%; }
 
   .ledger-table:not(.history-table) th { background: none; border-bottom: none; }
   .ledger-table:not(.history-table) tbody td {
@@ -1651,6 +1656,20 @@ input:checked + .sel-check::after {
   }
   .ledger-table:not(.history-table) td[data-label]::before {
     display: block; margin-bottom: 3px;
+  }
+  /* On the stacked card there are no columns left to line up, so a person
+     with no interest shows their balance alone instead of two dashes. */
+  .ledger-table:not(.history-table) tr.row.no-interest td.col-principal,
+  .ledger-table:not(.history-table) tr.row.no-interest td.col-interest { display: none; }
+  /* …and a lone figure doesn't need a caption stacked above it: label left,
+     amount right, one line instead of two — the card is that much shorter. */
+  .ledger-table.lean:not(.history-table) td.col-total,
+  .ledger-table:not(.history-table) tr.row.no-interest td.col-total {
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .ledger-table.lean:not(.history-table) td.col-total::before,
+  .ledger-table:not(.history-table) tr.row.no-interest td.col-total::before {
+    display: inline; margin-bottom: 0;
   }
   .ledger-table:not(.history-table) td.col-quick { flex: 1 1 100%; margin-top: 0; }
   .ledger-table td.col-quick { margin-top: var(--sp-2); }

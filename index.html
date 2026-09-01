@@ -105,7 +105,9 @@
 <div id="cloud-prompt-root"></div>
 
 <footer class="colophon">
-  <span>Interest accrues only on what they owe you · data lives in your browser</span>
+  <!-- The interest half of this line is written in by render() and only while
+       interest is switched on; see updateColophon() in app.js. -->
+  <span id="colophon-note">data lives in your browser</span>
 </footer>
 
 <script src="store.js"></script>
