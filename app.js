@@ -133,7 +133,7 @@ function applyTheme() {
   const theme = resolvedTheme();
   document.documentElement.setAttribute('data-theme', theme);
   // data-theme has to land first: barColor() reads the token it selects.
-  const meta = document.querySelector('meta[name="theme-color"]');
+  const meta = document.querySelector('meta[name="theme-color"]:not([media])');
   if (meta) meta.setAttribute('content', barColor(theme));
   const iosBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
   if (iosBar) iosBar.setAttribute('content', IOS_BAR_STYLE[theme]);
@@ -1395,12 +1395,14 @@ function splitPreviewHTML(payerId, ids, amt, includeMe, own) {
   if (!people.length && !includeMe) {
     return '<span class="muted">Tick who is splitting and enter an amount to see each share.</span>';
   }
-  if (!Number.isFinite(amt) || amt <= 0) {
-    return '<span class="muted">Enter the total to see each share.</span>';
-  }
+  /* Checked before the total: once everyone is on their own figure the total
+     is derived from these boxes, so an empty one is the real thing missing. */
   const ownMap = own || {};
   const unfilled = Object.keys(ownMap).some(k => !Number.isFinite(ownMap[k]));
   if (unfilled) return '<span class="muted">Enter an amount for everyone on their own figure.</span>';
+  if (!Number.isFinite(amt) || amt <= 0) {
+    return '<span class="muted">Enter the total to see each share.</span>';
+  }
 
   const baseCur = state.settings.baseCurrency;
   /* Shares come from the same computation that records them, so this preview
@@ -1522,6 +1524,35 @@ function splitOwnMap() {
   return own;
 }
 
+/* Every ticked participant, keyed the way the amount boxes are. */
+function splitParticipantKeys() {
+  return (splitIncludesMe() ? ['me'] : []).concat(splitSelectedIds());
+}
+
+/* True when everyone ticked is on their own figure — custom mode, or equal
+   mode with every last person long-pressed. Nobody is left to absorb a
+   remainder, so the individual amounts already determine the total. */
+function splitAllOwn() {
+  const keys = splitParticipantKeys();
+  return keys.length > 0 && keys.every(k => splitHasOwn(k));
+}
+
+/* The amount being divided. With everyone on their own figure it is simply
+   their sum — the total box would be a second place to get the same number
+   wrong, so it is hidden and this stands in for it. Otherwise it is the typed
+   total, which is what the equal split has to divide up. Empty boxes count as
+   nothing here; splitPreviewHTML reports them before the total matters. */
+function splitTotalAmount() {
+  if (!splitAllOwn()) {
+    const form = document.querySelector('[data-form="add-split"]');
+    return form ? parseFloat(form.amount.value) : NaN;
+  }
+  const own = splitOwnMap();
+  const sum = splitParticipantKeys()
+    .reduce((s, k) => s + (Number.isFinite(own[k]) ? own[k] : 0), 0);
+  return Math.round(sum * 100) / 100;
+}
+
 /* Records a split someone else paid for. The division is the same
    computeSplitShares call the preview and the paid-by-Me path use; the shares
    then land as linked indirect payments — each participant's share is added
@@ -1597,7 +1628,14 @@ function updateSplitPreview() {
   const memberSum = form.querySelector('[data-members-summary]');
   if (memberSum) memberSum.innerHTML = splitMembersLabel(ids, me);
 
-  node.innerHTML = splitPreviewHTML(payerId, ids, parseFloat(form.amount.value), me, splitOwnMap());
+  /* The total box only earns its place while someone is still on the equal
+     split. Disabled as well as hidden, so its `required` can't block submit on
+     a field nobody can see, and so it stays out of the submitted form data. */
+  const derived = splitAllOwn();
+  const totalBox = form.querySelector('[data-split-total]');
+  if (totalBox) { totalBox.hidden = derived; totalBox.disabled = derived; }
+
+  node.innerHTML = splitPreviewHTML(payerId, ids, splitTotalAmount(), me, splitOwnMap());
 }
 
 /* Long-pressing someone in the split picker hands them their own amount box,
@@ -1763,11 +1801,15 @@ function renderSplitModal() {
     Chip(p.currency))).join('');
 
   /* Nothing to divide until at least two people are ticked, so the equal/custom
-     choice only appears then (updateSplitPreview shows and hides it live). */
+     choice only appears then (updateSplitPreview shows and hides it live). It
+     governs every name below it, so styles.css sticks it to the top of the
+     scroll rather than letting it slide away with the list it applies to. */
   const modeBar = `
-    <div class="seg-control" role="group" aria-label="How the total is divided" data-split-modes ${several ? '' : 'hidden'}>
-      <button type="button" class="seg${custom ? '' : ' active'}" data-action="set-split-mode" data-mode="equal" aria-pressed="${!custom}">Split equally</button>
-      <button type="button" class="seg${custom ? ' active' : ''}" data-action="set-split-mode" data-mode="custom" aria-pressed="${custom}">Custom amounts</button>
+    <div class="split-mode-bar" data-split-modes ${several ? '' : 'hidden'}>
+      <div class="seg-control" role="group" aria-label="How the total is divided">
+        <button type="button" class="seg${custom ? '' : ' active'}" data-action="set-split-mode" data-mode="equal" aria-pressed="${!custom}">Split equally</button>
+        <button type="button" class="seg${custom ? ' active' : ''}" data-action="set-split-mode" data-mode="custom" aria-pressed="${custom}">Custom amounts</button>
+      </div>
     </div>`;
 
   /* People are created on the Ledger, never here — a split only divides a cost
@@ -1788,7 +1830,7 @@ function renderSplitModal() {
     title: 'Split an expense',
     closeAction: 'close-split',
     body: `
-      <p class="section-sub split-intro">Pick who paid, tick who shares the cost, and enter the total. If you paid, each share is recorded as money they owe you; if someone else paid, the shares are routed through you and the payer's balance drops by what they covered. Long-press anyone for their own amount; the rest re-split what's left.</p>
+      <p class="section-sub split-intro">Pick who paid, tick who shares the cost, and enter the total (custom amounts add up to their own). If you paid, each share is recorded as money they owe you; if someone else paid, the shares are routed through you and the payer's balance drops by what they covered. Long-press anyone for their own amount; the rest re-split what's left.</p>
 
       <form data-form="add-split">
         ${picker('payer', 'Paid by', splitPayerLabel(draft.payerId), openState.payer,
@@ -1801,7 +1843,7 @@ function renderSplitModal() {
 
         <div class="split-fixed">
           <div class="form-row">
-            <input name="amount" type="number" inputmode="decimal" step="any" min="0.01" placeholder="total amount" value="${esc(draft.amount || '')}" style="flex:1;min-width:8em" required>
+            <input name="amount" type="number" inputmode="decimal" step="any" min="0.01" placeholder="total amount" value="${esc(draft.amount || '')}" style="flex:1;min-width:8em" data-split-total required>
             <input name="date" type="date" value="${esc(draft.date || new Date().toISOString().slice(0, 10))}" required>
           </div>
           <div class="form-row">
@@ -2452,6 +2494,14 @@ document.addEventListener('click', e => {
           if (draft.me && !draft.meAmount && Number.isFinite(shares.me)) draft.meAmount = String(shares.me);
         }
       }
+      /* Coming back from custom, the total was never typed — it was the sum of
+         the individual figures. Seed the field with it (before the own-figure
+         set is cleared, which is what makes it derivable) so the equal split
+         has something to divide instead of an empty box. */
+      if (mode === 'equal' && !draft.amount) {
+        const sum = splitTotalAmount();
+        if (Number.isFinite(sum) && sum > 0) draft.amount = String(sum);
+      }
       // back to equal puts everyone on the equal division, long-presses included
       if (mode === 'equal' && draft.own) draft.own.clear();
       draft.mode = mode;
@@ -2743,11 +2793,13 @@ document.addEventListener('submit', e => {
       const payerId = fd.get('payerId') || 'me';
       try {
         const includeMe = splitIncludesMe();
+        // sum of the individual figures when everyone has one, else the typed total
+        const amount = splitTotalAmount();
         let n;
         if (payerId === 'me') {
           const { txns } = addSplitExpense({
             personIds: ids,
-            amount: parseFloat(fd.get('amount')),
+            amount,
             includeMe,
             own: splitOwnMap(),
             note: fd.get('note') || '',
@@ -2758,7 +2810,7 @@ document.addEventListener('submit', e => {
           n = recordSplitPaidBy({
             payerId,
             personIds: ids,
-            amount: parseFloat(fd.get('amount')),
+            amount,
             includeMe,
             own: splitOwnMap(),
             note: fd.get('note') || '',
