@@ -1046,6 +1046,20 @@ button { font-family: var(--body); cursor: pointer; }
 .pick-drop-body { padding: var(--sp-3) 12px; }
 .pick-drop .share-pick-list { margin: 0; }
 .pick-drop .seg-control { margin-bottom: var(--sp-3); }
+
+/* The equal/custom choice applies to every name under it, so it holds the top
+   of the scroll instead of sliding away with the list it governs. The form is
+   the scroll region (see .modal-split below); the bar pins to its top edge.
+   It runs full-bleed to the dropdown's own edges — the negative margins undo
+   .pick-drop-body's inset and the padding puts it back — so the card colour
+   covers the gaps around the pill and names pass behind it, not through it. */
+.modal-split .split-mode-bar {
+  position: sticky; top: 0; z-index: 2;
+  margin: calc(-1 * var(--sp-3)) -12px var(--sp-3);
+  padding: var(--sp-3) 12px;
+  background: var(--card);
+}
+.modal-split .split-mode-bar .seg-control { margin-bottom: 0; }
 /* "Paid by" is a fold-out you close again as soon as you've picked, so it is
    capped rather than allowed to push the rest of the form down. */
 .pick-drop-list { max-height: 50vh; overflow-y: auto; }

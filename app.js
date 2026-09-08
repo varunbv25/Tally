@@ -1801,11 +1801,15 @@ function renderSplitModal() {
     Chip(p.currency))).join('');
 
   /* Nothing to divide until at least two people are ticked, so the equal/custom
-     choice only appears then (updateSplitPreview shows and hides it live). */
+     choice only appears then (updateSplitPreview shows and hides it live). It
+     governs every name below it, so styles.css sticks it to the top of the
+     scroll rather than letting it slide away with the list it applies to. */
   const modeBar = `
-    <div class="seg-control" role="group" aria-label="How the total is divided" data-split-modes ${several ? '' : 'hidden'}>
-      <button type="button" class="seg${custom ? '' : ' active'}" data-action="set-split-mode" data-mode="equal" aria-pressed="${!custom}">Split equally</button>
-      <button type="button" class="seg${custom ? ' active' : ''}" data-action="set-split-mode" data-mode="custom" aria-pressed="${custom}">Custom amounts</button>
+    <div class="split-mode-bar" data-split-modes ${several ? '' : 'hidden'}>
+      <div class="seg-control" role="group" aria-label="How the total is divided">
+        <button type="button" class="seg${custom ? '' : ' active'}" data-action="set-split-mode" data-mode="equal" aria-pressed="${!custom}">Split equally</button>
+        <button type="button" class="seg${custom ? ' active' : ''}" data-action="set-split-mode" data-mode="custom" aria-pressed="${custom}">Custom amounts</button>
+      </div>
     </div>`;
 
   /* People are created on the Ledger, never here — a split only divides a cost
@@ -1826,7 +1830,7 @@ function renderSplitModal() {
     title: 'Split an expense',
     closeAction: 'close-split',
     body: `
-      <p class="section-sub split-intro">Pick who paid, tick who shares the cost, and enter the total — on custom amounts the individual figures add up to it, so there is no total to type. If you paid, each share is recorded as money they owe you; if someone else paid, the shares are routed through you and the payer's balance drops by what they covered. Long-press anyone for their own amount; the rest re-split what's left.</p>
+      <p class="section-sub split-intro">Pick who paid, tick who shares the cost, and enter the total (custom amounts add up to their own). If you paid, each share is recorded as money they owe you; if someone else paid, the shares are routed through you and the payer's balance drops by what they covered. Long-press anyone for their own amount; the rest re-split what's left.</p>
 
       <form data-form="add-split">
         ${picker('payer', 'Paid by', splitPayerLabel(draft.payerId), openState.payer,
