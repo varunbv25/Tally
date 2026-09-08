@@ -21,20 +21,26 @@
 /* Stamp the theme before first paint to avoid a flash of the wrong palette,
    and colour the OS status bar to match it — Safari reads the Apple
    status-bar meta once at load, so it has to be right before we paint.
-   Light unless the saved setting says 'dark'; app.js re-applies all of this
-   once state is loaded. Keep the storage key, the resolution logic and the
-   two bar values in sync with applyTheme(). */
+   An explicit saved 'light'/'dark' wins; anything else (including the
+   'device' default and a first visit with nothing saved) follows the OS.
+   app.js re-applies all of this once state is loaded — keep the storage key,
+   the resolution logic and the two bar values in sync with applyTheme(). */
 (function () {
+  var setting = null;
   try {
     var raw = localStorage.getItem('tally-ledger-v1');
     var s = raw ? JSON.parse(raw) : null;
-    var dark = !!(s && s.settings && s.settings.theme === 'dark');
-    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-    var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', dark ? '#171917' : '#ffffff');
-    var iosBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-    if (iosBar) iosBar.setAttribute('content', dark ? 'black-translucent' : 'default');
+    if (s && s.settings) setting = s.settings.theme;
   } catch (e) {}
+  var dark = setting === 'dark';
+  if (setting !== 'light' && setting !== 'dark') {
+    try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
+  }
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', dark ? '#171917' : '#ffffff');
+  var iosBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if (iosBar) iosBar.setAttribute('content', dark ? 'black-translucent' : 'default');
 })();
 </script>
 </head>

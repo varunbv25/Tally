@@ -123,10 +123,20 @@ function barColor(theme) {
   return THEME_BAR_COLOR[theme];
 }
 
-/* Anything that isn't an explicit 'dark' reads as light, so a ledger saved
-   under the old 'device' setting simply lands on the light default. */
+/* The OS preference, for the 'device' setting. Falsy on anything that can't
+   answer, which lands on light — the same default the CSS carries. */
+function prefersDark() {
+  try { return window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) { return false; }
+}
+
+/* An explicit 'light'/'dark' pins the app to that theme; 'device' — the
+   default, and what any unrecognised value is normalised to in loadState —
+   hands the choice to the OS. Keep in sync with the boot script in
+   index.html, which has to resolve the same thing before first paint. */
 function resolvedTheme() {
-  return (state && state.settings && state.settings.theme) === 'dark' ? 'dark' : 'light';
+  const setting = state && state.settings && state.settings.theme;
+  if (setting === 'light' || setting === 'dark') return setting;
+  return prefersDark() ? 'dark' : 'light';
 }
 
 function applyTheme() {
@@ -1995,19 +2005,23 @@ function updateSharePreview() {
 
 /* ---------- appearance / theme ---------- */
 const THEME_OPTIONS = [
-  ['light', 'Light'],
-  ['dark',  'Dark'],
+  ['device', 'Device'],
+  ['light',  'Light'],
+  ['dark',   'Dark'],
 ];
 
 function appearancePanel() {
-  const current = resolvedTheme();
+  /* The stored setting, not resolvedTheme(): on 'device' the resolved value is
+     light or dark, which would light up a segment the user never picked. */
+  const setting = state.settings.theme;
+  const current = (setting === 'light' || setting === 'dark') ? setting : 'device';
   const seg = ([value, label]) =>
     `<button type="button" class="seg${value === current ? ' active' : ''}" data-action="set-theme" data-theme="${value}" aria-pressed="${value === current}">${label}</button>`;
   return Panel({
     title: 'Appearance',
     body: `
       <div class="seg-control" role="group" aria-label="Theme">${THEME_OPTIONS.map(seg).join('')}</div>
-      <p class="muted">Tally opens light unless you switch it here — it doesn’t follow your device’s setting.</p>`,
+      <p class="muted">Device follows your phone’s light/dark setting and switches over with it. Light or Dark pins Tally to that one whatever the phone is doing.</p>`,
   });
 }
 
@@ -3210,6 +3224,13 @@ document.addEventListener('contextmenu', e => {
 
 /* interest accrues with time — refresh the numbers every minute */
 setInterval(render, 60_000);
+
+/* Follow the OS switching mid-session, not just at launch. applyTheme() reads
+   the setting itself, so this is a no-op while the app is pinned to a theme. */
+try {
+  window.matchMedia('(prefers-color-scheme: dark)')
+    .addEventListener('change', () => applyTheme());
+} catch (e) {}
 
 /* ---------- boot ---------- */
 

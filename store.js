@@ -49,7 +49,7 @@ function defaultState() {
     settings: {
       baseCurrency: 'INR',        // default currency for new people
       interestTz: null,           // UTC offset (minutes) interest charges are phased to; see interestOffset()
-      theme: 'light',             // 'light' | 'dark' — the app's own look, not the OS one
+      theme: 'device',            // 'device' | 'light' | 'dark' — 'device' follows the OS setting
       roundWhole: false,          // show every amount (incl. past entries & interest) as whole numbers
     },
   };
@@ -68,9 +68,12 @@ function loadState() {
     state = defaultState();
     saveState();
   }
-  /* The old 'device' setting is gone: normalise it (and any other stray value)
-     to the light default here, so everything downstream reads a real theme. */
-  if (state.settings.theme !== 'dark') state.settings.theme = 'light';
+  /* Only these three are real settings. Anything else — a stray value, or a
+     ledger written by a build that had a different set — falls back to
+     following the device, so everything downstream reads a known value. An
+     explicit 'light' or 'dark' already stored is kept: a theme someone chose
+     is not overridden by this becoming the default. */
+  if (!['device', 'light', 'dark'].includes(state.settings.theme)) state.settings.theme = 'device';
 }
 
 function saveState() {
