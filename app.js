@@ -133,7 +133,7 @@ function applyTheme() {
   const theme = resolvedTheme();
   document.documentElement.setAttribute('data-theme', theme);
   // data-theme has to land first: barColor() reads the token it selects.
-  const meta = document.querySelector('meta[name="theme-color"]:not([media])');
+  const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', barColor(theme));
   const iosBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
   if (iosBar) iosBar.setAttribute('content', IOS_BAR_STYLE[theme]);
